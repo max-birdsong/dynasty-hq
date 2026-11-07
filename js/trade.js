@@ -1,5 +1,5 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
-import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies } from './model.js';
+import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies, CAREER_END, playerWeekPts } from './model.js';
 import { settings, state } from './state.js';
 import { simulate } from './sim.js';
 import { teamPlan, winNowValue } from './plan.js';
@@ -40,6 +40,15 @@ export function perceived(a, partner) {
   // micro-market: in leagues where picks have traded above or below market, owners price them that way
   if (a.pick && partner?._pickIndex) v *= partner._pickIndex;
   return v;
+}
+
+// Rebuilders want players with years left. The age cap is set for WRs and shifts with each position's career length,
+// so a 29-year-old superflex QB (8 years left) is fine while a 27-year-old RB is not.
+export const tooOldFor = (a, R) => !a.pick && (a.age || 0) >= R.rebuildMaxAge + ((CAREER_END[a.pos] ?? 30.5) - CAREER_END.WR);
+// A team that owns its next 1st and is out of it gains from losing points (better draft slot), so it will happily
+// swap a healthy starter for an injured star who'll play for them next year: the classic tank trade.
+export function isTanking(L, p) {
+  return p.picks.includes(`k:${+L.season + 1}:1:${p.rid}`) && (p.playoff ?? 0) < 0.15;
 }
 
 // Sanderson's four reasons to trade. Only the first is zero-sum.
@@ -97,10 +106,11 @@ export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}
 export function checkRules(L, partner, r) {
   const R = settings().rules, f = [];
   const mode = partner.mode;
-  const need = mode === 'rebuild' ? R.rebuilderFcMargin * Math.max(r.fc.A, r.fc.B) : 0;
-  if (r.fc.partnerMargin < need) f.push({ bad: true, msg: mode === 'rebuild' ? `Rebuilder needs a clear FC win (≥ +${Math.round(need)})` : 'Partner loses on FantasyCalc' });
+  const tankHelp = isTanking(L, partner) && r.them && r.them.rosAfter < r.them.rosBefore - 1;
+  const need = mode === 'rebuild' && !tankHelp ? R.rebuilderFcMargin * Math.max(r.fc.A, r.fc.B) : 0;
+  if (r.fc.partnerMargin < need) f.push({ bad: true, msg: mode === 'rebuild' && need > 0 ? `Rebuilder needs a clear FC win (≥ +${Math.round(need)})` : 'Partner loses on FantasyCalc' });
   if (mode === 'rebuild') {
-    for (const a of r.give) if (!a.pick && (a.age || 0) >= R.rebuildMaxAge) f.push({ bad: true, msg: `${a.name} is ${Math.floor(a.age)}: rebuilders won't want him` });
+    for (const a of r.give) if (tooOldFor(a, R)) f.push({ bad: true, msg: `${a.name} is ${Math.floor(a.age)}: too few years left for a rebuilder` });
   }
   if (mode !== 'contend') for (const a of r.give) if (a.pos === 'RB' && (a.age || 0) >= R.oldRbAge) f.push({ bad: true, msg: `Old RB ${a.name} to a non-contender` });
   if (r.them && mode === 'contend' && r.them.rosAfter < r.them.rosBefore - R.contenderMaxDrop) f.push({ bad: true, msg: `Contender loses ${(r.them.rosBefore - r.them.rosAfter).toFixed(1)} pts/wk` });
@@ -259,6 +269,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     // plus players who would fill my holes right now, even if they're cheap in dynasty terms
     const fillers = all.filter(a => !a.pick && holeGroups.has(a.pos) && !top.includes(a)).map(a => ({ a, m: margOf(a, true) })).filter(x => x.m.reg > 3).sort((x, y) => y.m.reg - x.m.reg).slice(0, 5).map(x => x.a);
     const blockIds = new Set((S.block?.[L.id] || []).map(String));
+    const tanker = isTanking(L, p);
+    const theirPts = new Map(); if (tanker) for (const a of all) if (!a.pick) theirPts.set(a.id, reg.reduce((s, w) => s + playerWeekPts(L, a.id, w), 0) / Math.max(1, reg.length));
     const listed = all.filter(a => a.id && blockIds.has(String(a.id)) && !top.includes(a) && !fillers.includes(a));
     const theirs = [...top, ...fillers, ...listed];
     const cands = [];
@@ -268,9 +280,10 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
         // people aren't ATMs: owners overvalue what they already have, so they need to come out a bit ahead
         // ...unless they've put the player on the block: then they're a willing seller and fair is enough
         const onBlock = t.some(a => a.id && blockIds.has(String(a.id)));
-        const need = onBlock ? 0 : (p.mode === 'rebuild' ? R.rebuilderFcMargin : 0.03) * Math.max(fc.A, fc.B);
+        const tankHelp = tanker && t.some(a => !a.pick && (theirPts.get(a.id) || 0) > 3);
+        const need = onBlock || tankHelp ? 0 : (p.mode === 'rebuild' ? R.rebuilderFcMargin : 0.03) * Math.max(fc.A, fc.B);
         if (fc.partnerMargin < need || fc.partnerMargin > need + 0.3 * fc.B + 400) continue;
-        if (p.mode === 'rebuild' && g.some(a => !a.pick && (a.age || 0) >= R.rebuildMaxAge)) continue;
+        if (p.mode === 'rebuild' && g.some(a => tooOldFor(a, R))) continue;
         if (p.mode !== 'contend' && g.some(a => a.pos === 'RB' && (a.age || 0) >= R.oldRbAge)) continue;
         const tat = sum(t.map(a => a.tat)) - sum(g.map(a => a.tat));
         const dReg = sum(t.map(a => margOf(a, true).reg)) + sum(g.map(a => margOf(a, false).reg));
@@ -308,6 +321,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     r.goals = g.met; r.theirGoal = g.theirs;
     const blk = new Set((S.block?.[L.id] || []).map(String));
     if (r.get.some(a => a.id && blk.has(String(a.id)))) r.theirGoal = 'On their block';
+    else if (isTanking(L, r.partner) && r.them && r.them.rosAfter < r.them.rosBefore - 1) r.theirGoal = 'Helps their tank';
     r.type = tradeType(L, r);
     if (r.type.id === 'preference') r.pureValue = true;
     if (!T) r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);

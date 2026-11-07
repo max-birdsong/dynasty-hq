@@ -135,7 +135,7 @@ export default function dashboard() {
     }
   }
   diamonds.sort((x, y) => y.gap - x.gap);
-  if (diamonds.length) root.append(h('div', { class: 'panel' }, h('h2', {}, '💎 Diamond 1sts'),
+  if (diamonds.length) root.append(h('div', { class: 'panel' }, h('h2', {}, `💎 Diamond ${+M.season + 1} 1sts`),
     h('div', { class: 'muted small', style: { marginBottom: '8px' } }, `${+M.season + 1} 1sts (decided by this season) that look like mid or late picks from today's standings, but that the simulator expects to land earlier: weak rosters with lucky records, low max PF (draft order is reverse max PF unless set otherwise), or tough schedules ahead. Their owners price them by the standings, usually for vets who help now.`),
     table([
       { key: 'lg', label: 'League', n: false, sort: r => r.L.nick, fmt: (v, r) => r.L.nick },
@@ -160,16 +160,16 @@ export default function dashboard() {
     else if (a.slot && a.tat > a.fcLooks * 1.25) mineRisk.push({ L, a, msg: `projects #${a.slot.toFixed(1)}${a.p101 > 0.2 ? ` (${odds(a.p101)} chance of the 1.01)` : ''}: worth ${Math.round(a.tat).toLocaleString()} on Sanderson's slot curve vs the ${Math.round(a.fcLooks).toLocaleString()} the market prices it at`, gap: a.tat - a.fcLooks });
     else if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) mineRisk.push({ L, a, msg: `your roster ranks ${L.teams.length - a.futureSlot + 1}/${L.teams.length} for next year once age is factored in`, gap: a.tat - a.fc });
   }
-  if (mineRisk.length) root.append(h('div', { class: 'panel', style: { borderLeft: '3px solid var(--warn)' } }, h('h2', {}, '⚠️ Your 1sts worth more than they look'),
+  if (mineRisk.length) root.append(h('div', { class: 'panel', style: { borderLeft: '3px solid var(--warn)' } }, h('h2', {}, `⚠️ Your ${+M.season + 1} 1sts worth more than they look`),
     h('div', { class: 'muted small', style: { marginBottom: '8px' } }, "Don't give these away at the price they appear to be worth. The calculator and suggestions warn you too, and they value these at the real projection."),
     h('div', { class: 'assets' }, mineRisk.sort((x, y) => y.gap - x.gap).map(x => h('div', { class: 'asset' }, h('span', { class: 'nm' }, h('b', {}, x.L.nick), ` · ${x.a.short.split(' (')[0]}: ${x.msg}`), h('span', { class: 'pos num' }, sgn(x.gap)))))));
 
   // future diamonds: the 1st after next, from teams competing now on an old or thin roster, whose owners give up 1sts easily
-  const fut = h('div', { class: 'panel' }, h('h2', {}, '🔮 Future 1sts to target'), h('div', { class: 'muted small' }, 'Looking through trade histories…'));
+  const fut = h('div', { class: 'panel' }, h('h2', {}, `🔮 ${+M.season + 2} 1sts to target (a year early)`), h('div', { class: 'muted small' }, 'Looking through trade histories…'));
   root.append(fut);
   futureTargets(mine).then(rows => {
     if (!rows.length) { fut.remove(); return; }
-    fut.replaceChildren(h('h2', {}, '🔮 Future 1sts to target'),
+    fut.replaceChildren(h('h2', {}, `🔮 ${+M.season + 2} 1sts to target (a year early)`),
       h('div', { class: 'muted small', style: { marginBottom: '8px' } }, "The best time to buy a 1st is a season early. These teams are competing now but rank low long-term once age is taken into account, so their next-next 1st is likely to land early while the market prices it as an ordinary 1st. Ranked highest: teams whose record is better than their points and projections say (they think they're contenders, push with picks and try to keep it going next year), and owners who've traded 1sts before."),
       table([
         { key: 'lg', label: 'League', n: false, sort: r => r.L.nick, fmt: (v, r) => r.L.nick },

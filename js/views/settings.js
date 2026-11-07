@@ -35,7 +35,7 @@ export default function settingsView() {
       num(st.rules, 'minTatGain', 'Minimum total gain to suggest', 50),
       num(st.rules, 'rebuilderFcMargin', 'Rebuilder FC win (share of deal)', 0.01, '0.05 = they win by 5%'),
       num(st.rules, 'contenderMaxDrop', 'Contender may lose (pts/wk)', 0.1),
-      num(st.rules, 'rebuildMaxAge', 'Rebuilders only take players younger than', 0.5),
+      num(st.rules, 'rebuildMaxAge', 'Rebuilders only take players younger than', 0.5, 'Age for a WR; shifts with career length: +6.5 for QBs, -2 for RBs, +1 for TEs'),
       num(st.rules, 'oldRbAge', 'Old RB age (only to contenders)', 0.5),
       num(st.rules, 'contenderWinPct', 'Contender if win % at least', 0.025, 'median-game leagues count both games'),
       num(st.rules, 'rebuilderWinPct', 'Rebuilder if win % at most', 0.025)))));

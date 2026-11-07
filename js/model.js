@@ -490,7 +490,7 @@ export function asset(L, key) {
 // Sanderson's three currencies: picks, productive value (this season) and EYR value (expected years remaining).
 // Expected years remaining by position follows typical career ends (Harstad): production stays roughly flat until
 // a sharp drop, so a player's value is spread evenly over his remaining years.
-const CAREER_END = { QB: 37, RB: 28.5, WR: 30.5, TE: 31.5 };
+export const CAREER_END = { QB: 37, RB: 28.5, WR: 30.5, TE: 31.5 };
 export function currencies(a) {
   if (a.pick) return { picks: a.tat, now: 0, future: 0 };
   const end = CAREER_END[a.pos] ?? 30;
