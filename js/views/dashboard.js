@@ -1,4 +1,4 @@
-import { M, teamAssets, asset } from '../model.js';
+import { M, teamAssets, asset, sandersonSlotValue } from '../model.js';
 import { firstsSent } from '../owners.js';
 import { state, syncReady } from '../state.js';
 import { h, fmt, pct, odds, sgn } from '../util.js';
@@ -123,7 +123,12 @@ export default function dashboard() {
         const [, y, rd, orig] = k.split(':');
         if (+y !== ny || +rd !== 1) continue;
         const a = asset(L, k), o = L.byRid[orig];
-        const gap = a.tat - a.fcLooks;
+        // only picks whose owner thinks they're mid or late: if the standings already say "top 4", he knows
+        if (!a.looksSlot || a.looksSlot <= Math.ceil(L.numTeams / 3) || !a.slot) continue;
+        if (a.looksSlot - a.slot < 1.5 && (a.top3 || 0) < 0.15) continue; // a real misread, not averaging noise
+        // edge = what it's worth where the simulator puts it, minus what it's worth where it looks like it lands,
+        // both on the same curve, so the edge is the owner's misread and not just calculators underpricing early picks
+        const gap = a.tat - sandersonSlotValue(L, ny, '1st', a.looksSlot);
         if (gap < 300) continue;
         diamonds.push({ L, holder, o, a, gap });
       }
@@ -141,7 +146,7 @@ export default function dashboard() {
       { key: 'top3', label: 'Top 3', n: true, sort: r => r.a.top3, fmt: (v, r) => pct(r.a.top3) },
       { key: 'mkt', label: 'Priced as', n: true, sort: r => r.a.fcLooks, fmt: (v, r) => fmt(r.a.fcLooks) },
       { key: 'val', label: 'Worth (Sanderson)', n: true, sort: r => r.a.tat, fmt: (v, r) => fmt(r.a.tat) },
-      { key: 'gap', label: 'Edge', n: true, sort: r => r.gap, fmt: (v, r) => h('span', { class: r.gap > 0 ? 'pos' : 'neg' }, sgn(r.gap)) },
+      { key: 'gap', label: 'Edge', title: 'Worth where the simulator puts it minus worth where it looks like it lands', n: true, sort: r => r.gap, fmt: (v, r) => h('span', { class: r.gap > 0 ? 'pos' : 'neg' }, sgn(r.gap)) },
       { key: 'go', label: '', n: false, sort: () => 0, fmt: (v, r) => h('a', { href: `#/trades/${r.L.id}/${r.holder.rid}/calc` }, 'Build offer →') },
     ], diamonds.slice(0, 12), { sortKey: 'gap' })));
 

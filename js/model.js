@@ -458,6 +458,9 @@ export function asset(L, key) {
     const label = next && slot ? `${y} ${ord} (proj #${Math.round(slot)})` : fcName;
     const looks = next && ot?.winPct != null ? impliedSlot(L, orig) : null;
     const fcLooks = looks ? tierValue(L, y, ord, looks) : generic;
+    // an owner whose pick already looks top-3ish from the standings knows what he has: he won't sell it at the
+    // calculator's "early 1st" average, so price it to him at what that slot is really worth
+    const ask = looks && ord === '1st' && looks <= Math.ceil(L.numTeams / 4) ? Math.max(fcLooks, sandersonSlotValue(L, y, ord, looks)) : fcLooks;
     // a strong-value team with a weak lineup may trade its way out of a bad finish: shade the projection back
     const fix = next ? fixFactor(L, orig) : 0;
     if (fix && v > fcLooks) v = v - fix * (v - fcLooks);
@@ -470,7 +473,7 @@ export function asset(L, key) {
       const proj = hold * spreadValue(L, ny, '1st', fs, L.numTeams / 4);
       return { key, pick: true, orig: +orig, name: `${y} 1st (likely #${fs})` + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: `${y} 1st`, pos: 'PICK', fc: generic, tat: proj, fcGeneric: generic, fcLooks: generic, futureSlot: fs, age: null };
     }
-    return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: mine, fcGeneric: generic, fcLooks, looksSlot: looks, top3, fix, age: null, slot, p101: next ? (L.slotDist[orig]?.[1] || 0) : null };
+    return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: mine, fcGeneric: generic, fcLooks, ask, looksSlot: looks, top3, fix, age: null, slot, p101: next ? (L.slotDist[orig]?.[1] || 0) : null };
   }
   const id = pid(key);
   const p = M.players[id] || {};

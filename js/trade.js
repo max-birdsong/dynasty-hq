@@ -36,7 +36,7 @@ export function lineupImpact(L, t, outKeys, inKeys) {
 // How the partner sees a next-year pick: by where today's standings say it lands, not where the simulator
 // expects it to finish. A 5-3 team with a weak roster prices its 1st as a mid pick; that gap is a "diamond".
 export function perceived(a, partner) {
-  let v = a.pick && a.slot && a.fcLooks ? a.fcLooks : a.fc;
+  let v = a.pick && a.slot && a.fcLooks ? (a.ask ?? a.fcLooks) : a.fc;
   // micro-market: in leagues where picks have traded above or below market, owners price them that way
   if (a.pick && partner?._pickIndex) v *= partner._pickIndex;
   return v;
