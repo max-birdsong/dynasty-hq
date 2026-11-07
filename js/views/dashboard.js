@@ -1,4 +1,5 @@
 import { M, teamAssets, asset } from '../model.js';
+import { firstsSent } from '../owners.js';
 import { state, syncReady } from '../state.js';
 import { h, fmt, pct, sgn } from '../util.js';
 import { table, adviceTag, pctBar, posB, heat, empty } from '../components.js';
@@ -123,6 +124,25 @@ export default function dashboard() {
       { key: 'go', label: '', n: false, sort: () => 0, fmt: (v, r) => h('a', { href: `#/trades/${r.L.id}/${r.holder.rid}/calc` }, 'Build offer →') },
     ], diamonds.slice(0, 12), { sortKey: 'gap' })));
 
+  // future diamonds: the 1st after next, from teams competing now on an old or thin roster, whose owners give up 1sts easily
+  const fut = h('div', { class: 'panel' }, h('h2', {}, '🔮 Future 1sts to target'), h('div', { class: 'muted small' }, 'Looking through trade histories…'));
+  root.append(fut);
+  futureTargets(mine).then(rows => {
+    if (!rows.length) { fut.remove(); return; }
+    fut.replaceChildren(h('h2', {}, '🔮 Future 1sts to target'),
+      h('div', { class: 'muted small', style: { marginBottom: '8px' } }, "The best time to buy a 1st is a season early. These teams are competing now but rank low long-term once age is taken into account, so their next-next 1st is likely to land early, and the market still prices it as an ordinary 1st. Owners who've traded 1sts before are ranked higher."),
+      table([
+        { key: 'lg', label: 'League', n: false, sort: r => r.L.nick, fmt: (v, r) => r.L.nick },
+        { key: 'own', label: 'Owner', n: false, sort: r => r.t.owner, fmt: (v, r) => h('a', { href: `#/owners/${r.L.id}/${r.t.ownerId}` }, r.t.owner) },
+        { key: 'rec', label: 'Now', n: false, sort: r => r.t.playoff, fmt: (v, r) => `${r.t.wins}-${r.t.losses}, ${Math.round((r.t.playoff || 0) * 100)}% playoffs` },
+        { key: 'pick', label: 'Pick', n: false, sort: r => r.key, fmt: (v, r) => r.label },
+        { key: 'why', label: 'Why', n: false, sort: r => r.score, fmt: (v, r) => h('span', {}, r.why.map(w => h('span', { class: 'tag', style: { marginRight: '4px' } }, w))) },
+        { key: 'slot', label: 'Likely slot', n: true, sort: r => -r.slot, fmt: (v, r) => '#' + r.slot },
+        { key: 'edge', label: 'Edge', n: true, sort: r => r.edge, fmt: (v, r) => h('span', { class: 'pos' }, sgn(r.edge)) },
+        { key: 'go', label: '', n: false, sort: () => 0, fmt: (v, r) => h('a', { href: `#/trades/${r.L.id}/${r.t.rid}/calc` }, 'Build offer →') },
+      ], rows.slice(0, 12), { sortKey: 'score' }));
+  }).catch(() => fut.remove());
+
   if (pending.length) {
     root.append(h('div', { class: 'panel' }, h('h2', {}, 'Waiting on a reply'),
       h('div', { class: 'assets' }, pending.slice(0, 8).map(t => h('div', { class: 'asset' },
@@ -133,3 +153,36 @@ export default function dashboard() {
   return root;
 }
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
+
+async function futureTargets(leagues) {
+  const rows = [];
+  const decay = a => (!a || a <= 26) ? 1 : Math.max(0.35, 1 - 0.12 * (a - 26)); // value a player is likely to hold a year from now
+  for (const L of leagues) {
+    const sent = await firstsSent(L).catch(() => ({}));
+    const n = L.teams.length, y2 = +L.season + 2, y1 = +L.season + 1;
+    const strength = new Map(L.teams.map(t => [t.rid, teamAssets(L, t).filter(a => !a.pick).reduce((s, a) => s + a.tat * decay(a.age), 0)]));
+    const order = [...L.teams].sort((a, b) => strength.get(a.rid) - strength.get(b.rid)); // weakest next year first
+    const ord1 = L.fc.picks.get(`${y1} 1st`) || 1, gen2 = L.fc.picks.get(`${y2} 1st`) || 0;
+    const tierShare = s => (L.fc.picks.get(`${y1} 1st (${s <= n / 3 ? 'Early' : s <= 2 * n / 3 ? 'Mid' : 'Late'})`) || ord1) / ord1;
+    for (const t of L.teams) {
+      if (t.isMe) continue;
+      const slot = order.indexOf(t) + 1;
+      const key = `k:${y2}:1:${t.rid}`;
+      const holder = L.teams.find(x => x.picks.includes(key));
+      if (!holder || holder.isMe || slot > Math.ceil(n / 2)) continue;
+      const competing = (t.playoff ?? 0) >= 0.4 || t.winPct >= 0.5;
+      if (!competing) continue; // a rebuilder already knows his pick is valuable
+      const edge = gen2 * tierShare(slot) - gen2;
+      if (edge < 200) continue;
+      const nSent = sent[t.ownerId] || 0;
+      const why = [];
+      why.push(`long-term rank ${n - slot + 1}/${n}`);
+      if ((t.coreAge || 0) >= 27) why.push(`core age ${t.coreAge.toFixed(1)}`);
+      if (nSent) why.push(`traded ${nSent} 1st${nSent > 1 ? 's' : ''}`);
+      if (holder !== t) why.push(`held by ${holder.owner}`);
+      const score = edge * (competing ? 1.5 : 0.7) * (1 + 0.25 * Math.min(4, nSent));
+      rows.push({ L, t, key, label: `${y2} 1st`, slot, edge, why, score });
+    }
+  }
+  return rows.sort((a, b) => b.score - a.score);
+}

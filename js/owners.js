@@ -169,3 +169,15 @@ export async function crossLeague(ownerId) {
   }
   return rows;
 }
+
+// How freely each owner gives up 1st-round picks: 1sts sent away in trades (this season and last), by owner id
+export async function firstsSent(L) {
+  const trades = await loadTrades(L);
+  const out = {};
+  for (const tr of trades) for (const p of tr.draft_picks || []) {
+    if (p.round !== 1) continue;
+    const owner = tr._owners ? tr._owners[p.previous_owner_id] : L.byRid[p.previous_owner_id]?.ownerId;
+    if (owner) out[owner] = (out[owner] || 0) + 1;
+  }
+  return out;
+}
