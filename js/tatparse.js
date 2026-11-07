@@ -54,20 +54,24 @@ const ROW = /^\s*(\d{1,3})\s+(.+?)\s{2,}(QB|RB|WR|TE)\s+([A-Z]{2,3})?\s*(.*)$/;
 const MOVE = /(Up|Down) \d+ Tiers?|New Add|Returning/i;
 
 export function parseLines(lines) {
-  const rows = []; let tier = null; let stop = false;
+  const rows = []; let tier = null; let stop = false; let lower = false, island = false;
   for (const raw of lines) {
     const line = normQuotes(raw);
     if (/REMOVED FROM RANKINGS/i.test(line)) stop = true;
     if (stop) continue;
     const tk = tierKey(line);
-    if (tk) { tier = tk; continue; }
+    if (tk) { tier = tk; lower = false; island = false; continue; }
+    // half-tier break: players below it are in the bottom half of the tier ("wouldn't pay the tier price, wouldn't sell below it")
+    if (/HALF-TIER BREAK/i.test(line)) { lower = true; continue; }
+    // half-tier island: a group sitting between this tier and the next
+    if (/HALF-TIER ISLAND/i.test(line)) { island = true; continue; }
     const m = line.match(ROW);
     if (m && tier) {
       const rest = m[5] || '';
       const mv = (rest.match(MOVE) || [''])[0];
       const rank = +m[1];
       if (rows.some(r => r.rank === rank)) continue;
-      rows.push({ rank, name: m[2].trim(), pos: m[3], team: m[4] || '', tier, move: mv });
+      rows.push({ rank, name: m[2].trim(), pos: m[3], team: m[4] || '', tier, move: mv, ...(lower ? { half: 'lower' } : {}), ...(island ? { island: true } : {}) });
     }
   }
   rows.sort((a, b) => a.rank - b.rank);
@@ -105,11 +109,17 @@ export function valueRows(rows, tv) {
   const groups = new Map();
   for (const r of rows) { const v = tv(r.tier); if (!groups.has(v)) groups.set(v, []); groups.get(v).push(r); }
   const out = new Map();
+  const spread = (rs, a, b) => rs.forEach((r, j) => out.set(r.rank, a - (a - b) * (j + 0.5) / rs.length));
   for (const [v, g] of groups) {
     const i = vals.indexOf(v);
     const hi = i > 0 ? (vals[i - 1] + v) / 2 : v * 1.15;
     const lo = i + 1 < vals.length ? (vals[i + 1] + v) / 2 : v * 0.6;
-    g.forEach((r, j) => out.set(r.rank, hi - (hi - lo) * (j + 0.5) / g.length));
+    const isl = g.filter(r => r.island), main = g.filter(r => !r.island);
+    const loMain = isl.length ? (v + lo) / 2 : lo;          // an island sits between this tier and the next
+    const up = main.filter(r => r.half !== 'lower'), dn = main.filter(r => r.half === 'lower');
+    if (dn.length && up.length) { spread(up, hi, v); spread(dn, v, loMain); } // half-tier: top half above the tier price, bottom half below
+    else spread(main, hi, loMain);
+    if (isl.length) spread(isl, loMain, lo);
   }
   return out; // rank -> value
 }

@@ -154,11 +154,18 @@ function suggestions(L) {
     for (const lg of leagues) { all = all.concat(suggest(lg)); await sleep(0); }
     all.sort((a, b) => b.score - a.score);
     if (!all.length) { out.replaceChildren(empty('No trades pass all the rules. Loosen them in Settings, add targets on the Values page, or upload newer TAT values.')); return; }
-    out.replaceChildren(h('div', { class: 'cards' }, all.slice(0, 40).map(r => suggestionCard(r))));
+    // filter by goal
+    const labels = [...new Set(all.flatMap(r => r.goals.map(g => g.label)))];
+    const grid = h('div', { class: 'cards' });
+    const show = f => grid.replaceChildren(...all.filter(r => !f || (f === 'Pure value' ? r.pureValue : r.goals.some(g => g.label === f))).slice(0, 40).map(r => suggestionCard(r)));
+    const chips = h('div', { class: 'row', style: { margin: '0 0 12px', gap: '6px' } }, h('span', { class: 'small muted' }, 'Goal:'),
+      ['All', ...labels, ...(all.some(r => r.pureValue) ? ['Pure value'] : [])].map(l => h('button', { class: 'tag', style: { cursor: 'pointer' }, onclick: e => { chips.querySelectorAll('button').forEach(b => b.classList.remove('push')); e.target.classList.add('push'); show(l === 'All' ? null : l); } }, l)));
+    chips.querySelector('button').classList.add('push');
+    out.replaceChildren(chips, grid); show(null);
   };
   box.append(h('div', { class: 'panel' },
     h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, 'Suggested trades'),
-      h('div', { class: 'muted small' }, `Ranked by what each trade is worth to you: Sanderson value gained plus what it does to your odds this season, valued for your situation in that league (a title = ${fmt(S.titleWorth ?? 4500)} TAT). Partners must come out ahead on FantasyCalc and the deal has to make sense for their team. Offers already rejected are skipped.`)),
+      h('div', { class: 'muted small' }, `Every trade should serve a goal (Sanderson: "rankings are not a calculator"). Each suggestion is tagged with the goal it serves for you, from your plan, and for the partner when there's a reason for them too. Trades that serve no goal only appear if they win decisively. Within that, they're ranked by total value to you: Sanderson value gained plus the effect on this season (a title = ${fmt(S.titleWorth ?? 4500)} TAT). Treat the Sanderson-fair price as the worst acceptable deal, not the target. Offers already rejected are skipped.`)),
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues')))),
     out);
   box.insertBefore(planPanel(L), box.firstChild);
@@ -170,6 +177,10 @@ function suggestionCard(r) {
   return h('div', { class: 'card' },
     h('div', { class: 'row spread', style: { marginBottom: '8px' } }, h('div', {}, h('b', {}, r.L.nick), ' · ', r.partner.owner, ' ', modeTag(r.partner.mode)),
       h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Total value to you, in Sanderson points' }, sgn(r.value?.total ?? r.tatGain))),
+    h('div', { class: 'row', style: { gap: '4px', marginBottom: '6px' } },
+      (r.goals || []).map(g => h('span', { class: 'tag push' }, g.label)),
+      r.pureValue ? h('span', { class: 'tag', title: 'Serves none of your goals in this league, so it only shows up because it wins decisively' }, 'Pure value') : '',
+      r.theirGoal ? h('span', { class: 'tag good', title: "Why it makes sense for them" }, r.theirGoal) : ''),
     h('div', { class: 'small', style: { marginBottom: '8px' } },
       h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg' }, `Sanderson ${sgn(r.value?.tat ?? r.tatGain)}`), r.value?.dr < 0.99 ? h('span', { class: 'muted', title: "You're already well ahead of this league in value, so more of it adds little title equity" }, ` (of ${sgn(r.value.tatRaw)}, diminishing returns)`) : '', ' + ',
       h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${sgn(r.value?.now ?? 0)}`),

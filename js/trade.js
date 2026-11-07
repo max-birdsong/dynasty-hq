@@ -145,6 +145,36 @@ export function tradeValue(L, r, exact = null) {
   return { total: tat + now, tat, tatRaw: r.tatGain, dr, now, pickShift };
 }
 
+// Sanderson: rankings aren't a price list; every trade should serve a goal. Your goals come from the league plan.
+export function myGoals(L, plan) {
+  const t = L.me, g = [];
+  for (const h of plan.holes) g.push({ id: 'fix:' + h.g, label: `Fix ${h.g}` });
+  if (!plan.tanking && (t.title ?? 0) >= 0.06) g.push({ id: 'points', label: 'Buy points' });
+  if (plan.tanking || plan.weakLongTerm) g.push({ id: 'younger', label: 'Get younger' });
+  if (plan.tanking || ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15)) g.push({ id: 'picks', label: 'Turn players into picks' });
+  if ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15) g.push({ id: 'window', label: 'Extend the window' });
+  return g;
+}
+export function goalsMet(L, r, goals) {
+  const dReg = r.me ? r.me.rosAfter - r.me.rosBefore : 0, dPo = r.me ? r.me.poAfter - r.me.poBefore : 0;
+  const ages = xs => { const p = xs.filter(a => !a.pick && a.age); return p.length ? p.reduce((s, a) => s + a.age, 0) / p.length : null; };
+  const ag = ages(r.get), av = ages(r.give);
+  const met = [];
+  for (const g of goals) {
+    if (g.id.startsWith('fix:')) { const pos = g.id.slice(4); if (r.get.some(a => a.pos === pos) && dReg > 1) met.push(g); }
+    else if (g.id === 'points' && (dReg > 1.5 || dPo > 1.5)) met.push(g);
+    else if (g.id === 'younger' && r.mix.future > 300 && (ag == null || av == null || ag < av - 1.5)) met.push(g);
+    else if (g.id === 'picks' && r.mix.picks > 300) met.push(g);
+    else if (g.id === 'window' && r.mix.future + r.mix.picks > 300 && (r.value?.now ?? 0) > -150) met.push(g);
+  }
+  // the partner's side: contenders want points, rebuilders want picks and youth
+  const p = r.partner, theirReg = r.them ? r.them.rosAfter - r.them.rosBefore : 0;
+  const theirs = p.mode === 'contend' ? (theirReg > 1 ? 'Buys them points' : null)
+    : p.mode === 'rebuild' ? (-(r.mix.picks + r.mix.future) > 300 ? 'Gets them picks/youth' : null)
+    : (theirReg > 1 ? 'Buys them points' : -(r.mix.picks + r.mix.future) > 300 ? 'Gets them picks/youth' : null);
+  return { met, theirs };
+}
+
 export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10 } = {}) {
   if (!L.me) return [];
   const S = settings(), R = S.rules;
@@ -206,6 +236,16 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       if (++kept >= 4) break;
     }
   }
+  // goal first: trades that serve one of your goals rank ahead; pure value grabs must win decisively
+  const goals = myGoals(L, plan);
+  const R2 = settings().rules;
+  for (const r of out) {
+    const g = goalsMet(L, r, goals);
+    r.goals = g.met; r.theirGoal = g.theirs;
+    r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
+    r.pureValue = !r.goals.length;
+  }
+  for (let i = out.length - 1; i >= 0; i--) if (out[i].pureValue && out[i].value.total < 2 * R2.minTatGain) out.splice(i, 1);
   out.sort((a, b) => b.score - a.score);
   // the best few get a full season simulation, so their this-season value is exact rather than estimated
   for (const r of out.slice(0, exactTop)) {

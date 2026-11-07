@@ -9,6 +9,7 @@ import { M, simInput, simParams, playerWeekPts, posOf, teamAssets, expectedFromD
 import { simulate } from './sim.js';
 import { bestLineup } from './lineup.js';
 import { settings } from './state.js';
+import { myGoals } from './trade.js';
 
 const GROUPS = ['QB', 'RB', 'WR', 'TE'];
 
@@ -109,7 +110,10 @@ export function teamPlan(L) {
   if (tanking && lastYearBad) lines.push(`You were ${L.prevRecord.wins}-${L.prevRecord.losses} last year too. Sanderson's rule: a reload should last one year, because a second tank year rarely gains more than the title equity it gives up.`);
   if (tanking && bpOk) lines.push(`Your buying power ranks ${dynRank} of ${n}, which is enough to compete. Conceding the season costs real win equity, and your pick only offsets part of it.`);
 
+  const planObj = { holes, tanking, weakLongTerm };
   L.plan = { sens, ownFirst, tanking, middle, pickNow, slotNow, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };
+  const goals = myGoals(L, L.plan);
+  if (goals.length) L.plan.lines.push('Trade goals here: ' + goals.map(g => g.label).join(', ') + '.');
   return L.plan;
 }
 
