@@ -199,6 +199,8 @@ export function myGoals(L, plan) {
   if (plan.tanking || plan.weakLongTerm) g.push({ id: 'younger', label: 'Get younger' });
   if (plan.tanking || ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15)) g.push({ id: 'picks', label: 'Turn players into picks' });
   if ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15) g.push({ id: 'window', label: 'Extend the window' });
+  // Sanderson's first reason to buy: it materially raises your bye odds. Only meaningful while a bye is in play.
+  if (!plan.tanking && (t.playoff ?? 0) >= 0.25 && (t.bye ?? 0) >= 0.05 && (t.bye ?? 0) <= 0.8) g.push({ id: 'bye', label: 'Win a bye' });
   return g;
 }
 export function goalsMet(L, r, goals) {
@@ -252,13 +254,17 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     for (const a of all) if (a.pick && a.top3 > 0.15 && !top.includes(a)) top.push(a); // possible diamond picks
     // plus players who would fill my holes right now, even if they're cheap in dynasty terms
     const fillers = all.filter(a => !a.pick && holeGroups.has(a.pos) && !top.includes(a)).map(a => ({ a, m: margOf(a, true) })).filter(x => x.m.reg > 3).sort((x, y) => y.m.reg - x.m.reg).slice(0, 5).map(x => x.a);
-    const theirs = [...top, ...fillers];
+    const blockIds = new Set((S.block?.[L.id] || []).map(String));
+    const listed = all.filter(a => a.id && blockIds.has(String(a.id)) && !top.includes(a) && !fillers.includes(a));
+    const theirs = [...top, ...fillers, ...listed];
     const cands = [];
     for (const gs of [1, 2]) for (const ts of [1, 2]) {
       for (const g of combos(mine, gs)) for (const t of combos(theirs, ts)) {
         const fc = fcSides(g.map(a => a.fc), t.map(a => perceived(a, p)));
         // people aren't ATMs: owners overvalue what they already have, so they need to come out a bit ahead
-        const need = (p.mode === 'rebuild' ? R.rebuilderFcMargin : 0.03) * Math.max(fc.A, fc.B);
+        // ...unless they've put the player on the block: then they're a willing seller and fair is enough
+        const onBlock = t.some(a => a.id && blockIds.has(String(a.id)));
+        const need = onBlock ? 0 : (p.mode === 'rebuild' ? R.rebuilderFcMargin : 0.03) * Math.max(fc.A, fc.B);
         if (fc.partnerMargin < need || fc.partnerMargin > need + 0.3 * fc.B + 400) continue;
         if (p.mode === 'rebuild' && g.some(a => !a.pick && (a.age || 0) >= R.rebuildMaxAge)) continue;
         if (p.mode !== 'contend' && g.some(a => a.pos === 'RB' && (a.age || 0) >= R.oldRbAge)) continue;
@@ -289,6 +295,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   for (const r of out) {
     const g = goalsMet(L, r, goals);
     r.goals = g.met; r.theirGoal = g.theirs;
+    const blk = new Set((S.block?.[L.id] || []).map(String));
+    if (r.get.some(a => a.id && blk.has(String(a.id)))) r.theirGoal = 'On their block';
     r.type = tradeType(L, r);
     if (r.type.id === 'preference') r.pureValue = true;
     r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
@@ -300,7 +308,11 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   for (const r of out.slice(0, exactTop)) {
     r.sim = simDelta(L, r, 1200);
     r.value = tradeValue(L, r, r.sim);
-    r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0);
+    r.dBye = r.sim.me[1].bye - r.sim.me[0].bye;
+    // the bye is already inside the title odds, so no extra value; it just counts as meeting a goal
+    const byeGoal = goals.find(g => g.id === 'bye');
+    if (byeGoal && r.dBye >= 0.03 && !r.goals.includes(byeGoal)) { r.goals.push(byeGoal); r.pureValue = false; }
+    r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0) + (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
   }
   // keep the list varied: each asset appears in at most two suggestions
   const used = new Map(), final = [];

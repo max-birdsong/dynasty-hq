@@ -117,8 +117,11 @@ function simTable(d, partner) {
   const headline0 = Math.abs(dT) >= 0.01
     ? `Your title chances get ${word(dT)}: ${P(me[0].title)}% → ${P(me[1].title)}%.`
     : `Your title chances don't really change (${P(me[0].title)}% → ${P(me[1].title)}%)` + (Math.abs(dP) >= 0.01 ? `, but your playoff chances get ${word(dP)}: ${P(me[0].playoff)}% → ${P(me[1].playoff)}%.` : '.');
+  const dB = me[1].bye - me[0].bye;
+  const byeLine = dB >= 0.03 ? ` Bye odds ${P(me[0].bye)}% → ${P(me[1].bye)}% (+${P(dB)}): raising your bye chances is Sanderson's best reason to buy.`
+    : dB <= -0.03 ? ` Bye odds ${P(me[0].bye)}% → ${P(me[1].bye)}%: this costs you bye equity.` : '';
   const v = d.value;
-  const headline = headline0 + (v ? ` Overall worth ${sgn(v.total)} to you (long-term ${sgn(v.tat)} after this season's games are used up, this season ${sgn(v.now)}${v.pickShift && Math.abs(v.pickShift) >= 50 ? `, of which draft-slot shift ${sgn(v.pickShift)}` : ''}).` : '');
+  const headline = headline0 + byeLine + (v ? ` Overall worth ${sgn(v.total)} to you (long-term ${sgn(v.tat)} after this season's games are used up, this season ${sgn(v.now)}${v.pickShift && Math.abs(v.pickShift) >= 50 ? `, of which draft-slot shift ${sgn(v.pickShift)}` : ''}).` : '');
   return h('div', { style: { marginTop: '12px' } },
     h('div', { class: 'verdict' }, headline),
     h('div', { class: 'sides', style: { marginTop: '10px' } }, team('You', d.me), team(partner.owner, d.them)),
@@ -175,9 +178,30 @@ function suggestions(L) {
       h('div', { class: 'muted small' }, `Every trade should serve a goal (Sanderson: "rankings are not a calculator"). Each suggestion is tagged with the goal it serves for you, from your plan, and for the partner when there's a reason for them too. Trades that serve no goal only appear if they win decisively. Within that, they're ranked by total value to you: Sanderson value gained plus the effect on this season (a title = ${fmt(S.titleWorth ?? 4500)} TAT). Treat the Sanderson-fair price as the worst acceptable deal, not the target. Offers already rejected are skipped.`)),
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues')))),
     out);
+  box.insertBefore(blockPanel(L), box.firstChild);
   box.insertBefore(planPanel(L), box.firstChild);
   if (!state().tatSets.length) out.append(h('div', { class: 'panel' }, 'Upload Sanderson rankings on the ', h('a', { href: '#/values' }, 'Values page'), ' first. Without them every player is valued at half his FC value, so suggestions are meaningless.'));
   return box;
+}
+
+// Sleeper doesn't make trade blocks public, so they're marked by hand. Listed players are always considered,
+// and the owner only needs a fair deal (no endowment premium), since they've said they want to sell.
+function blockPanel(L) {
+  const S = settings();
+  const list = () => ((S.block ||= {})[L.id] ||= []);
+  const others = L.teams.filter(t => !t.isMe).flatMap(t => t.players.map(id => ({ id: String(id), t })))
+    .filter(x => M.players[x.id]).map(x => ({ ...x, label: `${M.players[x.id].full_name || x.id} (${x.t.owner})` }));
+  const chips = h('div', { class: 'row', style: { gap: '6px', flexWrap: 'wrap' } });
+  const draw = () => chips.replaceChildren(...list().map(id => { const x = others.find(o => o.id === String(id));
+    return h('span', { class: 'tag' }, x ? x.label : id, ' ', h('a', { href: 'javascript:void 0', title: 'Remove', onclick: () => { S.block[L.id] = list().filter(y => String(y) !== String(id)); save({ settingsChanged: true }); draw(); } }, '×')); }),
+    ...(list().length ? [] : [h('span', { class: 'small muted' }, 'Nobody marked yet.')]));
+  const dl = h('datalist', { id: 'blk-' + L.id }, others.map(x => h('option', { value: x.label })));
+  const inp = h('input', { list: 'blk-' + L.id, placeholder: 'Type a player on someone\'s block…', style: { minWidth: '320px', maxWidth: '100%' },
+    onchange: e => { const x = others.find(o => o.label === e.target.value); if (!x) return; if (!list().includes(x.id)) list().push(x.id); save({ settingsChanged: true }); e.target.value = ''; draw(); } });
+  draw();
+  return h('details', { class: 'panel' }, h('summary', {}, h('b', {}, `On the trade block in ${L.nick}`), h('span', { class: 'small muted' }, ` (${list().length})`)),
+    h('p', { class: 'small muted' }, "Sleeper doesn't share trade blocks outside the app, so mark them here. Listed players are always considered in suggestions, and their owner only needs a fair deal, not a premium."),
+    h('div', { class: 'row', style: { gap: '8px', marginBottom: '8px' } }, inp, dl), chips);
 }
 
 function suggestionCard(r) {
@@ -192,7 +216,7 @@ function suggestionCard(r) {
     h('div', { class: 'small', style: { marginBottom: '8px' } },
       h('span', { class: (r.value?.tat ?? r.tatGain) >= 0 ? 'pos' : 'neg', title: "Sanderson value after this season (market value minus the production the players will use up this year). This season's production is counted in the next number instead." }, `Long-term ${sgn(r.value?.tat ?? r.tatGain)}`), r.value?.dr < 0.99 ? h('span', { class: 'muted', title: "You're already well ahead of this league in value, so more of it adds little title equity" }, ` (of ${sgn(r.value.tatRaw)}, diminishing returns)`) : '', ' + ',
       h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${sgn(r.value?.now ?? 0)}`),
-      r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%` + (Math.abs(r.value?.pickShift || 0) >= 50 ? `, draft-slot shift ${sgn(r.value.pickShift)}` : '') + ')') : ''),
+      r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%` + (Math.abs(r.dBye || 0) >= 0.03 ? `, bye ${Math.round(r.sim.me[0].bye * 100)}% → ${Math.round(r.sim.me[1].bye * 100)}%` : '') + (Math.abs(r.value?.pickShift || 0) >= 50 ? `, draft-slot shift ${sgn(r.value.pickShift)}` : '') + ')') : ''),
     h('div', { class: 'small muted' }, 'You send'), h('div', { class: 'assets' }, r.give.map(a => assetLine(a))),
     h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'You get'), h('div', { class: 'assets' }, r.get.map(a => assetLine(a))),
     h('div', { class: 'small', style: { marginTop: '8px' } },
