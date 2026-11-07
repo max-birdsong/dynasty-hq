@@ -2,7 +2,7 @@ import { M, leagueById, teamAssets, asset, isPick } from '../model.js';
 import { state, logTrade, updateTrade, deleteTrade, settings, save } from '../state.js';
 import { evalTrade, simDelta, suggest, tradeValue } from '../trade.js';
 import { teamPlan } from '../plan.js';
-import { loadTrades, tradeSides } from '../owners.js';
+import { loadTrades, tradeSides, pickIndex } from '../owners.js';
 import { h, fmt, sgn, pct, toast, sleep } from '../util.js';
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
 
@@ -75,6 +75,7 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       r.me ? kpi(h('span', {}, delta(r.me.rosAfter - r.me.rosBefore, 1), ' / ', delta(r.me.poAfter - r.me.poBefore, 1)), 'Your pts/wk: now / playoffs') : '',
       r.them ? kpi(h('span', {}, delta(r.them.rosAfter - r.them.rosBefore, 1), ' / ', delta(r.them.poAfter - r.them.poBefore, 1)), `${partner.owner} pts/wk`) : ''),
     h('div', { class: 'small muted', style: { marginTop: '4px' } }, h('b', {}, r.mixLabel), ` · picks ${sgn(r.mix.picks)}, this season ${sgn(r.mix.now)}, future years ${sgn(r.mix.future)}`),
+    r.type && r.type.id !== 'other' ? h('div', { class: 'small', style: { marginTop: '4px' } }, h('b', {}, r.type.label), r.type.tip ? ': ' + r.type.tip : '') : '',
     h('div', { class: 'flags' },
       r.flags.length ? r.flags.map(f => h('div', { class: 'flag ' + (f.bad ? 'bad' : f.warn ? 'warnf' : '') }, (f.bad ? '✕ ' : f.warn ? '⚠️ ' : '• ') + f.msg)) : h('div', { class: 'flag ok' }, '✓ Fits the partner and your lineup rules'),
       r.memory.same ? h('div', { class: 'flag ' + (['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status) ? 'bad' : '') }, `You sent this exact offer on ${new Date(r.memory.same.created).toLocaleDateString()}: ${r.memory.same.status}`) : '',
@@ -151,7 +152,13 @@ function suggestions(L) {
     out.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), 'Searching trades…'));
     await sleep(30);
     let all = [];
-    for (const lg of leagues) { all = all.concat(suggest(lg)); await sleep(0); }
+    for (const lg of leagues) {
+      // this league's own price for picks, from its trade history
+      const pi = await pickIndex(lg).catch(() => null);
+      lg.pickIndex = pi;
+      for (const t of lg.teams) t._pickIndex = pi?.index || null;
+      all = all.concat(suggest(lg)); await sleep(0);
+    }
     all.sort((a, b) => b.score - a.score);
     if (!all.length) { out.replaceChildren(empty('No trades pass all the rules. Loosen them in Settings, add targets on the Values page, or upload newer TAT values.')); return; }
     // filter by goal
@@ -180,7 +187,8 @@ function suggestionCard(r) {
     h('div', { class: 'row', style: { gap: '4px', marginBottom: '6px' } },
       (r.goals || []).map(g => h('span', { class: 'tag push' }, g.label)),
       r.pureValue ? h('span', { class: 'tag', title: 'Serves none of your goals in this league, so it only shows up because it wins decisively' }, 'Pure value') : '',
-      r.theirGoal ? h('span', { class: 'tag good', title: "Why it makes sense for them" }, r.theirGoal) : ''),
+      r.theirGoal ? h('span', { class: 'tag good', title: "Why it makes sense for them" }, r.theirGoal) : '',
+      r.type && r.type.id !== 'other' ? h('span', { class: 'tag', title: r.type.tip }, r.type.label) : ''),
     h('div', { class: 'small', style: { marginBottom: '8px' } },
       h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg' }, `Sanderson ${sgn(r.value?.tat ?? r.tatGain)}`), r.value?.dr < 0.99 ? h('span', { class: 'muted', title: "You're already well ahead of this league in value, so more of it adds little title equity" }, ` (of ${sgn(r.value.tatRaw)}, diminishing returns)`) : '', ' + ',
       h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${sgn(r.value?.now ?? 0)}`),

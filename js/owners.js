@@ -181,3 +181,27 @@ export async function firstsSent(L) {
   }
   return out;
 }
+
+// Micro-market: how this league prices 1st-round picks. For trades where one side sent only picks and the other
+// only players, compare the two sides at values from the week of the trade. >1 means picks fetch more than market.
+export async function pickIndex(L) {
+  const trades = await loadTrades(L);
+  const valuer = makeValuer(await loadDp(), L);
+  if (!valuer) return null;
+  const ratios = [];
+  for (const tr of trades) {
+    const sides = Object.values(tradeSides(L, tr, valuer));
+    if (sides.length !== 2) continue;
+    const [a, b] = sides;
+    const onlyPicks = s => s.gave.length && s.gave.every(x => x.pick), onlyPlayers = s => s.gave.length && s.gave.every(x => !x.pick);
+    let pk = null, pl = null;
+    if (onlyPicks(a) && onlyPlayers(b)) { pk = a; pl = b; } else if (onlyPicks(b) && onlyPlayers(a)) { pk = b; pl = a; }
+    if (!pk) continue;
+    const pv = pk.gave.reduce((s, x) => s + (x.fcThen || 0), 0), yv = pl.gave.reduce((s, x) => s + (x.fcThen || 0), 0);
+    if (pv > 500 && yv > 500) ratios.push(yv / pv);
+  }
+  if (ratios.length < 3) return { n: ratios.length, index: null };
+  ratios.sort((x, y) => x - y);
+  const med = ratios[Math.floor(ratios.length / 2)];
+  return { n: ratios.length, index: Math.max(0.7, Math.min(1.4, med)) };
+}

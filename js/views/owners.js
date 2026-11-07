@@ -1,6 +1,6 @@
 import { M, leagueById } from '../model.js';
 import { state, noteOf, setNote } from '../state.js';
-import { profiles } from '../owners.js';
+import { profiles, pickIndex } from '../owners.js';
 import { h, fmt, sgn } from '../util.js';
 import { modeTag, posB, empty, table } from '../components.js';
 
@@ -12,6 +12,9 @@ export default async function ownersView(id, ownerId) {
     M.leagues.filter(x => x.me).map(x => h('a', { href: `#/owners/${x.id}`, class: 'tag' + (x.id === id ? ' push' : '') }, x.nick))));
   if (!L) return root;
   const P = await profiles(L);
+  const pi = await pickIndex(L).catch(() => null);
+  if (pi) root.append(h('div', { class: 'panel' }, h('h2', {}, 'How this league prices picks'),
+    h('p', { class: 'small', style: { margin: 0 } }, pi.index ? `In ${pi.n} trades of picks for players, the players sent back were worth ${Math.round(pi.index * 100)}% of the picks' market value at the time. ${pi.index > 1.1 ? 'Picks fetch a premium here: a good league to sell picks in.' : pi.index < 0.9 ? 'Picks go cheap here: a good league to buy picks in.' : 'Picks trade close to market here.'} Suggestions use this when pricing picks.` : `Only ${pi.n} pick-for-player trades so far, not enough to tell how this league prices picks.`)));
   // league-wide trade record leaderboard
   const recStr = r => r && r.n ? `${r.w}-${r.l}${r.e ? '-' + r.e : ''}` : '–';
   const pctStr = r => r && r.n ? ` (${Math.round(r.pct * 100)}%)` : '';

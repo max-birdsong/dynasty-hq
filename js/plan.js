@@ -63,6 +63,9 @@ export function teamPlan(L) {
   const med = {};
   for (const g of GROUPS) { const v = all.map(a => a.g[g]).sort((a, b) => a - b); med[g] = v[Math.floor(v.length / 2)]; }
   const holes = GROUPS.map(g => ({ g, mine: mine[g], med: med[g], gap: mine[g] - med[g] })).filter(x => x.gap < -5).sort((a, b) => a.gap - b.gap);
+  // every team's holes and surpluses, for spotting "parallel need" trades (I need a RB, you need a WR)
+  L.posNeeds = {};
+  for (const a of all) L.posNeeds[a.x.rid] = { holes: GROUPS.filter(g => a.g[g] - med[g] < -5), surplus: GROUPS.filter(g => a.g[g] - med[g] > 5) };
 
   // dead weight this season: valuable players projected for ~nothing the rest of the year
   const dead = teamAssets(L, t).filter(a => !a.pick && a.tat >= 800 && weeks.every(w => playerWeekPts(L, a.id, w) < 1) && (a.inj || '').length);

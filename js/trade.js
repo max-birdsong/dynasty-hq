@@ -36,8 +36,28 @@ export function lineupImpact(L, t, outKeys, inKeys) {
 // How the partner sees a next-year pick: by where today's standings say it lands, not where the simulator
 // expects it to finish. A 5-3 team with a weak roster prices its 1st as a mid pick; that gap is a "diamond".
 export function perceived(a, partner) {
-  if (a.pick && a.slot && a.fcLooks) return a.fcLooks;
-  return a.fc;
+  let v = a.pick && a.slot && a.fcLooks ? a.fcLooks : a.fc;
+  // micro-market: in leagues where picks have traded above or below market, owners price them that way
+  if (a.pick && partner?._pickIndex) v *= partner._pickIndex;
+  return v;
+}
+
+// Sanderson's four reasons to trade. Only the first is zero-sum.
+export function tradeType(L, r) {
+  const p = r.partner, me = L.me;
+  const players = xs => xs.filter(a => !a.pick);
+  const gp = players(r.get), vp = players(r.give);
+  const myNeeds = L.posNeeds?.[me.rid], theirNeeds = L.posNeeds?.[p.rid];
+  // parallel timeline: one side moves value into this season, the other into future seasons
+  const myNow = r.mix.now, theirNow = -r.mix.now, myFut = r.mix.future + r.mix.picks;
+  if ((myNow > 300 && myFut < -300) || (myNow < -300 && myFut > 300)) return { id: 'timeline', label: 'Parallel timeline', tip: 'You move value into a different season than they do. Both can win.' };
+  // parallel need: I get a position I'm short at, they get one they're short at
+  if (myNeeds && theirNeeds && gp.some(a => myNeeds.holes.includes(a.pos)) && vp.some(a => theirNeeds.holes.includes(a.pos))) return { id: 'need', label: 'Parallel need', tip: 'Each side fills a hole. Both can win.' };
+  // mutual benefit: consolidation by the deeper team (depth is worth less to them than a star)
+  if (r.give.length > r.get.length || r.get.length > r.give.length) return { id: 'mutual', label: 'Consolidation', tip: 'One side turns depth into a better starter; the other gets depth it can use. Both can improve relative to the league.' };
+  // preference: same kind of asset for same kind of asset; a bet on whose evaluation is right
+  if (gp.length === 1 && vp.length === 1 && gp[0].pos === vp[0].pos && Math.abs((gp[0].age || 0) - (vp[0].age || 0)) < 2.5) return { id: 'preference', label: 'Preference (zero-sum)', tip: 'Like-for-like swap: you are betting your evaluation beats theirs. Rarely accepted; only worth it on a clear edge.' };
+  return { id: 'other', label: 'Value', tip: '' };
 }
 
 export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}) {
@@ -67,6 +87,7 @@ export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}
       r.takesStartingQb = qbIn.length < qbOut.length;
     }
   }
+  r.type = tradeType(L, r);
   r.flags = checkRules(L, partner, r);
   r.memory = tradeMemory(L, partner, giveKeys, getKeys);
   return r;
@@ -211,7 +232,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     for (const gs of [1, 2]) for (const ts of [1, 2]) {
       for (const g of combos(mine, gs)) for (const t of combos(theirs, ts)) {
         const fc = fcSides(g.map(a => a.fc), t.map(a => perceived(a, p)));
-        const need = p.mode === 'rebuild' ? R.rebuilderFcMargin * Math.max(fc.A, fc.B) : 0;
+        // people aren't ATMs: owners overvalue what they already have, so they need to come out a bit ahead
+        const need = (p.mode === 'rebuild' ? R.rebuilderFcMargin : 0.03) * Math.max(fc.A, fc.B);
         if (fc.partnerMargin < need || fc.partnerMargin > need + 0.3 * fc.B + 400) continue;
         if (p.mode === 'rebuild' && g.some(a => !a.pick && (a.age || 0) >= R.rebuildMaxAge)) continue;
         if (p.mode !== 'contend' && g.some(a => a.pos === 'RB' && (a.age || 0) >= R.oldRbAge)) continue;
@@ -242,8 +264,10 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   for (const r of out) {
     const g = goalsMet(L, r, goals);
     r.goals = g.met; r.theirGoal = g.theirs;
+    r.type = tradeType(L, r);
+    if (r.type.id === 'preference') r.pureValue = true;
     r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
-    r.pureValue = !r.goals.length;
+    r.pureValue = r.pureValue || !r.goals.length;
   }
   for (let i = out.length - 1; i >= 0; i--) if (out[i].pureValue && out[i].value.total < 2 * R2.minTatGain) out.splice(i, 1);
   out.sort((a, b) => b.score - a.score);
