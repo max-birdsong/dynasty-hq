@@ -130,16 +130,16 @@ export default function dashboard() {
         // both on the same curve, so the edge is the owner's misread and not just calculators underpricing early picks
         const gap = a.tat - sandersonSlotValue(L, ny, '1st', a.looksSlot);
         if (gap < 300) continue;
-        diamonds.push({ L, holder, o, a, gap });
+        diamonds.push({ L, holder, o, a, gap, y: ny });
       }
     }
   }
   diamonds.sort((x, y) => y.gap - x.gap);
   if (diamonds.length) root.append(h('div', { class: 'panel' }, h('h2', {}, '💎 Diamond 1sts'),
-    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, `Next year's 1sts that look like mid or late picks from today's standings, but that the simulator expects to land earlier: weak rosters with lucky records, low max PF (draft order is reverse max PF unless set otherwise), or tough schedules ahead. Their owners price them by the standings, usually for vets who help now.`),
+    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, `${+M.season + 1} 1sts (decided by this season) that look like mid or late picks from today's standings, but that the simulator expects to land earlier: weak rosters with lucky records, low max PF (draft order is reverse max PF unless set otherwise), or tough schedules ahead. Their owners price them by the standings, usually for vets who help now.`),
     table([
       { key: 'lg', label: 'League', n: false, sort: r => r.L.nick, fmt: (v, r) => r.L.nick },
-      { key: 'pick', label: 'Pick', n: false, sort: r => r.o.owner, fmt: (v, r) => `${r.o.owner}'s 1st` + (r.holder.rid !== r.o.rid ? ` (held by ${r.holder.owner})` : '') },
+      { key: 'pick', label: 'Pick', n: false, sort: r => r.o.owner, fmt: (v, r) => `${r.o.owner}'s ${r.y} 1st` + (r.holder.rid !== r.o.rid ? ` (held by ${r.holder.owner})` : '') },
       { key: 'rec', label: 'Their record', n: false, sort: r => r.o.winPct, fmt: (v, r) => h('span', {}, `${r.o.wins}-${r.o.losses}`, r.a.fix > 0.15 ? h('span', { class: 'tag', style: { marginLeft: '6px' }, title: 'Their roster value ranks well above their lineup, so they could trade to fix it before the deadline. Edge already reduced for this.' }, 'could trade to fix') : '') },
       { key: 'looks', label: 'Looks like', n: true, sort: r => -r.a.looksSlot, fmt: (v, r) => '#' + r.a.looksSlot },
       { key: 'slot', label: 'Simulator says', n: true, sort: r => -r.a.slot, fmt: (v, r) => '#' + r.a.slot.toFixed(1) },
