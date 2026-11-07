@@ -365,15 +365,19 @@ function tierValue(L, y, ord, s) {
   return base * (shape[a] + (shape[b] - shape[a]) * (p - a));
 }
 
-// Sanderson's slot curve for 1st-round picks, in base 1sts (from "Tearing Down your Dynasty Team"; 1.01 set to 3 for
-// a normal class instead of the 4 he used for the Caleb Williams class). This is YOUR valuation of a pick, while
-// FantasyCalc's early/mid/late prices remain the market's view that partners trade on.
+// Sanderson's slot curve for 1st-round picks, in base 1sts (from "Tearing Down your Dynasty Team"). The 1.01 depends
+// on the class: 4 base 1sts in an elite class (his number for the Caleb Williams class), 3 in a normal one, 2.5 in a
+// weak one. This is YOUR valuation of a pick, while FantasyCalc's early/mid/late prices remain the market's view.
+export const CLASS_TOP = { weak: 2.5, normal: 3, strong: 4 };
+export const DEFAULT_CLASSES = { 2027: 'strong' }; // Jeremiah Smith / Arch Manning class: consensus elite
+export const classOf = y => settings().classes?.[y] ?? DEFAULT_CLASSES[y] ?? 'normal';
 const SANDERSON_1ST = [3, 2, 2, 1.5, 1.5, 1, 1, 1, 0.75, 0.75, 0.75, 0.75];
 export function sandersonSlotValue(L, y, ord, s) {
   if (ord !== '1st') return tierValue(L, y, ord, s);
   const B = L.fc.picks.get(`${y} 1st`) ?? M.fc['12-2-1']?.picks.get(`${y} 1st`) ?? 0;
+  const curve = SANDERSON_1ST.slice(); curve[0] = CLASS_TOP[classOf(y)] ?? 3;
   const n = L.numTeams, p = n > 1 ? (s - 1) * 11 / (n - 1) : 0, a = Math.floor(p), b = Math.min(11, a + 1);
-  return B * (SANDERSON_1ST[a] + (SANDERSON_1ST[b] - SANDERSON_1ST[a]) * (p - a));
+  return B * (curve[a] + (curve[b] - curve[a]) * (p - a));
 }
 
 // Base value thesis: a pick whose slot is uncertain is worth the average over its possible slots, which is more

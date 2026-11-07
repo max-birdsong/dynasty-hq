@@ -67,3 +67,5 @@ Because the repo is public, anyone with the link can read `data/state.json`, whi
 - **FantasyCalc 2-for-1 adjustment:** the formula is `min(value × 0.6982, 753 + 0.23 × value)` for each extra piece. If the FantasyCalc site shows a different adjustment for the same trade, change the three constants in Settings.
 - **Thresholds:** contending, rebuilding and the trade rules are all adjustable in Settings. Leagues with a median game count both games, so the win-percentage thresholds still work there.
 - **Refresh:** ↻ reloads everything. Otherwise, API data is cached for 20 minutes to 6 hours depending on how often it changes.
+
+**Buying at the deadline (Sanderson):** whether to buy depends on two things. Production: points matter most when you're in the hunt; favourites hit diminishing returns. Buying power: high-value teams can afford to spend futures, low-value teams should buy with short-dated assets and keep their furthest-out 1st, and middle teams should be most careful. Rookie class strength sets the 1.01 (weak 2.5 / normal 3 / strong 4 base 1sts); 2027 defaults to strong.

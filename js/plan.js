@@ -5,7 +5,7 @@
 //  - where the lineup is short (position groups producing far less than the league's typical starters)
 //  - players who are out for the season (zero points now, value later)
 // Everything is turned into one currency: Sanderson (TAT) value. A title is worth `titleWorth` TAT.
-import { M, simInput, simParams, playerWeekPts, posOf, teamAssets, expectedFromDist } from './model.js';
+import { M, simInput, simParams, playerWeekPts, posOf, teamAssets, expectedFromDist, classOf } from './model.js';
 import { simulate } from './sim.js';
 import { bestLineup } from './lineup.js';
 import { settings } from './state.js';
@@ -102,10 +102,26 @@ export function teamPlan(L) {
   let headline;
   const bpOk = dynRank <= Math.ceil(n / 2);
   const highValue = dynRank <= 3, lowValue = dynRank > n * 0.6;
-  // "Tearing Down": high-value teams should buy mid-season (future contention is already assured; extend the
-  // window into this year); low-value teams should sell now, hard, before more depreciation, to shorten the rebuild.
-  if (highValue && !tanking && (t.title ?? 0) < 0.15 && (t.playoff ?? 0) >= 0.25) lines.push(`Your buying power is top-3 (${dynRank} of ${n}), so you're assured of contending in future years. Sanderson: high-value teams should buy now and bring that window into this season, ideally early enough to chase a bye.`);
-  if (lowValue && outOfIt) lines.push(`Low buying power (${dynRank} of ${n}) and out of it: sell hard now, including young players if the price is right, before more depreciation. The faster value moves into picks and other assets that gain value, the shorter the rebuild.`);
+  // "Buying at the Deadline": the urge to buy runs on two axes.
+  //  - production (S-curve): points matter most when you're in the hunt; favourites hit diminishing returns, teams
+  //    out of it can't be helped. Measured directly by the +10 pts/wk re-simulations above.
+  //  - buying power (U-shape): high-value teams can afford to spend futures; very low-value teams face a rebuild
+  //    anyway, so this year carries most of their equity; MIDDLE teams lose most, because spending futures is what
+  //    pushes them into an earlier or longer rebuild.
+  const bp = dynRank <= Math.max(3, Math.round(n / 4)) ? 'high' : lowValue ? 'low' : 'middle';
+  const favourite = (t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15;
+  const prod = favourite ? 'favourite' : (t.playoff ?? 0) >= 0.25 ? 'hunt' : 'out';
+  const yrs = [...new Set(t.picks.map(k => +k.split(':')[1]))].sort();
+  const lastYear = yrs.at(-1);
+  const keepFirst = t.picks.includes(`k:${lastYear}:1:${t.rid}`) ? lastYear : null;
+  const verdict = prod === 'favourite' ? 'HOLD' : prod === 'out' ? (bp === 'low' ? 'SELL' : 'RELOAD') : bp === 'middle' ? 'CAREFUL' : 'BUY';
+  if (prod === 'hunt' && bp === 'high') lines.push(`Deadline: BUY. Buying power ranks ${dynRank} of ${n} and you're in the hunt, so you can afford to spend futures. Aim for moves that raise your bye odds, not just your playoff lineup.`);
+  if (prod === 'hunt' && bp === 'low') lines.push(`Deadline: BUY, with short-dated assets. Buying power ranks ${dynRank} of ${n}, so a rebuild is coming either way and this season holds most of your equity. Spend vets and near picks${keepFirst ? `, but keep your ${keepFirst} 1st: it's likely your own high pick when the rebuild comes` : ''}.`);
+  if (prod === 'hunt' && bp === 'middle') lines.push(`Deadline: CAREFUL. Middle buying power (${dynRank} of ${n}) is where buying hurts most: spending futures is what pushes a team like this into an earlier or longer rebuild. Buy only with surplus or this-season value, and only where it fills a real hole.`);
+  if (prod === 'out' && bp === 'low') lines.push(`Deadline: SELL. Low buying power (${dynRank} of ${n}) and out of it: sell hard now, including young players if the price is right, before more depreciation. The faster value moves into picks and other assets that gain value, the shorter the rebuild.`);
+  const strong = yrs.filter(y => classOf(y) === 'strong'), weak = yrs.filter(y => classOf(y) === 'weak');
+  if (strong.length && (prod === 'out' || bp === 'low')) lines.push(`The ${strong.join('/')} class is rated strong, so its picks should hold or gain market value up to the draft. If a reload is coming, line it up with that class.`);
+  if (weak.length && prod === 'hunt') lines.push(`The ${weak.join('/')} class is rated weak: those picks are the cheapest currency to buy with.`);
   if (tanking && L.draftOrder !== 'record') {
     // max PF tactics: cheap producers only hurt draft position
     const e3 = L.fc.picks.get(`${ny} 3rd (Early)`) ?? L.fc.picks.get(`${ny} 3rd`) ?? 1000;
@@ -127,7 +143,7 @@ export function teamPlan(L) {
   if (tanking && bpOk) lines.push(`Your buying power ranks ${dynRank} of ${n}, which is enough to compete. Conceding the season costs real win equity, and your pick only offsets part of it.`);
 
   const planObj = { holes, tanking, weakLongTerm };
-  L.plan = { sens, ownFirst, tanking, middle, pickNow, slotNow, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };
+  L.plan = { sens, ownFirst, tanking, middle, bp, prod, verdict, keepFirst, pickNow, slotNow, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };
   const goals = myGoals(L, L.plan);
   if (goals.length) L.plan.lines.push('Trade goals here: ' + goals.map(g => g.label).join(', ') + '.');
   return L.plan;

@@ -112,6 +112,15 @@ export function checkRules(L, partner, r) {
     if (a.p101 > 0.25) f.push({ bad: false, warn: true, msg: `Careful: your ${a.short.split(' (')[0]} has a ${Math.round(a.p101 * 100)}% chance of being the 1.01. On Sanderson's curve that's worth about ${Math.round(a.tat).toLocaleString()}, far more than any calculator's "early 1st" price.` });
     if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) f.push({ bad: false, warn: true, msg: `Careful: once age is factored in your roster ranks ${L.teams.length - a.futureSlot + 1} of ${L.teams.length} for next year, so your ${a.short} is likely an early pick (≈#${a.futureSlot}). The market prices it as an ordinary 1st.` });
   }
+  // "Buying at the Deadline": protect the window and the rebuild pick
+  const me = L.me, plan = L.plan;
+  if (me && r.tatGain < 0) {
+    const n = L.teams.length, mid = Math.ceil(n / 2);
+    const after = me.tatTotal + r.tatGain;
+    const rankAfter = 1 + L.teams.filter(x => x !== me && (x === partner ? x.tatTotal - r.tatGain : x.tatTotal) > after).length;
+    if (me.tatTotalRank <= mid && rankAfter > mid) f.push({ bad: false, warn: true, msg: `This drops your buying power from ${me.tatTotalRank} to ${rankAfter} of ${n}. Below the middle is where spending futures for this season most often starts a rebuild early.` });
+  }
+  if (plan?.bp === 'low' && plan.keepFirst) for (const a of r.give) if (a.pick && a.orig === me?.rid && a.key.split(':')[2] === '1' && +a.key.split(':')[1] === plan.keepFirst) f.push({ bad: false, warn: true, msg: `Keep your ${plan.keepFirst} 1st if you can: your buying power is low, so that's likely your own high pick when the rebuild comes. Buy with nearer picks and vets instead.` });
   return f;
 }
 
