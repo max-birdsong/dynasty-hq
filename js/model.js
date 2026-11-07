@@ -1,6 +1,6 @@
 // Builds the full model for every league: rosters, picks, FC + TAT values, projections, simulation, power rankings.
 import * as api from './api.js';
-import { state, settings, nick, latestTat, recordHistory } from './state.js';
+import { state, settings, save, nick, latestTat, recordHistory } from './state.js';
 import { parseLines, tierValues, valueRows, normName } from './tatparse.js';
 import { startSlots, neededPositions, scoreStats, bestLineup } from './lineup.js';
 import { simulate, DEFAULT_PARAMS } from './sim.js';
@@ -62,6 +62,10 @@ export async function loadAll(progress = () => {}) {
   M.calib = calibrate(sources, M.players, posOf);
   progress('Simulating seasons');
   for (const L of M.leagues) runSim(L);
+  // fitted playoff luck is cached per NFL week (it barely moves); refit in the background when a new week starts
+  const cached = settings().sim.playoffFit;
+  if (cached && cached.key === `${M.season}-${M.week}`) { M.playoffK = cached.k; M.seedCheck = cached.check; if (cached.k !== 1) for (const L of M.leagues) runSim(L); }
+  else M.needsPlayoffFit = true;
   for (const L of M.leagues) { computePower(L); snapshotHistory(L); }
   await mergeSnapshots().catch(() => {});
   M.ready = true;
@@ -284,11 +288,48 @@ export function simParams() {
   // Calibration uses each week's final pre-game projections. Projecting week 15 from today is less accurate than that,
   // so add a forecast-horizon error on top of whatever season-long error the data shows.
   const horizon = s.horizonSd ?? 0.05;
-  return { ...base, baseRateWeight: s.baseRateWeight ?? 0.5, measuredSeason: base.sdSeason, horizon, sdSeason: Math.sqrt(base.sdSeason ** 2 + horizon ** 2), injRates: { ...DEFAULT_PARAMS.injRates, ...(s.injRates || {}) }, injRecover: s.injRecover };
+  return { ...base, playoffK: M.playoffK || 1, baseRateWeight: s.baseRateWeight ?? 0, measuredSeason: base.sdSeason, horizon, sdSeason: Math.sqrt(base.sdSeason ** 2 + horizon ** 2), injRates: { ...DEFAULT_PARAMS.injRates, ...(s.injRates || {}) }, injRecover: s.injRecover };
 }
 export function runSim(L) {
   L.sim = simulate(simInput(L), { runs: settings().simRuns, params: simParams(), seed: 777 });
   assignPickSlots(L);
+}
+
+// Check against real leagues: in 900 real-money 12-team leagues (6-team playoffs, 2 byes), the two bye seeds won the
+// title 29% of the time each and seeds 3-6 about 10% each. Our simulated seasons also produce seeds, so we can ask
+// the same question of the model. If the model's top seeds win more often than real ones do, its playoff games are
+// too predictable; we then widen playoff-week luck until the two agree. One number, fitted to outside data.
+const REAL = { bye: 0.29, non: 0.10 };
+async function seedRates(leagues, params, runs) {
+  let bye = 0, non = 0, k = 0;
+  for (const L of leagues) {
+    await new Promise(r => setTimeout(r, 0)); // keep the page responsive
+    const r = simulate(simInput(L), { runs, params, seed: 99 });
+    const st = r._seedTitle;
+    bye += (st[1] + st[2]) / 2; non += (st[3] + st[4] + st[5] + st[6]) / 4; k++;
+  }
+  return k ? { bye: bye / k, non: non / k, leagues: k } : null;
+}
+export async function fitPlayoffVariance() {
+  const s = settings().sim;
+  const std = M.leagues.filter(L => L.playoffTeams === 6).slice(0, 6);
+  if (!std.length) { M.seedCheck = null; return; }
+  const base = { ...simParams(), playoffK: 1, baseRateWeight: 0 };
+  const at1 = await seedRates(std, base, 400);
+  let k = 1, fit = at1;
+  if (s.fitPlayoffs !== false && at1 && at1.bye > REAL.bye + 0.01) {
+    let lo = 1, hi = 3;
+    for (let i = 0; i < 5; i++) {
+      const mid = (lo + hi) / 2, r = await seedRates(std, { ...base, playoffK: mid }, 300);
+      if (r.bye > REAL.bye) lo = mid; else hi = mid;
+    }
+    k = (lo + hi) / 2; fit = await seedRates(std, { ...base, playoffK: k }, 400);
+  }
+  M.playoffK = k;
+  M.seedCheck = { before: at1, after: fit, k, real: REAL, leagues: std.length };
+  settings().sim.playoffFit = { key: `${M.season}-${M.week}`, k, check: M.seedCheck };
+  save({ settingsChanged: false });
+  for (const L of M.leagues) { await new Promise(r => setTimeout(r, 0)); runSim(L); computePower(L); }
 }
 
 function assignPickSlots(L) {

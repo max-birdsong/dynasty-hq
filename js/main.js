@@ -1,4 +1,4 @@
-import { M, loadAll, refreshValues } from './model.js';
+import { M, loadAll, refreshValues, fitPlayoffVariance } from './model.js';
 import { pull, startAutoSync, onSync, syncReady, applySetup } from './state.js';
 import { $, $$, h, toast } from './util.js';
 import { cclear } from './db.js';
@@ -38,6 +38,7 @@ async function boot(force = false) {
     await loadAll(prog);
     if (M.errors.length) console.warn(M.errors);
     route();
+    if (M.needsPlayoffFit) setTimeout(async () => { await fitPlayoffVariance(); M.needsPlayoffFit = false; const a = document.activeElement; if (!a || !['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)) route(); }, 300);
 
   } catch (e) {
     console.error(e);

@@ -27,6 +27,7 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
   const rids = L.teams.map(t => t.rid);
   const res = Object.fromEntries(rids.map(r => [r, { playoff: 0, title: 0, wins: 0, seed: 0, final: 0, bye: 0, pts: 0, slot: 0, slotDist: new Array(rids.length + 1).fill(0) }]));
   // max PF (potential points): current value plus simulated scores scaled by each team's own ratio of potential to actual so far
+  const seedTitle = new Array(rids.length + 1).fill(0);
   const mpRatio = Object.fromEntries(L.teams.map(t => [t.rid, t.fpts > 0 && t.ppts > 0 ? Math.max(1, t.ppts / t.fpts) : 1.08]));
   const base = Object.fromEntries(L.teams.map(t => [t.rid, t]));
   const avgMean = {};
@@ -77,7 +78,8 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
         // scaled the way the data says spread grows with the projection; normal curve if not calibrated
         const noise = nz ? nz.c * Math.pow(Math.max(1, base), nz.gamma) * nz.z[Math.floor(rand() * nz.z.length)]
           : base * P.sdWeek * randn();
-        score[rid][wk] = Math.max(0, base + noise);
+        // playoff weeks can be given extra spread (k fitted so that title rates by seed match real leagues)
+        score[rid][wk] = Math.max(0, base + noise * (wk >= (L.playoffStart || 15) ? (P.playoffK || 1) : 1));
       }
     }
     const W = {}, PF = {}, MP = {};
@@ -112,7 +114,7 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
       if (next.length === 2) next.forEach(rid => rid != null && res[rid].final++);
       slots = next; wk++; round++;
     }
-    if (slots[0] != null) { res[slots[0]].title++; exit[slots[0]] = round + 1; }
+    if (slots[0] != null) { res[slots[0]].title++; exit[slots[0]] = round + 1; seedTitle[seeds.indexOf(slots[0]) + 1]++; }
     // next year's draft order: non-playoff teams first (by reverse max PF, or by record), then playoff teams by how far they got
     const seedOf = Object.fromEntries(seeds.map((r, i) => [r, i]));
     const non = standings.slice(n).sort(L.draftOrder === 'record' ? ((a, b) => W[a] - W[b] || PF[a] - PF[b]) : ((a, b) => MP[a] - MP[b]));
@@ -120,6 +122,8 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
     [...non, ...po].forEach((rid, i) => { res[rid].slot += i + 1; res[rid].slotDist[i + 1]++; });
   }
   for (const rid of rids) { for (const k of Object.keys(res[rid])) if (k !== 'slotDist') res[rid][k] /= runs; res[rid].slotDist = res[rid].slotDist.map(c => c / runs); }
+  Object.defineProperty(res, '_seedTitle', { value: seedTitle.map(c => c / runs), enumerable: false });
+  Object.defineProperty(res, '_format', { value: { n, size, teams: rids.length }, enumerable: false });
   // Humility: blend the model's title odds with real-league base rates. Across 900 real-money 12-team leagues
   // (6-team playoffs, 2 byes) a bye team won ~29% of the time and a non-bye playoff team ~10%, because one-week
   // playoff games are close to coin flips. Base rates for other formats scale from those.

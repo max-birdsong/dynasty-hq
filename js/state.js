@@ -24,7 +24,7 @@ export function defaultState() {
       simRuns: 3000,
       titleWorth: 4500,
       draftOrder: {},
-      sim: { useCalibration: true, teamAdj: true, sdWeek: 0.17, sdSeason: 0.06, horizonSd: 0.05, baseRateWeight: 0.5, injRates: { QB: 0.02, RB: 0.05, WR: 0.035, TE: 0.035 }, injRecover: 0.35 },
+      sim: { useCalibration: true, teamAdj: true, sdWeek: 0.17, sdSeason: 0.06, horizonSd: 0.05, baseRateWeight: 0, fitPlayoffs: true, injRates: { QB: 0.02, RB: 0.05, WR: 0.035, TE: 0.035 }, injRecover: 0.35 },
       adj: { pct: 0.6982, base: 753, scalar: 0.23 },
       rules: {
         minTatGain: 300, rebuilderFcMargin: 0.05, contenderMaxDrop: 0.3, myMaxDrop: 1.0,
