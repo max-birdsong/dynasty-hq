@@ -228,21 +228,27 @@ export function teamWeekly(L, ids) {
   return out;
 }
 
-// For the injury model: how many points each projected starter is worth over his bench replacement, per week
-export function teamDrops(L, ids) {
+// For the injury model, per week: the players who matter (starters plus the best bench options), their projected
+// points, each starter's value over his replacement, and the healthy lineup total.
+export function teamInj(L, ids) {
   const out = {};
+  const k = L.slots.length + 6;
   for (let w = M.week; w <= M.lastWeek; w++) {
     const pts = {};
     for (const id of ids) pts[id] = playerWeekPts(L, id, w);
-    const best = bestLineup(ids, pts, posOf, L.slots);
-    out[w] = [...best.starters].map(s => [s, Math.max(0, best.total - bestLineup(ids.filter(x => x !== s), pts, posOf, L.slots).total)]);
+    const cand = ids.filter(id => pts[id] > 0).sort((a, b) => pts[b] - pts[a]).slice(0, k);
+    const best = bestLineup(cand, pts, posOf, L.slots);
+    const drops = {}, pos = {};
+    for (const id of cand) pos[id] = M.players[id]?.position || 'WR';
+    for (const s of best.starters) drops[s] = Math.max(0, best.total - bestLineup(cand.filter(x => x !== s), pts, posOf, L.slots).total);
+    out[w] = { cand, pts, pos, starters: best.starters, drops, total: best.total };
   }
   return out;
 }
 
 function computeWeekly(L) {
-  L.weekly = {}; L.drops = {};
-  for (const t of L.teams) { L.weekly[t.rid] = teamWeekly(L, t.players); L.drops[t.rid] = teamDrops(L, t.players); }
+  L.weekly = {}; L.inj = {};
+  for (const t of L.teams) { L.weekly[t.rid] = teamWeekly(L, t.players); L.inj[t.rid] = teamInj(L, t.players); }
 }
 
 export function startersNow(L, ids) {
@@ -252,12 +258,13 @@ export function startersNow(L, ids) {
 }
 
 // ---------------- simulation ----------------
-export function simInput(L, weeklyOverride = {}, dropsOverride = {}) {
+export function simInput(L, weeklyOverride = {}, injOverride = {}) {
   const adj = {};
   if (settings().sim.teamAdj && M.calib?.ok) for (const t of L.teams) adj[t.rid] = M.calib.teamAdj[L.id + ':' + t.rid]?.adj || 0;
   return {
     teams: L.teams.map(t => ({ rid: t.rid, wins: t.wins, losses: t.losses, ties: t.ties, fpts: t.fpts })),
-    weekly: { ...L.weekly, ...weeklyOverride }, drops: { ...L.drops, ...dropsOverride }, adj,
+    weekly: { ...L.weekly, ...weeklyOverride }, inj: { ...L.inj, ...injOverride }, adj,
+    lineupFn: (ids, pts) => bestLineup(ids, pts, posOf, L.slots).total,
     schedule: L.schedule, regWeeks: L.regWeeks, firstWeek: M.week,
     playoffStart: L.playoffStart, playoffTeams: L.playoffTeams, median: L.median,
   };
@@ -268,7 +275,7 @@ export function simParams() {
   // Calibration uses each week's final pre-game projections. Projecting week 15 from today is less accurate than that,
   // so add a forecast-horizon error on top of whatever season-long error the data shows.
   const horizon = s.horizonSd ?? 0.05;
-  return { ...base, measuredSeason: base.sdSeason, horizon, sdSeason: Math.sqrt(base.sdSeason ** 2 + horizon ** 2), injRate: s.injRate, injRecover: s.injRecover };
+  return { ...base, measuredSeason: base.sdSeason, horizon, sdSeason: Math.sqrt(base.sdSeason ** 2 + horizon ** 2), injRates: { ...DEFAULT_PARAMS.injRates, ...(s.injRates || {}) }, injRecover: s.injRecover };
 }
 export function runSim(L) {
   L.sim = simulate(simInput(L), { runs: settings().simRuns, params: simParams(), seed: 777 });

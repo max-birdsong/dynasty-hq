@@ -13,17 +13,17 @@ function bracketOrder(size) {
   return order;
 }
 
-export const DEFAULT_PARAMS = { bias: 0, sdWeek: 0.17, sdSeason: 0.06, injRate: 0.035, injRecover: 0.35 };
+export const DEFAULT_PARAMS = { bias: 0, sdWeek: 0.17, sdSeason: 0.06, injRates: { QB: 0.02, RB: 0.05, WR: 0.035, TE: 0.035, K: 0.01, DEF: 0 }, injRecover: 0.35 };
 
 /**
- * L: { teams:[{rid,wins,losses,ties,fpts}], weekly:{rid:{week:mean}}, drops:{rid:{week:[[pid,drop],...]}},
+ * L: { teams:[{rid,wins,losses,ties,fpts}], weekly:{rid:{week:mean}}, inj:{rid:{week:{cand,pts,pos,starters,drops,total}}}, lineupFn,
  *      adj:{rid:number}, schedule, regWeeks, playoffStart, playoffTeams, median, firstWeek }
  */
 export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null } = {}) {
   // a fixed seed gives "common random numbers": before/after comparisons of a trade see the same luck
   const rand = seed == null ? Math.random : mulberry32(seed);
   const randn = () => { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-  const P = { ...DEFAULT_PARAMS, ...params };
+  const P = { ...DEFAULT_PARAMS, ...params, injRates: { ...DEFAULT_PARAMS.injRates, ...(params.injRates || {}) } };
   const rids = L.teams.map(t => t.rid);
   const res = Object.fromEntries(rids.map(r => [r, { playoff: 0, title: 0, wins: 0, seed: 0, final: 0, bye: 0, pts: 0 }]));
   const base = Object.fromEntries(L.teams.map(t => [t.rid, t]));
@@ -54,14 +54,20 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
       for (const rid of rids) {
         const mu = L.weekly[rid]?.[wk] ?? avgMean[rid];
         let loss = 0;
-        const drops = L.drops?.[rid]?.[wk];
-        if (drops && wk > firstWeek) {
-          const st = inj[rid];
-          for (const [pid, d] of drops) {
-            let out = st.get(pid) || false;
-            out = out ? rand() > P.injRecover : rand() < P.injRate;
-            st.set(pid, out);
-            if (out) loss += d;
+        // injuries: every relevant player (starters and the bench players who'd replace them) can get hurt,
+        // at a position-specific weekly rate, and stays out until he recovers
+        const D = L.inj?.[rid]?.[wk];
+        if (D && wk > firstWeek) {
+          const st = inj[rid]; let hurt = null;
+          for (const pid of D.cand) {
+            let o = st.get(pid) || false;
+            o = o ? rand() > P.injRecover : rand() < (P.injRates[D.pos[pid]] ?? 0.035);
+            st.set(pid, o);
+            if (o) (hurt ||= []).push(pid);
+          }
+          if (hurt && hurt.some(p => D.starters.has(p))) {
+            // one starter out: cost = gap to his replacement. Several out (or a replacement also hurt): rebuild the lineup from who's healthy
+            loss = hurt.length === 1 ? (D.drops[hurt[0]] || 0) : D.total - L.lineupFn(D.cand.filter(p => !hurt.includes(p)), D.pts);
           }
         }
         const base = (mu - loss) * mult[rid];

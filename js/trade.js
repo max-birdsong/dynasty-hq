@@ -1,5 +1,5 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
-import { M, asset, teamAssets, teamWeekly, teamDrops, startersNow, simInput, simParams, isPick, pid } from './model.js';
+import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid } from './model.js';
 import { settings, state } from './state.js';
 import { simulate } from './sim.js';
 import { sum } from './util.js';
@@ -85,7 +85,7 @@ const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
 // Re-simulate the league with both rosters changed
 export function simDelta(L, r, runs = 3000) {
   const params = simParams();
-  const drops = { [L.me.rid]: teamDrops(L, r.me.ids), [r.partner.rid]: teamDrops(L, r.them.ids) };
+  const drops = { [L.me.rid]: teamInj(L, r.me.ids), [r.partner.rid]: teamInj(L, r.them.ids) };
   const after = simulate(simInput(L, { [L.me.rid]: r.me.after, [r.partner.rid]: r.them.after }, drops), { runs, params, seed: 12345 });
   const before = simulate(simInput(L), { runs, params, seed: 12345 });
   return { me: [before[L.me.rid], after[L.me.rid]], them: [before[r.partner.rid], after[r.partner.rid]] };

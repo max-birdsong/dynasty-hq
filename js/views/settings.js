@@ -36,7 +36,7 @@ export default function settingsView() {
   root.append(h('div', { class: 'panel' }, h('h2', {}, 'Simulator & FantasyCalc adjustment'),
     h('div', { class: 'grid g3' },
       num(st, 'simRuns', 'Simulated seasons', 100),
-      num(st.sim, 'injRate', 'Injury chance per starter per week', 0.005, '0.035 ≈ a starter misses ~10% of future weeks'),
+      ...['QB', 'RB', 'WR', 'TE'].map(p => { st.sim.injRates ||= { QB: 0.02, RB: 0.05, WR: 0.035, TE: 0.035 }; return num(st.sim.injRates, p, `${p} injury chance per week`, 0.005, p === 'RB' ? '0.05 ≈ an RB misses ~13% of future weeks' : ''); }),
       num(st.sim, 'injRecover', 'Chance an injured starter returns each week', 0.05, '0.35 ≈ 3 weeks out on average'),
       num(st.sim, 'horizonSd', 'Forecast-horizon error (season-long)', 0.01, 'Extra uncertainty for projecting weeks ahead; 0.05 = ±5%'),
       num(st.sim, 'sdWeek', 'Weekly spread if not calibrated', 0.01),
