@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dynasty HQ</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏈</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">Dynasty<span>HQ</span></a>
+  <nav id="nav">
+    <a href="#/">Dashboard</a>
+    <a href="#/league">Leagues</a>
+    <a href="#/owners">Owners</a>
+    <a href="#/trades">Trades</a>
+    <a href="#/values">Values</a>
+    <a href="#/settings">Settings</a>
+  </nav>
+  <span id="sync" class="sync off">Not syncing</span>
+  <button id="refresh" class="btn ghost small" title="Reload all data">↻</button>
+</header>
+<main id="app"><div class="loading" id="loading"><div class="spinner"></div><div id="progress">Loading…</div></div></main>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
