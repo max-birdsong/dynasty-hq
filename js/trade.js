@@ -1,5 +1,5 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
-import { M, asset, teamAssets, teamWeekly, startersNow, simInput, isPick, pid } from './model.js';
+import { M, asset, teamAssets, teamWeekly, teamDrops, startersNow, simInput, simParams, isPick, pid } from './model.js';
 import { settings, state } from './state.js';
 import { simulate } from './sim.js';
 import { sum } from './util.js';
@@ -29,7 +29,7 @@ export function lineupImpact(L, t, outKeys, inKeys) {
   const after = teamWeekly(L, rosterAfter(t, outKeys, inKeys));
   const po = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) po.push(w);
   const reg = L.regWeeks.length ? L.regWeeks : po;
-  return { rosBefore: mean(before, reg), rosAfter: mean(after, reg), poBefore: mean(before, po), poAfter: mean(after, po), after };
+  return { rosBefore: mean(before, reg), rosAfter: mean(after, reg), poBefore: mean(before, po), poAfter: mean(after, po), after, ids: rosterAfter(t, outKeys, inKeys) };
 }
 
 export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}) {
@@ -83,10 +83,11 @@ export function tradeMemory(L, partner, giveKeys, getKeys) {
 const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
 
 // Re-simulate the league with both rosters changed
-export function simDelta(L, r, runs = 1500) {
-  const sd = settings().simSd;
-  const after = simulate(simInput(L, { [L.me.rid]: r.me.after, [r.partner.rid]: r.them.after }), { runs, sd });
-  const before = simulate(simInput(L), { runs, sd });
+export function simDelta(L, r, runs = 3000) {
+  const params = simParams();
+  const drops = { [L.me.rid]: teamDrops(L, r.me.ids), [r.partner.rid]: teamDrops(L, r.them.ids) };
+  const after = simulate(simInput(L, { [L.me.rid]: r.me.after, [r.partner.rid]: r.them.after }, drops), { runs, params, seed: 12345 });
+  const before = simulate(simInput(L), { runs, params, seed: 12345 });
   return { me: [before[L.me.rid], after[L.me.rid]], them: [before[r.partner.rid], after[r.partner.rid]] };
 }
 

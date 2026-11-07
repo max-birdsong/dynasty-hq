@@ -3,7 +3,8 @@ import * as api from './api.js';
 import { state, settings, nick, latestTat, recordHistory } from './state.js';
 import { parseLines, tierValues, valueRows, normName } from './tatparse.js';
 import { startSlots, neededPositions, scoreStats, bestLineup } from './lineup.js';
-import { simulate } from './sim.js';
+import { simulate, DEFAULT_PARAMS } from './sim.js';
+import { calibrate } from './calib.js';
 import { pool, sum } from './util.js';
 
 export const M = { ready: false, leagues: [], players: {}, season: null, week: 1, errors: [], projSource: 'sleeper' };
@@ -52,6 +53,8 @@ export async function loadAll(progress = () => {}) {
   M.leagues.sort((a, b) => a.nick.localeCompare(b.nick));
 
   applyTat();
+  progress('Calibrating simulator on your leagues');
+  M.calib = calibrate(M.leagues, M.projPast, M.players, posOf);
   progress('Simulating seasons');
   for (const L of M.leagues) runSim(L);
   for (const L of M.leagues) { computePower(L); snapshotHistory(L); }
@@ -92,6 +95,11 @@ async function loadProjections(leagues) {
   const res = await pool(weeks, 4, w => api.weekProjections(M.season, w, positions));
   weeks.forEach((w, i) => { if (res[i]) M.proj[w] = res[i]; });
   M.projSource = Object.keys(M.proj).length ? 'sleeper' : 'average';
+  // projections for weeks already played, used to calibrate the simulator
+  M.projPast = {};
+  const past = []; for (let w = 1; w < M.week; w++) past.push(w);
+  const pr = await pool(past, 4, w => api.weekProjections(M.season, w, positions, 30 * 86400e3).catch(() => null));
+  past.forEach((w, i) => { if (pr[i]) M.projPast[w] = pr[i]; });
 }
 
 function posOf(id) {
@@ -144,7 +152,7 @@ async function buildLeague(lg) {
   const weeks = [];
   for (let w = 1; w < L.playoffStart; w++) weeks.push(w);
   const mus = await pool(weeks, 4, w => api.matchups(id, w, w < M.week - 1).catch(() => []));
-  L.schedule = {}; L.pastPts = {};
+  L.schedule = {}; L.pastPts = {}; L.pastMatchups = {};
   weeks.forEach((w, i) => {
     const arr = mus[i] || [];
     if (w >= M.week) {
@@ -152,6 +160,7 @@ async function buildLeague(lg) {
       for (const m of arr) if (m.matchup_id != null) (g[m.matchup_id] ||= []).push(m.roster_id);
       L.schedule[w] = Object.values(g).map(p => [p[0], p[1] ?? null]);
     } else {
+      L.pastMatchups[w] = arr;
       for (const m of arr) for (const [pl, pts] of Object.entries(m.players_points || {})) {
         (L.pastPts[pl] ||= []).push(pts);
       }
@@ -191,9 +200,21 @@ export function teamWeekly(L, ids) {
   return out;
 }
 
+// For the injury model: how many points each projected starter is worth over his bench replacement, per week
+export function teamDrops(L, ids) {
+  const out = {};
+  for (let w = M.week; w <= M.lastWeek; w++) {
+    const pts = {};
+    for (const id of ids) pts[id] = playerWeekPts(L, id, w);
+    const best = bestLineup(ids, pts, posOf, L.slots);
+    out[w] = [...best.starters].map(s => [s, Math.max(0, best.total - bestLineup(ids.filter(x => x !== s), pts, posOf, L.slots).total)]);
+  }
+  return out;
+}
+
 function computeWeekly(L) {
-  L.weekly = {};
-  for (const t of L.teams) L.weekly[t.rid] = teamWeekly(L, t.players);
+  L.weekly = {}; L.drops = {};
+  for (const t of L.teams) { L.weekly[t.rid] = teamWeekly(L, t.players); L.drops[t.rid] = teamDrops(L, t.players); }
 }
 
 export function startersNow(L, ids) {
@@ -203,16 +224,23 @@ export function startersNow(L, ids) {
 }
 
 // ---------------- simulation ----------------
-export function simInput(L, weeklyOverride = {}) {
+export function simInput(L, weeklyOverride = {}, dropsOverride = {}) {
+  const adj = {};
+  if (settings().sim.teamAdj && M.calib?.ok) for (const t of L.teams) adj[t.rid] = M.calib.teamAdj[L.id + ':' + t.rid]?.adj || 0;
   return {
     teams: L.teams.map(t => ({ rid: t.rid, wins: t.wins, losses: t.losses, ties: t.ties, fpts: t.fpts })),
-    weekly: { ...L.weekly, ...weeklyOverride }, schedule: L.schedule, regWeeks: L.regWeeks,
+    weekly: { ...L.weekly, ...weeklyOverride }, drops: { ...L.drops, ...dropsOverride }, adj,
+    schedule: L.schedule, regWeeks: L.regWeeks, firstWeek: M.week,
     playoffStart: L.playoffStart, playoffTeams: L.playoffTeams, median: L.median,
   };
 }
+export function simParams() {
+  const s = settings().sim;
+  const base = M.calib?.ok && s.useCalibration ? M.calib.params : { ...DEFAULT_PARAMS, sdWeek: s.sdWeek, sdSeason: s.sdSeason };
+  return { ...base, injRate: s.injRate, injRecover: s.injRecover };
+}
 export function runSim(L) {
-  const s = settings();
-  L.sim = simulate(simInput(L), { runs: s.simRuns, sd: s.simSd });
+  L.sim = simulate(simInput(L), { runs: settings().simRuns, params: simParams(), seed: 777 });
   assignPickSlots(L);
 }
 

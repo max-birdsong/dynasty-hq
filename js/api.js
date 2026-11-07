@@ -23,9 +23,9 @@ export function fcValues(numTeams = 12, numQbs = 2, ppr = 1) {
 }
 
 // Weekly projections from Sleeper (undocumented endpoint). Returns null if blocked.
-export async function weekProjections(season, week, positions) {
+export async function weekProjections(season, week, positions, maxAge = 6 * HOUR) {
   const key = `proj-${season}-${week}-${positions.join('')}`;
-  const hit = await cget(key, 6 * HOUR);
+  const hit = await cget(key, maxAge);
   if (hit) return hit;
   const qs = positions.map(p => `position[]=${p}`).join('&');
   for (const base of ['https://api.sleeper.app/projections/nfl', 'https://api.sleeper.com/projections/nfl']) {

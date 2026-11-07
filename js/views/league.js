@@ -1,4 +1,4 @@
-import { M, leagueById, teamAssets, startersNow, playerWeekPts } from '../model.js';
+import { M, leagueById, teamAssets, startersNow, playerWeekPts, simParams } from '../model.js';
 import { state } from '../state.js';
 import { h, fmt, pct, sgn, lineChart, PALETTE } from '../util.js';
 import { table, adviceTag, modeTag, pctBar, posB, empty } from '../components.js';
@@ -24,7 +24,7 @@ export default function leagueView(id, tab = 'power') {
       kpi(`#${me.fcTotalRank}`, 'FantasyCalc'), kpi(`#${me.tatTotalRank}`, 'Sanderson'), kpi(`${fmt(me.ros, 1)} (#${me.rosRank})`, 'proj pts/wk')) : '',
     me ? h('p', { class: 'muted small', style: { marginBottom: 0 } }, me.advice.text) : ''));
 
-  const tabs = [['power', 'Power rankings'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks']];
+  const tabs = [['power', 'Power rankings'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
   root.append(h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: k === tab ? 'on' : '', onclick: () => location.hash = `#/league/${id}/${k}` }, l))));
   const body = h('div', { class: 'panel' });
   root.append(body);
@@ -32,6 +32,7 @@ export default function leagueView(id, tab = 'power') {
   if (tab === 'roster') body.append(roster(L));
   if (tab === 'history') body.append(history(L));
   if (tab === 'picks') body.append(picks(L));
+  if (tab === 'sim') body.append(simTab(L));
   return root;
 }
 
@@ -112,4 +113,45 @@ function picks(L) {
   cols.push({ key: 'total', label: 'All', n: true }, { key: 'value', label: 'FC value', n: true, fmt: v => fmt(v) });
   return h('div', {}, h('div', { class: 'muted small', style: { marginBottom: '8px' } }, 'Projected draft slot comes from the simulator (worst expected record picks first).'),
     table(cols, rows, { sortKey: 'value', rowClass: r => r.isMe ? 'me' : '' }));
+}
+
+function simTab(L) {
+  const C = M.calib, P = simParams();
+  const wrap = h('div');
+  const pc = x => (x * 100).toFixed(1) + '%';
+  wrap.append(h('h3', {}, 'How the simulator works'),
+    h('p', { class: 'small' }, `Each team's weekly projection is its best lineup from Sleeper's projections, scored with this league's settings. The rest of the season and the playoffs are played out ${fmt(state().settings.simRuns)} times. In each simulated season every team gets three kinds of luck:`),
+    h('ul', { class: 'small' },
+      h('li', {}, h('b', {}, 'Season-long error '), `(±${pc(P.sdSeason)}): the projection is simply wrong about the team for the rest of the year. Drawn once per simulated season, so it doesn't average out.`),
+      h('li', {}, h('b', {}, 'Week-to-week luck '), `(±${pc(P.sdWeek)}): drawn fresh every week; this part carries no information about the future.`),
+      h('li', {}, h('b', {}, 'Injuries: '), `each projected starter has a ${pc(P.injRate)} chance per future week of getting hurt and is out ~${(1 / P.injRecover).toFixed(1)} weeks on average, costing the points between him and his bench replacement. Stars-and-scrubs rosters get hit harder.`)),
+    h('p', { class: 'small' }, P.bias ? `Projections have run ${pc(Math.abs(P.bias))} ${P.bias < 0 ? 'high' : 'low'} on average (perfect-hindsight lineups vs real lineups), so every team is scaled by the same amount. That doesn't change who's favoured.` : ''));
+  if (!C?.ok) {
+    wrap.append(h('div', { class: 'err-box' }, C?.note || 'Not calibrated yet: Sleeper projections for past weeks were not available. Using default spreads.'));
+    return wrap;
+  }
+  wrap.append(h('h3', { style: { marginTop: '16px' } }, 'Calibration from your leagues'),
+    h('div', { class: 'kpis' },
+      kpi(fmt(C.n), `team-weeks (${C.weeks} weeks, ${C.teams} team-seasons)`),
+      kpi(pc(C.params.sdWeek), 'weekly luck (sd)'),
+      kpi(pc(C.params.sdSeason), 'season-long error (sd)'),
+      kpi(fmt(C.meanAbsErr, 1), 'avg miss, pts per team-week'),
+      kpi(C.favRight != null ? pc(C.favRight) : '–', 'projected favourite won'),
+      kpi(C.brier != null ? C.brier.toFixed(3) : '–', 'Brier score (coin flip = 0.250)')),
+    h('p', { class: 'small muted' }, 'All 11 leagues are pooled, because how wrong projections are is a property of projections, not of any one league. Below: when the model gave the favourite X%, how often did the favourite actually win? Close numbers mean the odds are honest.'),
+    h('table', { style: { maxWidth: '520px' } }, h('thead', {}, h('tr', {}, ['Model said', 'Games', 'Model avg', 'Favourite actually won'].map(x => h('th', {}, x)))),
+      h('tbody', {}, C.bins.map(b => h('tr', {}, h('td', {}, `${Math.round(b.lo * 100)}–${Math.min(100, Math.round(b.hi * 100))}%`), h('td', { class: 'n' }, b.n), h('td', { class: 'n' }, b.p != null ? pc(b.p) : '–'), h('td', { class: 'n' }, b.rate != null ? pc(b.rate) : '–'))))));
+  const rows = L.teams.map(t => { const a = C.teamAdj[L.id + ':' + t.rid] || {}; return { owner: t.owner, isMe: t.isMe, n: a.n, proj: a.proj, actual: a.actual, diff: a.mean != null ? a.mean - C.params.bias : null, shrink: a.shrink, adj: a.adj }; });
+  wrap.append(h('h3', { style: { marginTop: '16px' } }, 'Did teams beat their projections?'),
+    h('p', { class: 'small muted' }, `"Applied" is how much of each team's over/under-performance the simulator carries forward. It is shrunk toward zero by how much of the error persists in the data (${pc(C.params.sdSeason)} season vs ${pc(C.params.sdWeek)} weekly), so a team that's just been unlucky isn't marked down.` + (state().settings.sim.teamAdj ? '' : ' (Currently switched off in Settings.)')),
+    table([
+      { key: 'owner', label: 'Team', n: false },
+      { key: 'n', label: 'Weeks', n: true },
+      { key: 'proj', label: 'Projected/wk', n: true, fmt: v => fmt(v, 1) },
+      { key: 'actual', label: 'Actual/wk', n: true, fmt: v => fmt(v, 1) },
+      { key: 'diff', label: 'vs projection', n: true, fmt: v => v == null ? '–' : h('span', { class: v > 0 ? 'pos' : 'neg' }, (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%') },
+      { key: 'shrink', label: 'Weight', n: true, fmt: v => v == null ? '–' : Math.round(v * 100) + '%' },
+      { key: 'adj', label: 'Applied', n: true, fmt: v => v == null ? '–' : (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%' },
+    ], rows, { sortKey: 'diff', rowClass: r => r.isMe ? 'me' : '' }));
+  return wrap;
 }
