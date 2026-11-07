@@ -328,25 +328,51 @@ export function teamAssets(L, t) {
 }
 
 // Map TAT rows to Sleeper ids once, then value per league (each league's own pick scale)
+let byNamePosCache = null;
+function matchTatRows(set) {
+  M.tatMatchCache ||= new Map();
+  if (M.tatMatchCache.has(set.id)) return M.tatMatchCache.get(set.id);
+  const fc12 = M.fc['12-2-1'];
+  if (!byNamePosCache) {
+    byNamePosCache = new Map();
+    for (const [id, p] of Object.entries(M.players)) {
+      if (!p.full_name || !['QB', 'RB', 'WR', 'TE'].includes(p.position)) continue;
+      const k = normName(p.full_name) + '|' + p.position;
+      const prev = byNamePosCache.get(k);
+      if (!prev || (p.team && !M.players[prev].team) || (p.active && !M.players[prev].active)) byNamePosCache.set(k, id);
+    }
+  }
+  const ids = new Map(), unmatched = [];
+  for (const r of set.rows) {
+    const k = normName(r.name) + '|' + r.pos;
+    const id = fc12?.byName.get(k) || byNamePosCache.get(k);
+    if (id) ids.set(r.rank, String(id)); else unmatched.push(r.name);
+  }
+  const res = { ids, unmatched };
+  M.tatMatchCache.set(set.id, res);
+  return res;
+}
+
+// TAT values of any uploaded set, on this league's scale (cached)
+export function tatMapFor(L, set) {
+  L.tatSetCache ||= new Map();
+  if (L.tatSetCache.has(set.id)) return L.tatSetCache.get(set.id);
+  const { ids } = matchTatRows(set);
+  const pv = n => L.fc.picks.get(n) ?? M.fc['12-2-1']?.picks.get(n) ?? 0;
+  const vals = valueRows(set.rows, tierValues(pv, +L.season + 1));
+  const m = new Map();
+  for (const r of set.rows) { const id = ids.get(r.rank); if (id) m.set(id, vals.get(r.rank)); }
+  L.tatSetCache.set(set.id, m);
+  return m;
+}
+
 export function applyTat() {
   const set = latestTat();
   M.tatSet = set;
   M.tatIds = new Map();
   if (!set) { for (const L of M.leagues) { L.tatMap = null; L.tatRank = null; L.tatMove = null; } return; }
-  const fc12 = M.fc['12-2-1'];
-  const byNamePos = new Map();
-  for (const [id, p] of Object.entries(M.players)) {
-    if (!p.full_name || !['QB', 'RB', 'WR', 'TE'].includes(p.position)) continue;
-    const k = normName(p.full_name) + '|' + p.position;
-    const prev = byNamePos.get(k);
-    if (!prev || (p.team && !M.players[prev].team) || (p.active && !M.players[prev].active)) byNamePos.set(k, id);
-  }
-  const unmatched = [];
-  for (const r of set.rows) {
-    const k = normName(r.name) + '|' + r.pos;
-    const id = fc12?.byName.get(k) || byNamePos.get(k);
-    if (id) M.tatIds.set(r.rank, String(id)); else unmatched.push(r.name);
-  }
+  const { ids, unmatched } = matchTatRows(set);
+  M.tatIds = ids;
   M.tatUnmatched = unmatched;
   for (const L of M.leagues) valueTat(L, set);
 }

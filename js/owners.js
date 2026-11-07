@@ -1,5 +1,7 @@
 // Owner profiles: trade history, pick flow, buying/selling tendencies, positional needs.
-import { M, asset, teamAssets } from './model.js';
+import { M, asset, teamAssets, tatMapFor, isPick } from './model.js';
+import { state } from './state.js';
+import { loadDp, makeValuer } from './history.js';
 import * as api from './api.js';
 import { sum } from './util.js';
 
@@ -27,7 +29,14 @@ function pickAsset(L, p) {
   return { key, pick: true, name: `${p.season} ${ORD[p.round]} (used)`, fc: v, tat: v, pos: 'PICK' };
 }
 
-export function tradeSides(L, tr) {
+// TAT set that was current on a date (only if one had been uploaded by then)
+function tatSetOn(ms) {
+  const d = new Date(ms).toISOString().slice(0, 10);
+  let r = null; for (const s of state().tatSets) if (s.date <= d) r = s;
+  return r;
+}
+
+export function tradeSides(L, tr, valuer = null) {
   const sides = {};
   for (const rid of tr.roster_ids) sides[rid] = { rid, ownerId: ownerOfRid(L, tr, rid), got: [], gave: [] };
   for (const [pl, rid] of Object.entries(tr.adds || {})) sides[rid]?.got.push(asset(L, 'p:' + pl));
@@ -36,9 +45,26 @@ export function tradeSides(L, tr) {
     const a = pickAsset(L, p);
     sides[p.owner_id]?.got.push(a); sides[p.previous_owner_id]?.gave.push(a);
   }
+  // values at the time of the trade
+  const set = tatSetOn(tr.created), tmap = set ? tatMapFor(L, set) : null;
+  const then = new Map();
+  const valueThen = a => {
+    if (then.has(a.key)) return then.get(a.key);
+    let fc = null, tat = null;
+    if (valuer) {
+      if (a.pick) { const [, y, rd] = a.key.split(':'); fc = valuer.pick(+y, +rd, tr.created); }
+      else fc = valuer.player(a.id || a.key.slice(2), tr.created);
+      if (tmap) tat = a.pick ? fc : (tmap.get(a.id) ?? Math.min(fc * 0.5, 600));
+    }
+    const o = { fc, tat }; then.set(a.key, o); return o;
+  };
   for (const s of Object.values(sides)) {
     s.fcNet = sum(s.got.map(a => a.fc)) - sum(s.gave.map(a => a.fc));
     s.tatNet = sum(s.got.map(a => a.tat)) - sum(s.gave.map(a => a.tat));
+    for (const a of [...s.got, ...s.gave]) { const t = valueThen(a); a.fcThen = t.fc; a.tatThen = t.tat; }
+    s.fcNetThen = valuer ? sum(s.got.map(a => a.fcThen)) - sum(s.gave.map(a => a.fcThen)) : null;
+    s.tatNetThen = tmap ? sum(s.got.map(a => a.tatThen)) - sum(s.gave.map(a => a.tatThen)) : null;
+    s.valuedOn = valuer ? valuer.date(tr.created) : null; s.tatSet = set?.label || null;
   }
   return sides;
 }
@@ -68,13 +94,14 @@ function posNeeds(L) {
 
 export async function profiles(L) {
   const trades = await loadTrades(L);
+  const valuer = makeValuer(await loadDp(), L);
   const { ranks } = posNeeds(L);
   const N = L.teams.length;
   const out = [];
   for (const t of L.teams) {
     const mine = [];
     for (const tr of trades) {
-      const sides = tradeSides(L, tr);
+      const sides = tradeSides(L, tr, valuer);
       const me = Object.values(sides).find(s => s.ownerId === t.ownerId);
       if (!me) continue;
       const others = Object.values(sides).filter(s => s !== me);
@@ -99,17 +126,21 @@ export async function profiles(L) {
     if (mine.length >= 6) tags.push('Active trader'); else if (mine.length === 0) tags.push('Never trades');
     const fcNet = sum(mine.map(x => x.me.fcNet)), tatNet = sum(mine.map(x => x.me.tatNet));
     // trade record: a trade counts as a win/loss if the net is more than 5% of the deal (min 150), else even
+    const VAL = { fcNet: 'fc', tatNet: 'tat', fcNetThen: 'fcThen', tatNetThen: 'tatThen' };
     const rec = k => {
-      const r = { w: 0, l: 0, e: 0 };
-      for (const x of mine) {
-        const size = Math.max(sum(x.me.got.map(a => a[k === 'fcNet' ? 'fc' : 'tat'])), sum(x.me.gave.map(a => a[k === 'fcNet' ? 'fc' : 'tat'])));
+      const r = { w: 0, l: 0, e: 0 }; const used = mine.filter(x => x.me[k] != null);
+      for (const x of used) {
+        const f = VAL[k];
+        const size = Math.max(sum(x.me.got.map(a => a[f])), sum(x.me.gave.map(a => a[f])));
         const th = Math.max(150, 0.05 * size), v = x.me[k];
         v > th ? r.w++ : v < -th ? r.l++ : r.e++;
       }
-      r.n = mine.length; r.pct = r.n ? (r.w + 0.5 * r.e) / r.n : null; r.avg = r.n ? sum(mine.map(x => x.me[k])) / r.n : null;
+      r.n = used.length; r.pct = r.n ? (r.w + 0.5 * r.e) / r.n : null; r.avg = r.n ? sum(used.map(x => x.me[k])) / r.n : null;
       return r;
     };
-    const fcRec = rec('fcNet'), tatRec = rec('tatNet');
+    const fcRecNow = rec('fcNet'), tatRec = rec('tatNet'), fcThenRec = rec('fcNetThen'), tatThenRec = rec('tatNetThen');
+    // judge on values at the time when we have them; hindsight otherwise
+    const fcRec = fcThenRec.n ? fcThenRec : fcRecNow;
     let style = null;
     if (mine.length >= 3) {
       if (fcRec.pct >= 0.6 && tatRec.pct >= 0.6) style = 'Shark';
@@ -124,7 +155,7 @@ export async function profiles(L) {
     const r = ranks[t.rid];
     const needs = Object.entries(r).filter(([, v]) => v > N * 0.66).map(([k]) => k);
     const surplus = Object.entries(r).filter(([, v]) => v <= Math.max(2, Math.round(N * 0.2))).map(([k]) => k);
-    out.push({ team: t, trades: mine, got, gave, aIn, aOut, picksIn, picksOut, own, def, byRound, posIn, posOut, partners, tags, fcNet, tatNet, fcRec, tatRec, style, ranks: r, needs, surplus });
+    out.push({ team: t, trades: mine, got, gave, aIn, aOut, picksIn, picksOut, own, def, byRound, posIn, posOut, partners, tags, fcNet, tatNet, fcRec, fcRecNow, fcThenRec, tatRec, tatThenRec, style, ranks: r, needs, surplus });
   }
   return out;
 }

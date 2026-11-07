@@ -19,10 +19,14 @@ jobs:
       - run: node scripts/snapshot.mjs
         env:
           SLEEPER_USER: boximax
+      - name: Refresh DynastyProcess value history
+        run: |
+          git clone --quiet --filter=blob:none --shallow-since=2024-12-01 https://github.com/dynastyprocess/data /tmp/dp
+          node scripts/dp-history.mjs /tmp/dp
       - name: Commit snapshot
         run: |
           git config user.name "dynasty-hq-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add data/snapshots
+          git add data/snapshots data/history
           git diff --cached --quiet || git commit -m "Weekly snapshot $(date -u +%F)"
           git push
