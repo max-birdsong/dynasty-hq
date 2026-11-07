@@ -110,3 +110,21 @@ code { font-family: var(--mono); font-size: 12px; background: var(--panel2); pad
 .panel.plan { border-left: 3px solid var(--accent); }
 
 .flag.warnf { color: var(--warn); font-weight: 600; }
+
+/* --- decluttered layout --- */
+.setup { background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; color: var(--muted); }
+.lcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.lcard { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; color: inherit; text-decoration: none; transition: border-color .15s; }
+.lcard:hover { border-color: var(--accent); }
+.lcard .lname { font-size: 16px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.stat { background: var(--panel2); border-radius: 6px; padding: 6px 8px; }
+.stat b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.verdict .big { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+.keylines { margin: 8px 0 4px; padding-left: 18px; }
+.keylines li { margin-bottom: 3px; }
+.panel.plan h2 { font-size: 16px; }
+details > summary { list-style: revert; }
+@media (max-width: 600px) { .top { flex-wrap: wrap; row-gap: 6px; } .top nav { order: 3; flex-basis: 100%; } .brand { margin-right: auto; } }

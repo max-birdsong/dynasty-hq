@@ -22,6 +22,9 @@ export const fmt = (n, d = 0) => (n == null || isNaN(n)) ? '–' : Number(n).toL
 export const sgn = (n, d = 0) => (n == null || isNaN(n)) ? '–' : (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n), d);
 // odds from a simulation are never truly 0 or 100: the model can't see trades, injuries to come, or a rival tanking
 export const odds = n => n == null || isNaN(n) ? '–' : n > 0.995 ? '>99%' : n > 0 && n < 0.005 ? '<1%' : Math.round(n * 100) + '%';
+// value in generic (base) 1sts of next year's class, the unit people actually trade in
+export const firstsOf = (L, v) => v / (L?.fc?.picks.get(`${+L.season + 1} 1st`) || 3000);
+export const f1 = (L, v, sign = true) => { const x = firstsOf(L, v), a = Math.abs(x); if (a < 0.005) return '≈0 1sts'; return (sign ? (x >= 0 ? '+' : '−') : x < 0 ? '−' : '') + (a < 0.95 ? a.toFixed(2) : a.toFixed(1)) + ' 1sts'; };
 export const pct = n => (n == null || isNaN(n)) ? '–' : Math.round(n * 100) + '%';
 export const cls = (n, eps = 0) => n > eps ? 'pos' : n < -eps ? 'neg' : '';
 export const sum = a => a.reduce((s, x) => s + (x || 0), 0);

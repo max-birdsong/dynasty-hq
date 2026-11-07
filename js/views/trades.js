@@ -3,7 +3,7 @@ import { state, logTrade, updateTrade, deleteTrade, settings, save } from '../st
 import { evalTrade, simDelta, suggest, tradeValue } from '../trade.js';
 import { teamPlan } from '../plan.js';
 import { loadTrades, tradeSides, pickIndex } from '../owners.js';
-import { h, fmt, sgn, pct, toast, sleep } from '../util.js';
+import { h, fmt, sgn, pct, toast, sleep, f1 } from '../util.js';
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
 
 const STATUSES = ['sent', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
@@ -70,7 +70,7 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       h('div', {}, h('h3', {}, 'You send'), h('div', { class: 'assets' }, r.give.map(a => assetLine(a)))),
       h('div', {}, h('h3', {}, 'You get'), h('div', { class: 'assets' }, r.get.map(a => assetLine(a))))),
     h('div', { class: 'kpis' },
-      kpi(delta(r.tatGain), 'Sanderson gain (you)'),
+      kpi(h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg', title: sgn(r.tatGain) + ' Sanderson points' }, f1(L, r.tatGain)), 'Sanderson gain (you)'),
       kpi(delta(m), `FC for ${partner.owner}` + (r.fc.adjA || r.fc.adjB ? ` (adj ${fmt(r.fc.adjA || r.fc.adjB)})` : '')),
       r.me ? kpi(h('span', {}, delta(r.me.rosAfter - r.me.rosBefore, 1), ' / ', delta(r.me.poAfter - r.me.poBefore, 1)), 'Your pts/wk: now / playoffs') : '',
       r.them ? kpi(h('span', {}, delta(r.them.rosAfter - r.them.rosBefore, 1), ' / ', delta(r.them.poAfter - r.them.poBefore, 1)), `${partner.owner} pts/wk`) : ''),
@@ -81,28 +81,20 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       r.memory.same ? h('div', { class: 'flag ' + (['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status) ? 'bad' : '') }, `You sent this exact offer on ${new Date(r.memory.same.created).toLocaleDateString()}: ${r.memory.same.status}`) : '',
       r.memory.overlap.filter(o => o !== r.memory.same).slice(0, 3).map(o => h('div', { class: 'flag' }, `Earlier ask for ${o.getNames.join(' + ')} (${new Date(o.created).toLocaleDateString()}): ${o.status}`))),
     h('div', { class: 'row', style: { marginTop: '10px' } },
-      !showSim && r.me ? h('button', { class: 'btn ghost small', onclick: async e => { e.target.disabled = true; simBox.replaceChildren(h('span', { class: 'muted small' }, 'Simulating…')); await sleep(20); const d = simDelta(L, r); simBox.replaceChildren(simTable(d, partner)); e.target.disabled = false; } }, 'Simulate playoff / title impact') : '',
+      !showSim && r.me ? h('button', { class: 'btn ghost small', onclick: async e => { e.target.disabled = true; simBox.replaceChildren(h('span', { class: 'muted small' }, 'Simulating…')); await sleep(20); const d = simDelta(L, r); d.L = L; simBox.replaceChildren(simTable(d, partner)); e.target.disabled = false; } }, 'Simulate playoff / title impact') : '',
       h('button', { class: 'btn small', onclick: () => { logTrade(toLog(r)); toast('Logged as sent'); } }, 'Log as sent')),
     simBox);
   // in the calculator, re-simulate the season automatically whenever the trade changes
   if (showSim && r.me) {
     simBox.replaceChildren(h('div', { class: 'muted small', style: { marginTop: '10px' } }, 'Simulating the season with and without this trade…'));
     clearTimeout(evalPanel._t);
-    evalPanel._t = setTimeout(() => { if (!simBox.isConnected) return; const d = simDelta(L, r); d.value = tradeValue(L, r, d); simBox.replaceChildren(simTable(d, partner)); }, 250);
+    evalPanel._t = setTimeout(() => { if (!simBox.isConnected) return; const d = simDelta(L, r); d.L = L; d.value = tradeValue(L, r, d); simBox.replaceChildren(simTable(d, partner)); }, 250);
   }
   return el;
 }
 
 function simTable(d, partner) {
   const P = x => Math.round(x * 100);
-  const word = dlt => { const a = Math.abs(dlt); return a < 0.01 ? 'about the same' : a < 0.04 ? (dlt > 0 ? 'slightly better' : 'slightly worse') : a < 0.12 ? (dlt > 0 ? 'better' : 'worse') : (dlt > 0 ? 'much better' : 'much worse'); };
-  const phrase = (who, [b, a]) => {
-    const parts = [['make the playoffs', 'playoff'], ['win the title', 'title']].map(([lbl, k]) => {
-      const dl = a[k] - b[k];
-      return P(a[k]) === P(b[k]) ? `chance to ${lbl} stays at ${P(b[k])}%` : `chance to ${lbl} goes from ${P(b[k])}% to ${P(a[k])}%`;
-    });
-    return `${who}: ${parts.join(', and ')}.`;
-  };
   // one row: label, before bar -> after bar, change
   const bar = (b, a, lbl) => {
     const dl = a - b, c = dl > 0.005 ? 'var(--pos)' : dl < -0.005 ? 'var(--neg)' : 'var(--muted)';
@@ -113,20 +105,19 @@ function simTable(d, partner) {
   };
   const team = (who, x) => h('div', { class: 'card' }, h('h3', {}, who),
     bar(x[0].playoff, x[1].playoff, 'Playoffs'), bar(x[0].bye, x[1].bye, 'Bye'), bar(x[0].title, x[1].title, 'Title'));
-  const me = d.me, dT = me[1].title - me[0].title, dP = me[1].playoff - me[0].playoff;
-  const headline0 = Math.abs(dT) >= 0.01
-    ? `Your title chances get ${word(dT)}: ${P(me[0].title)}% → ${P(me[1].title)}%.`
-    : `Your title chances don't really change (${P(me[0].title)}% → ${P(me[1].title)}%)` + (Math.abs(dP) >= 0.01 ? `, but your playoff chances get ${word(dP)}: ${P(me[0].playoff)}% → ${P(me[1].playoff)}%.` : '.');
-  const dB = me[1].bye - me[0].bye;
-  const byeLine = dB >= 0.03 ? ` Bye odds ${P(me[0].bye)}% → ${P(me[1].bye)}% (+${P(dB)}): raising your bye chances is Sanderson's best reason to buy.`
-    : dB <= -0.03 ? ` Bye odds ${P(me[0].bye)}% → ${P(me[1].bye)}%: this costs you bye equity.` : '';
+  const me = d.me, L = d.L;
+  const ch = (k, lbl) => { const b = P(me[0][k]), a = P(me[1][k]); return b === a ? null : `${lbl} ${b}% → ${a}%`; };
   const v = d.value;
-  const headline = headline0 + byeLine + (v ? ` Overall worth ${sgn(v.total)} to you (long-term ${sgn(v.tat)} after this season's games are used up, this season ${sgn(v.now)}${v.pickShift && Math.abs(v.pickShift) >= 50 ? `, of which draft-slot shift ${sgn(v.pickShift)}` : ''}).` : '');
+  const odd = [ch('title', 'title'), Math.abs(me[1].bye - me[0].bye) >= 0.03 ? ch('bye', 'bye') : null, ch('playoff', 'playoffs')].filter(Boolean);
+  const dB = me[1].bye - me[0].bye;
   return h('div', { style: { marginTop: '12px' } },
-    h('div', { class: 'verdict' }, headline),
+    h('div', { class: 'verdict' },
+      v ? h('div', { class: 'big' }, h('span', { class: v.total >= 0 ? 'pos' : 'neg' }, `Worth ${f1(L, v.total)}`), h('span', { class: 'muted small', title: 'Sanderson points' }, ` (${sgn(v.total)})`)) : '',
+      h('div', { class: 'small' }, v ? `Long-term ${f1(L, v.tat)} · this season ${f1(L, v.now)}` : '', odd.length ? (v ? ': ' : '') + odd.join(', ') : (v ? ': odds unchanged' : 'Odds unchanged'),
+        v?.pickShift && Math.abs(v.pickShift) >= 50 ? ` (draft slot ${f1(L, v.pickShift)})` : '',
+        dB >= 0.03 ? h('div', { class: 'pos' }, "Raises your bye odds: Sanderson's best reason to buy.") : dB <= -0.03 ? h('div', { class: 'neg' }, 'Costs you bye equity.') : '')),
     h('div', { class: 'sides', style: { marginTop: '10px' } }, team('You', d.me), team(partner.owner, d.them)),
-    h('p', { class: 'small muted', style: { marginTop: '8px' } }, phrase('You', d.me), ' ', phrase(partner.owner, d.them),
-      ' Grey = now, coloured = after the trade. Both versions of the season use the same luck, so the difference is the trade itself; changes of 1% or less are noise.'));
+    h('p', { class: 'small muted', style: { marginTop: '6px' } }, 'Grey = now, coloured = after. Both seasons use the same luck; changes of 1% or less are noise.'));
 }
 
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
@@ -140,11 +131,17 @@ export function toLog(r) {
 }
 
 // ---------------- suggestions ----------------
-export function planPanel(L) {
+export const VERDICT = { BUY: 'push', HOLD: 'mid', CAREFUL: 'sell', RELOAD: 'tank', SELL: 'tank' };
+const KEY_LINE = /^(Deadline|If you filled|Even with|Filling |You don't own|Biggest hole|Trade goals)/;
+export function planPanel(L, { compact = false } = {}) {
   const p = teamPlan(L);
   if (!p) return '';
-  return h('div', { class: 'panel plan' }, h('div', { class: 'row spread' }, h('h2', { style: { margin: 0 } }, `${L.nick}: ${p.headline}`)),
-    h('ul', { class: 'small', style: { margin: '8px 0 0', paddingLeft: '18px' } }, p.lines.map(l => h('li', {}, l))));
+  const key = p.lines.filter(l => KEY_LINE.test(l)).map(l => l.replace(/^Deadline: [A-Z]+[.,]\s*/, '').replace(/^./, c => c.toUpperCase()));
+  const rest = p.lines.filter(l => !KEY_LINE.test(l));
+  return h('div', { class: 'panel plan' },
+    h('div', { class: 'row', style: { gap: '8px' } }, p.verdict ? h('span', { class: 'tag ' + (VERDICT[p.verdict] || ''), title: 'Deadline stance from buying power and production (Sanderson)' }, p.verdict) : '', h('h2', { style: { margin: 0 } }, compact ? p.headline : `${L.nick}: ${p.headline}`)),
+    h('ul', { class: 'small keylines' }, key.map(l => h('li', {}, l))),
+    rest.length ? h('details', {}, h('summary', { class: 'small muted' }, 'Full reasoning'), h('ul', { class: 'small', style: { margin: '6px 0 0', paddingLeft: '18px' } }, rest.map(l => h('li', {}, l)))) : '');
 }
 
 function suggestions(L) {
@@ -176,11 +173,11 @@ function suggestions(L) {
   };
   box.append(h('div', { class: 'panel' },
     h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, 'Suggested trades'),
-      h('div', { class: 'muted small' }, `Every trade should serve a goal (Sanderson: "rankings are not a calculator"). Each suggestion is tagged with the goal it serves for you, from your plan, and for the partner when there's a reason for them too. Trades that serve no goal only appear if they win decisively. Within that, they're ranked by total value to you: Sanderson value gained plus the effect on this season (a title = ${fmt(S.titleWorth ?? 4500)} TAT). Treat the Sanderson-fair price as the worst acceptable deal, not the target. Offers already rejected are skipped.`)),
+      h('div', { class: 'muted small' }, 'Trades that serve one of your goals, ranked by value to you in generic 1sts. ', h('details', { style: { display: 'inline' } }, h('summary', { style: { display: 'inline', fontWeight: 400 } }, 'How'), ` Each suggestion is tagged with the goal it serves for you and, when there is one, for the partner. Trades that serve no goal only appear if they win decisively. Value = Sanderson value gained plus the effect on this season (a title = ${fmt(S.titleWorth ?? 4500)} TAT). Treat the Sanderson-fair price as the worst acceptable deal, not the target. Offers already rejected are skipped.`))),
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues'), h('button', { class: 'btn ghost', title: 'Trades ranked by how much they raise your title odds, with what each costs long-term', onclick: () => run([L], 'title') }, '🏆 Biggest title swings')))),
     out);
   box.insertBefore(blockPanel(L), box.firstChild);
-  box.insertBefore(planPanel(L), box.firstChild);
+  box.insertBefore(planPanel(L, { compact: true }), box.firstChild);
   if (!state().tatSets.length) out.append(h('div', { class: 'panel' }, 'Upload Sanderson rankings on the ', h('a', { href: '#/values' }, 'Values page'), ' first. Without them every player is valued at half his FC value, so suggestions are meaningless.'));
   return box;
 }
@@ -209,17 +206,17 @@ function suggestionCard(r) {
   return h('div', { class: 'card' },
     h('div', { class: 'row spread', style: { marginBottom: '8px' } }, h('div', {}, h('b', {}, r.L.nick), ' · ', r.partner.owner, ' ', modeTag(r.partner.mode)),
       r.dTitle != null && r.dTitle >= 0.01 && r.value?.tat < 0
-        ? h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Change in title odds, and the long-term value it costs per +1%' }, `Title +${Math.round(r.dTitle * 100)}%`, h('span', { class: 'muted small', style: { fontWeight: 400 } }, ` · ${fmt(-r.value.tat / (r.dTitle * 100))} per 1%`))
-        : h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Total value to you, in Sanderson points' }, sgn(r.value?.total ?? r.tatGain))),
+        ? h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Change in title odds, and the long-term value it costs per +1%' }, `Title +${Math.round(r.dTitle * 100)}%`, h('span', { class: 'muted small', style: { fontWeight: 400 } }, ` · ${f1(r.L, -r.value.tat / (r.dTitle * 100), false)} per 1%`))
+        : h('span', { class: 'pos', style: { fontWeight: 700 }, title: `Total value to you: ${sgn(r.value?.total ?? r.tatGain)} Sanderson points` }, f1(r.L, r.value?.total ?? r.tatGain))),
     h('div', { class: 'row', style: { gap: '4px', marginBottom: '6px' } },
       (r.goals || []).map(g => h('span', { class: 'tag push' }, g.label)),
       r.pureValue ? h('span', { class: 'tag', title: 'Serves none of your goals in this league, so it only shows up because it wins decisively' }, 'Pure value') : '',
       r.theirGoal ? h('span', { class: 'tag good', title: "Why it makes sense for them" }, r.theirGoal) : '',
       r.type && r.type.id !== 'other' ? h('span', { class: 'tag', title: r.type.tip }, r.type.label) : ''),
     h('div', { class: 'small', style: { marginBottom: '8px' } },
-      h('span', { class: (r.value?.tat ?? r.tatGain) >= 0 ? 'pos' : 'neg', title: "Sanderson value after this season (market value minus the production the players will use up this year). This season's production is counted in the next number instead." }, `Long-term ${sgn(r.value?.tat ?? r.tatGain)}`), r.value?.dr < 0.99 ? h('span', { class: 'muted', title: "You're already well ahead of this league in value, so more of it adds little title equity" }, ` (of ${sgn(r.value.tatRaw)}, diminishing returns)`) : '', ' + ',
-      h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${sgn(r.value?.now ?? 0)}`),
-      r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%` + (Math.abs(r.dBye || 0) >= 0.03 ? `, bye ${Math.round(r.sim.me[0].bye * 100)}% → ${Math.round(r.sim.me[1].bye * 100)}%` : '') + (Math.abs(r.value?.pickShift || 0) >= 50 ? `, draft-slot shift ${sgn(r.value.pickShift)}` : '') + ')') : ''),
+      h('span', { class: (r.value?.tat ?? r.tatGain) >= 0 ? 'pos' : 'neg', title: "Sanderson value after this season (market value minus the production the players will use up this year). This season's production is counted in the next number instead." }, `Long-term ${f1(r.L, r.value?.tat ?? r.tatGain)}`), r.value?.dr < 0.99 ? h('span', { class: 'muted', title: "You're already well ahead of this league in value, so more of it adds little title equity" }, ` (of ${f1(r.L, r.value.tatRaw)}, diminishing returns)`) : '', ' + ',
+      h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${f1(r.L, r.value?.now ?? 0)}`),
+      r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%` + (Math.abs(r.dBye || 0) >= 0.03 ? `, bye ${Math.round(r.sim.me[0].bye * 100)}% → ${Math.round(r.sim.me[1].bye * 100)}%` : '') + (Math.abs(r.value?.pickShift || 0) >= 50 ? `, draft slot ${f1(r.L, r.value.pickShift)}` : '') + ')') : ''),
     h('div', { class: 'small muted' }, 'You send'), h('div', { class: 'assets' }, r.give.map(a => assetLine(a))),
     h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'You get'), h('div', { class: 'assets' }, r.get.map(a => assetLine(a))),
     h('div', { class: 'small', style: { marginTop: '8px' } },

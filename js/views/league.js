@@ -19,7 +19,7 @@ export default function leagueView(id, tab = 'power') {
   root.append(h('div', { class: 'panel' },
     h('div', { class: 'row spread' }, h('div', {}, h('h1', {}, L.nick), h('div', { class: 'muted small' }, `${L.name} · ${L.teams.length} teams · ${L.fmt.numQbs === 2 ? 'Superflex' : '1QB'}` +
       (L.scoring.bonus_rec_te ? ` · TEP ${L.scoring.bonus_rec_te}` : '') + (L.median ? ' · median game' : '') + ` · playoffs wk ${L.playoffStart} (${L.playoffTeams} teams)`)),
-      me ? adviceTag(me.advice) : ''),
+      ''),
     me ? h('div', { class: 'kpis', style: { marginTop: '12px' } },
       kpi(`${me.wins}-${me.losses}`, 'record'), kpi(pct(me.playoff), 'playoff odds'), kpi(pct(me.bye), 'bye odds'), kpi(pct(me.title), 'title odds'),
       kpi(`#${me.fcTotalRank}`, 'FantasyCalc'), kpi(`#${me.tatTotalRank}`, 'Sanderson'), kpi(`${fmt(me.ros, 1)} (#${me.rosRank})`, 'proj pts/wk')) : '',
@@ -40,13 +40,20 @@ export default function leagueView(id, tab = 'power') {
 
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
 
+let showAllCols = false;
+const CORE = new Set(['owner', 'winPct', 'ros', 'playoff', 'title', 'tatTotal', 'fcTotal', 'mode']);
 function power(L) {
   const rows = L.teams.map(t => ({ ...t, t }));
-  return table([
-    { key: 'owner', label: 'Team', n: false, fmt: (v, r) => h('span', {}, v, r.t.isMe ? '' : h('a', { href: `#/owners/${L.id}/${r.t.ownerId}`, class: 'small', style: { marginLeft: '6px' } }, 'profile')) },
+  const box = h('div');
+  const draw = () => box.replaceChildren(
+    h('div', { class: 'row spread', style: { marginBottom: '6px' } }, h('span', { class: 'muted small' }, 'Click a column to sort.'),
+      h('button', { class: 'btn ghost small', onclick: () => { showAllCols = !showAllCols; draw(); } }, showAllCols ? 'Fewer columns' : 'More columns')),
+    tbl());
+  const tbl = () => table([
+    { key: 'owner', label: 'Team', n: false, fmt: (v, r) => r.t.isMe ? h('b', {}, v) : h('a', { href: `#/owners/${L.id}/${r.t.ownerId}`, title: 'Owner profile' }, v) },
     { key: 'winPct', label: 'W-L', n: true, fmt: (v, r) => `${r.wins}-${r.losses}` },
     { key: 'fpts', label: 'PF', n: true, fmt: v => fmt(v) },
-    { key: 'ros', label: 'Lineup/wk', n: true, fmt: (v, r) => `${fmt(v, 1)} (${r.rosRank})` },
+    { key: 'ros', label: 'Proj pts/wk', n: true, fmt: (v, r) => `${fmt(v, 1)} (${r.rosRank})` },
     { key: 'po', label: 'Playoff wks', n: true, fmt: (v, r) => `${fmt(v, 1)} (${r.poRank})`, title: 'Projected starters, fantasy playoff weeks' },
     { key: 'expWins', label: 'Proj W', n: true, fmt: v => fmt(v, 1), title: 'Average final wins across simulated seasons' },
     { key: 'playoff', label: 'Playoff', n: true, fmt: v => pctBar(v) },
@@ -59,7 +66,9 @@ function power(L) {
     { key: 'eff', label: 'Efficiency', n: true, sort: r => r.tatTotalRank - r.titleRank, title: 'Roster efficiency: title-odds rank vs buying-power rank. Positive = getting more title equity than your value suggests.', fmt: (v, r) => { const d = r.tatTotalRank - r.titleRank; return h('span', { class: d > 1 ? 'pos' : d < -1 ? 'neg' : '' }, (d > 0 ? '+' : '') + d); } },
     { key: 'coreAge', label: 'Core age', n: true, fmt: v => fmt(v, 1), title: 'Value-weighted age of top 15 players' },
     { key: 'mode', label: 'Mode', n: false, fmt: v => modeTag(v) },
-  ], rows, { sortKey: 'tatTotal', rowClass: r => r.isMe ? 'me' : '' });
+  ].filter(c => showAllCols || CORE.has(c.key)), rows, { sortKey: 'tatTotal', rowClass: r => r.isMe ? 'me' : '' });
+  draw();
+  return box;
 }
 
 function roster(L) {

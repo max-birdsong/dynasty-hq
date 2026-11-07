@@ -91,7 +91,10 @@ export function teamPlan(L) {
     const w = { ...L.weekly[t.rid] }; for (const k of [...reg, ...po]) w[k] = (w[k] || 0) + gap;
     const f = simulate(simInput(L, { [t.rid]: w }), { runs, params, seed })[t.rid];
     ifFixed = { gap, playoff: f.playoff, title: f.title, bye: f.bye, pick: pickEV(f) };
-    lines.push(`If you filled ${holes.map(x => x.g).join(' and ')} with league-typical starters (+${gap.toFixed(0)} pts/wk): playoffs ${pc(base.playoff)} → ${pc(f.playoff)}, title ${pc(base.title)} → ${pc(f.title)}` +
+    if (f.playoff - base.playoff < 0.03 && f.title - base.title < 0.01) lines.push(f.playoff < 0.1
+      ? `Even with league-typical starters at ${holes.map(x => x.g).join(' and ')} you'd miss the playoffs: this season is done, so trade for next year.`
+      : `Filling ${holes.map(x => x.g).join(' and ')} barely moves your odds: it isn't where your title chances come from.`);
+    else lines.push(`If you filled ${holes.map(x => x.g).join(' and ')} with league-typical starters (+${gap.toFixed(0)} pts/wk): playoffs ${pc(base.playoff)} → ${pc(f.playoff)}, title ${pc(base.title)} → ${pc(f.title)}` +
       (ownFirst ? `, and your own ${ny} 1st drops from about ${Math.round(pickNow).toLocaleString()} to ${Math.round(ifFixed.pick).toLocaleString()}. Net: ${(TITLE * (f.title - base.title) + ifFixed.pick - pickNow) >= 0 ? 'pushing beats reloading' : 'reloading beats pushing'} by about ${Math.abs(Math.round(TITLE * (f.title - base.title) + ifFixed.pick - pickNow)).toLocaleString()}, before the cost of the trades.` : '. You don\'t own your 1st, so there is no draft-slot cost to pushing.'));
   }
   if (holes.length) lines.push(`Biggest hole: ${holes.map(x => `${x.g} (${x.mine.toFixed(1)} pts/wk vs league typical ${x.med.toFixed(1)})`).join(', ')}.`);
@@ -145,13 +148,14 @@ export function teamPlan(L) {
   const lastYearBad = L.prevRecord && L.prevRecord.winPct < 0.4;
   if ((t.title ?? 0) >= 0.15 && (t.bye ?? 0) >= 0.5) headline = 'Bye secured: extend the window, don\'t chase the last piece';
   else if ((t.title ?? 0) >= 0.12) headline = 'Contend for a bye, at the lowest cost';
+  else if ((t.playoff ?? 0) < 0.05) headline = tanking ? 'Season\'s gone: take the high pick, compete next year' : 'Out this year: sell what won\'t help next year';
   else if (tanking && !bpOk) headline = lastYearBad ? 'Second down year: get back to competing' : 'One-year reload';
   else if (holes.length && (t.playoff ?? 0) >= 0.05) headline = `Stay at the table: fix ${holes[0].g} cheaply`;
   else if (bpOk) headline = 'Chip and a chair: compete with what you have';
   else headline = 'Reload for one year, then compete';
   if ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15) lines.push("You're likely to get a bye, and that's where most of your title odds come from. One more stud adds only 1–2% (Adeiko), so spending future value now has sharply diminishing returns. Put surplus into picks and extending the window.");
   if (tanking && lastYearBad) lines.push(`You were ${L.prevRecord.wins}-${L.prevRecord.losses} last year too. Sanderson's rule: a reload should last one year, because a second tank year rarely gains more than the title equity it gives up.`);
-  if (tanking && bpOk) lines.push(`Your buying power ranks ${dynRank} of ${n}, which is enough to compete. Conceding the season costs real win equity, and your pick only offsets part of it.`);
+  if (tanking && bpOk && (t.playoff ?? 0) >= 0.05) lines.push(`Your buying power ranks ${dynRank} of ${n}, which is enough to compete. Conceding the season costs real win equity, and your pick only offsets part of it.`);
 
   const planObj = { holes, tanking, weakLongTerm };
   L.plan = { sens, ownFirst, tanking, middle, ifFixed, bp, prod, verdict, keepFirst, pickNow, slotNow, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };

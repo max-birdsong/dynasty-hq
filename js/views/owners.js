@@ -1,7 +1,7 @@
 import { M, leagueById } from '../model.js';
 import { state, noteOf, setNote } from '../state.js';
 import { profiles, pickIndex } from '../owners.js';
-import { h, fmt, sgn } from '../util.js';
+import { h, fmt, sgn, f1 } from '../util.js';
 import { modeTag, posB, empty, table } from '../components.js';
 
 export default async function ownersView(id, ownerId) {
@@ -13,14 +13,14 @@ export default async function ownersView(id, ownerId) {
   if (!L) return root;
   const P = await profiles(L);
   const pi = await pickIndex(L).catch(() => null);
-  if (pi) root.append(h('div', { class: 'panel' }, h('h2', {}, 'How this league prices picks'),
+  if (pi?.index) root.append(h('div', { class: 'panel' }, h('h2', {}, 'How this league prices picks'),
     h('p', { class: 'small', style: { margin: 0 } }, pi.index ? `In ${pi.n} trades of picks for players, the players sent back were worth ${Math.round(pi.index * 100)}% of the picks' market value at the time. ${pi.index > 1.1 ? 'Picks fetch a premium here: a good league to sell picks in.' : pi.index < 0.9 ? 'Picks go cheap here: a good league to buy picks in.' : 'Picks trade close to market here.'} Suggestions use this when pricing picks.` : `Only ${pi.n} pick-for-player trades so far, not enough to tell how this league prices picks.`)));
   // league-wide trade record leaderboard
   const recStr = r => r && r.n ? `${r.w}-${r.l}${r.e ? '-' + r.e : ''}` : '–';
   const pctStr = r => r && r.n ? ` (${Math.round(r.pct * 100)}%)` : '';
   const avgCell = r => r && r.n ? h('span', { class: r.avg >= 0 ? 'pos' : 'neg' }, sgn(r.avg)) : '–';
   const lb = P.filter(p => p.trades.length).map(p => ({ owner: p.team.owner, isMe: p.team.isMe, n: p.trades.length, then: p.fcThenRec, now: p.fcRecNow, tat: p.tatRec, tatThen: p.tatThenRec, style: p.style, oid: p.team.ownerId }));
-  if (lb.length) root.append(h('div', { class: 'panel' }, h('h2', {}, 'Who wins their trades?'),
+  if (lb.length >= 3) root.append(h('div', { class: 'panel' }, h('h2', {}, 'Who wins their trades?'),
     h('div', { class: 'muted small', style: { marginBottom: '8px' } }, "Every completed trade this season and last. \"At the time\" uses market values from the week of the trade (DynastyProcess weekly history, put on the FantasyCalc scale), so later injuries and breakouts don't count. \"Today\" is hindsight. W-L-E = won / lost / even (within 5% of the deal); avg = value gained per trade."),
     table([
       { key: 'owner', label: 'Owner', n: false, fmt: (v, r) => r.isMe ? h('b', {}, v) : h('a', { href: `#/owners/${L.id}/${r.oid}` }, v) },
@@ -34,8 +34,6 @@ export default async function ownersView(id, ownerId) {
       { key: 'style', label: 'Style', n: false, fmt: v => v ? h('span', { class: 'tag' + (v === 'Easy mark' ? ' good' : v === 'Shark' ? ' bad' : '') }, v) : h('span', { class: 'muted small' }, 'too few trades') },
     ], lb, { sortKey: 'ta', rowClass: r => r.isMe ? 'me' : '' })));
   const S = state();
-  root.append(h('div', { class: 'muted small', style: { marginBottom: '10px' } },
-    `${L.trades.length} completed trades this season and last. Values shown are today's FantasyCalc / Sanderson values, so "net" means who has won their trades so far.`));
   const cards = h('div', { class: 'cards' });
   const order = [...P].sort((a, b) => (b.team.ownerId === ownerId) - (a.team.ownerId === ownerId) || (a.team.isMe - b.team.isMe) || b.trades.length - a.trades.length);
   for (const p of order) cards.append(card(L, p, S));
@@ -51,21 +49,16 @@ function card(L, p, S) {
   const notes = h('textarea', { placeholder: 'Notes on this owner (shared across leagues)…', oninput: e => { clearTimeout(notes._t); notes._t = setTimeout(() => setNote(t.ownerId, e.target.value), 800); } });
   notes.value = noteOf(t.ownerId);
   const rk = p.ranks;
-  return h('div', { class: 'card' + (t.isMe ? ' me' : ''), id: 'o-' + t.ownerId },
-    h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, t.owner), h('div', { class: 'muted small' }, `${t.wins}-${t.losses} · PF #${t.fptsRank} · playoff ${Math.round((t.playoff || 0) * 100)}% · core age ${fmt(t.coreAge, 1)}`)), modeTag(t.mode)),
-    h('div', { class: 'row', style: { margin: '8px 0', gap: '6px' } }, p.tags.map(x => h('span', { class: 'tag' }, x))),
-    h('div', { class: 'small', style: { marginBottom: '6px' } },
-      h('b', {}, 'Position rank (starters FC): '), ['QB', 'RB', 'WR', 'TE'].map(k => h('span', { class: 'pill', style: { marginRight: '4px', color: p.needs.includes(k) ? 'var(--neg)' : p.surplus.includes(k) ? 'var(--pos)' : '' } }, `${k} ${rk[k]}`)),
-      p.needs.length ? h('div', { class: 'muted' }, 'Needs: ' + p.needs.join(', ') + (p.surplus.length ? ' · Strength: ' + p.surplus.join(', ') : '')) : p.surplus.length ? h('div', { class: 'muted' }, 'Strength: ' + p.surplus.join(', ')) : ''),
+  const hasNote = !!noteOf(t.ownerId);
+  const noteBox = h('div', { style: { marginTop: '6px', display: hasNote ? '' : 'none' } }, notes);
+  const more = [
     h('div', { class: 'small', style: { marginBottom: '6px' } },
       h('b', {}, 'Pick capital: '), `${p.own} picks (default ${p.def}) · `, Object.entries(p.byRound).map(([r, n]) => `R${r}×${n}`).join(' '),
       h('div', { class: 'muted' }, `In trades: got ${p.picksIn} picks, sent ${p.picksOut}`)),
-    h('div', { class: 'small', style: { marginBottom: '6px' } },
-      h('b', {}, `Trades: ${p.trades.length}`), p.trades.length ? [' · net FC ', h('span', { class: p.fcNet >= 0 ? 'pos' : 'neg' }, sgn(p.fcNet)), ' · net TAT ', h('span', { class: p.tatNet >= 0 ? 'pos' : 'neg' }, sgn(p.tatNet))] : '',
-      p.trades.length ? h('div', { class: 'muted' }, `Record: market at the time ${p.fcThenRec.n ? `${p.fcThenRec.w}-${p.fcThenRec.l}-${p.fcThenRec.e}` : '–'} · FC today ${p.fcRecNow.w}-${p.fcRecNow.l}-${p.fcRecNow.e} · Sanderson today ${p.tatRec.w}-${p.tatRec.l}-${p.tatRec.e} (won-lost-even)`) : '',
+    p.trades.length ? h('div', { class: 'small', style: { marginBottom: '6px' } },
+      h('div', { class: 'muted' }, `Record: market at the time ${p.fcThenRec.n ? `${p.fcThenRec.w}-${p.fcThenRec.l}-${p.fcThenRec.e}` : '–'} · FC today ${p.fcRecNow.w}-${p.fcRecNow.l}-${p.fcRecNow.e} · Sanderson today ${p.tatRec.w}-${p.tatRec.l}-${p.tatRec.e} (won-lost-even)`),
       p.aIn ? h('div', { class: 'muted' }, `Avg age acquired ${fmt(p.aIn, 1)} vs sent ${fmt(p.aOut, 1)}`) : '',
-      Object.keys(p.posOut).length ? h('div', { class: 'muted' }, 'Sent away: ' + Object.entries(p.posOut).map(([k, v]) => `${v} ${k}`).join(', ') + ' · Got: ' + Object.entries(p.posIn).map(([k, v]) => `${v} ${k}`).join(', ')) : ''),
-    p.trades.length ? h('details', {}, h('summary', { class: 'small' }, 'Trade history'),
+      Object.keys(p.posOut).length ? h('div', { class: 'muted' }, 'Sent away: ' + Object.entries(p.posOut).map(([k, v]) => `${v} ${k}`).join(', ') + ' · Got: ' + Object.entries(p.posIn).map(([k, v]) => `${v} ${k}`).join(', ')) : '',
       h('div', { class: 'assets', style: { marginTop: '6px' } }, p.trades.slice(0, 12).map(x => h('div', { style: { borderTop: '1px solid var(--line)', padding: '6px 0' } },
         h('div', { class: 'muted small' }, `${x.date.toLocaleDateString()} · with ${x.others.map(o => L.teams.find(tt => tt.ownerId === o.ownerId)?.owner || 'former owner').join(', ')}`,
           x.me.fcNetThen != null ? [' · at the time ', h('span', { class: x.me.fcNetThen >= 0 ? 'pos' : 'neg' }, sgn(x.me.fcNetThen))] : '', ' · today ', h('span', { class: x.me.fcNet >= 0 ? 'pos' : 'neg' }, sgn(x.me.fcNet))),
@@ -74,6 +67,17 @@ function card(L, p, S) {
     myOffers.length ? h('div', { class: 'small', style: { marginTop: '6px' } }, h('b', {}, 'Your offers to them'),
       myOffers.slice(0, 6).map(o => h('div', { class: 'muted' }, `${new Date(o.created).toLocaleDateString()} · ${o.giveNames.join(' + ')} for ${o.getNames.join(' + ')} → `, h('span', { class: o.status === 'accepted' ? 'pos' : o.status === 'sent' ? '' : 'neg' }, o.status)))) : '',
     others.length ? h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'Also in: ', others.map(x => h('a', { href: `#/owners/${x.id}/${t.ownerId}`, style: { marginRight: '6px' } }, x.nick))) : '',
-    t.isMe ? '' : h('div', { style: { marginTop: '8px' } }, notes,
-      h('a', { class: 'btn small ghost', href: `#/trades/${L.id}/${t.rid}`, style: { marginTop: '6px', display: 'inline-block' } }, 'Build a trade with ' + t.owner)));
+  ];
+  return h('div', { class: 'card' + (t.isMe ? ' me' : ''), id: 'o-' + t.ownerId },
+    h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, t.owner), h('div', { class: 'muted small' }, `${t.wins}-${t.losses} · playoff ${Math.round((t.playoff || 0) * 100)}% · core age ${fmt(t.coreAge, 1)}`)), modeTag(t.mode)),
+    h('div', { class: 'row', style: { margin: '8px 0', gap: '4px' } },
+      ['QB', 'RB', 'WR', 'TE'].map(k => h('span', { class: 'pill', title: `${k} starters rank ${rk[k]} of ${L.teams.length}`, style: { color: p.needs.includes(k) ? 'var(--neg)' : p.surplus.includes(k) ? 'var(--pos)' : '' } }, `${k} ${rk[k]}`)),
+      p.tags.map(x => h('span', { class: 'tag' }, x))),
+    h('div', { class: 'small' }, p.needs.length ? h('span', {}, h('b', {}, 'Needs '), p.needs.join(', ')) : '', p.needs.length && p.surplus.length ? ' · ' : '', p.surplus.length ? h('span', {}, h('b', {}, 'Deep at '), p.surplus.join(', ')) : '',
+      p.trades.length ? h('div', {}, `${p.trades.length} trade${p.trades.length > 1 ? 's' : ''} · net `, h('span', { class: p.fcNet >= 0 ? 'pos' : 'neg' }, f1(L, p.fcNet)), ' on FC') : h('div', { class: 'muted' }, 'No trades yet')),
+    h('details', { style: { marginTop: '6px' } }, h('summary', { class: 'small muted' }, 'Details'), more),
+    t.isMe ? '' : h('div', { class: 'row', style: { marginTop: '8px', gap: '6px' } },
+      h('a', { class: 'btn small', href: `#/trades/${L.id}/${t.rid}` }, 'Build a trade'),
+      hasNote ? '' : h('button', { class: 'btn ghost small', onclick: e => { noteBox.style.display = ''; e.target.remove(); notes.focus(); } }, 'Add note')),
+    t.isMe ? '' : noteBox);
 }
