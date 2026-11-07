@@ -82,9 +82,10 @@ export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}
     const theirStart = startersNow(L, partner.players).starters;
     const qbOut = getKeys.filter(k => !isPick(k) && theirStart.has(pid(k)) && M.players[pid(k)]?.position === 'QB');
     if (qbOut.length) {
+      // only a problem if their lineup ends up with fewer starting QBs (a team with depth can spare one)
+      const qbs = set => [...set].filter(id => M.players[id]?.position === 'QB').length;
       const afterStart = startersNow(L, rosterAfter(partner, getKeys, giveKeys)).starters;
-      const qbIn = giveKeys.filter(k => !isPick(k) && afterStart.has(pid(k)) && M.players[pid(k)]?.position === 'QB');
-      r.takesStartingQb = qbIn.length < qbOut.length;
+      r.takesStartingQb = qbs(afterStart) < qbs(theirStart);
     }
   }
   r.type = tradeType(L, r);
