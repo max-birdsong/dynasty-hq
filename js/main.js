@@ -7,9 +7,10 @@ import leagueView from './views/league.js';
 import ownersView from './views/owners.js';
 import tradesView from './views/trades.js';
 import valuesView from './views/values.js';
+import waiversView from './views/waivers.js';
 import settingsView from './views/settings.js';
 
-const routes = { '': dashboard, league: leagueView, owners: ownersView, trades: tradesView, values: valuesView, settings: settingsView };
+const routes = { '': dashboard, league: leagueView, owners: ownersView, trades: tradesView, values: valuesView, waivers: waiversView, settings: settingsView };
 const app = $('#app');
 
 export async function route() {

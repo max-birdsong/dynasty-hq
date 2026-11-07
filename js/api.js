@@ -14,6 +14,10 @@ export const users = id => cachedJson(`${SL}/league/${id}/users`, DAY);
 export const tradedPicks = id => cachedJson(`${SL}/league/${id}/traded_picks`, HOUR);
 export const matchups = (id, wk, past) => cachedJson(`${SL}/league/${id}/matchups/${wk}`, past ? 30 * DAY : 30 * MIN);
 export const transactions = (id, wk, past) => cachedJson(`${SL}/league/${id}/transactions/${wk}`, past ? 365 * DAY : 30 * MIN);
+// players being added across Sleeper right now: [{player_id, count}]
+export const trending = () => cachedJson(`${SL}/players/nfl/trending/add?lookback_hours=48&limit=200`, HOUR);
+// rosters straight from Sleeper, no cache (waiver checks need who's rostered right now)
+export const rostersLive = id => fetch(`${SL}/league/${id}/rosters`).then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)));
 export const players = () => cachedJson(`${SL}/players/nfl`, DAY, { key: 'players-nfl' });
 
 // FantasyCalc dynasty values for a league format
