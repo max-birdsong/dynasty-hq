@@ -38,7 +38,7 @@ async function boot(force = false) {
     await loadAll(prog);
     if (M.errors.length) console.warn(M.errors);
     route();
-    if (M.needsPlayoffFit) setTimeout(async () => { await fitPlayoffVariance(); M.needsPlayoffFit = false; const a = document.activeElement; if (!a || !['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)) route(); }, 300);
+    if (M.needsPlayoffFit) setTimeout(async () => { await fitPlayoffVariance(); M.needsPlayoffFit = false; }, 300);
 
   } catch (e) {
     console.error(e);

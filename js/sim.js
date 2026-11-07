@@ -78,8 +78,7 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
         // scaled the way the data says spread grows with the projection; normal curve if not calibrated
         const noise = nz ? nz.c * Math.pow(Math.max(1, base), nz.gamma) * nz.z[Math.floor(rand() * nz.z.length)]
           : base * P.sdWeek * randn();
-        // playoff weeks can be given extra spread (k fitted so that title rates by seed match real leagues)
-        score[rid][wk] = Math.max(0, base + noise * (wk >= (L.playoffStart || 15) ? (P.playoffK || 1) : 1));
+        score[rid][wk] = Math.max(0, base + noise);
       }
     }
     const W = {}, PF = {}, MP = {};
