@@ -55,6 +55,8 @@ function power(L) {
     { key: 'fcTotal', label: 'FC value', n: true, fmt: (v, r) => `${fmt(v)} (${r.fcTotalRank})` },
     { key: 'tatTotal', label: 'TAT value', n: true, fmt: (v, r) => `${fmt(v)} (${r.tatTotalRank})` },
     { key: 'pickFc', label: 'Picks', n: true, fmt: v => fmt(v) },
+    { key: 'mixF', label: 'Picks · Now · Future', n: true, sort: r => r.mix.future / r.mix.total, title: "Sanderson's three currencies: share of buying power in picks, this season's production, and future years (EYR)", fmt: (v, r) => { const m = r.mix, p = x => Math.round(100 * x / m.total); return h('span', { class: 'mono small' }, `${p(m.picks)} · ${p(m.now)} · `, h('span', { class: p(m.future) >= 65 ? 'warn' : '' }, p(m.future))); } },
+    { key: 'eff', label: 'Efficiency', n: true, sort: r => r.tatTotalRank - r.titleRank, title: 'Roster efficiency: title-odds rank vs buying-power rank. Positive = getting more title equity than your value suggests.', fmt: (v, r) => { const d = r.tatTotalRank - r.titleRank; return h('span', { class: d > 1 ? 'pos' : d < -1 ? 'neg' : '' }, (d > 0 ? '+' : '') + d); } },
     { key: 'coreAge', label: 'Core age', n: true, fmt: v => fmt(v, 1), title: 'Value-weighted age of top 15 players' },
     { key: 'mode', label: 'Mode', n: false, fmt: v => modeTag(v) },
   ], rows, { sortKey: 'tatTotal', rowClass: r => r.isMe ? 'me' : '' });

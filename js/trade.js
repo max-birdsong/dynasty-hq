@@ -1,5 +1,5 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
-import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist } from './model.js';
+import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf } from './model.js';
 import { settings, state } from './state.js';
 import { simulate } from './sim.js';
 import { teamPlan, winNowValue } from './plan.js';
@@ -45,6 +45,16 @@ export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}
   const fc = fcSides(give.map(a => a.fc), get.map(a => perceived(a, partner)));
   const tatGain = sum(get.map(a => a.tat)) - sum(give.map(a => a.tat));
   const r = { L, partner, giveKeys, getKeys, give, get, fc, tatGain, flags: [] };
+  // how the trade shifts your three currencies (picks / this season's production / future years)
+  const mg = mixOf(get), mv = mixOf(give);
+  r.mix = { picks: mg.picks - mv.picks, now: mg.now - mv.now, future: mg.future - mv.future };
+  const x = r.mix, big = Math.max(Math.abs(x.picks), Math.abs(x.now), Math.abs(x.future));
+  r.mixLabel = big < 200 ? 'Balanced swap'
+    : x.now > 0 && x.future < 0 && x.now >= Math.abs(x.picks) ? 'Buying points (vets)'
+    : x.picks > 0 && x.picks === big ? 'Banking picks'
+    : x.future > 0 && x.future === big ? 'Adding future value (EYR, fragile)'
+    : x.picks < 0 && x.picks === -big ? 'Spending picks'
+    : x.now < 0 && x.future > 0 ? 'Selling points for youth' : 'Mixed';
   if (lineups && L.me) {
     r.me = lineupImpact(L, L.me, giveKeys, getKeys);
     r.them = lineupImpact(L, partner, getKeys, giveKeys);

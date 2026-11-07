@@ -81,6 +81,15 @@ export function teamPlan(L) {
   }
   if (holes.length) lines.push(`Biggest hole: ${holes.map(x => `${x.g} (${x.mine.toFixed(1)} pts/wk vs league typical ${x.med.toFixed(1)})`).join(', ')}.`);
   if (dead.length) lines.push(`Out for the season: ${dead.map(a => a.name).join(', ')}. They score nothing this year but hold ${Math.round(dead.reduce((s, a) => s + a.tat, 0)).toLocaleString()} TAT of value.`);
+  if (t.mix?.total) {
+    const pp = x => Math.round(100 * x / t.mix.total);
+    const lm = L.teams.reduce((s, x) => s + x.mix.future / x.mix.total, 0) / n;
+    lines.push(`Your buying power: ${pp(t.mix.picks)}% picks, ${pp(t.mix.now)}% this season's production, ${pp(t.mix.future)}% future years (league average ${Math.round(lm * 100)}% future). ` +
+      (t.mix.future / t.mix.total > lm + 0.08 ? "That's EYR-heavy, the most fragile kind of value: young players rarely hold their price. Picks and productive vets are sturdier." : t.mix.picks / t.mix.total > 0.15 ? 'Plenty of picks: they gain value as they get closer to the draft and pay off big when they land early.' : 'A reasonably balanced mix.'));
+    const eff = t.tatTotalRank - t.titleRank;
+    if (eff <= -3 && (t.title ?? 0) < 0.15) lines.push(`Efficiency: your buying power ranks ${t.tatTotalRank} of ${n} but your title odds rank ${t.titleRank}. Some of that value isn't turning into wins; converting EYR or surplus picks into productive vets would use it better.`);
+    else if (eff >= 3) lines.push(`Efficiency: your title odds rank ${t.titleRank} of ${n} on buying power that ranks ${t.tatTotalRank}, so your roster is turning value into wins well.`);
+  }
   if (weakLongTerm) lines.push('Your roster ranks low long-term, so selling aging players for younger ones is still smart, even if you keep competing.');
 
   let headline;

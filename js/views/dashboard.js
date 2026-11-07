@@ -196,8 +196,6 @@ async function futureTargets(leagues) {
     const n = L.teams.length, y2 = +L.season + 2, y1 = +L.season + 1;
     const strength = new Map(L.teams.map(t => [t.rid, teamAssets(L, t).filter(a => !a.pick).reduce((s, a) => s + a.tat * decay(a.age), 0)]));
     const order = [...L.teams].sort((a, b) => strength.get(a.rid) - strength.get(b.rid)); // weakest next year first
-    const ord1 = L.fc.picks.get(`${y1} 1st`) || 1, gen2 = L.fc.picks.get(`${y2} 1st`) || 0;
-    const tierShare = s => (L.fc.picks.get(`${y1} 1st (${s <= n / 3 ? 'Early' : s <= 2 * n / 3 ? 'Mid' : 'Late'})`) || ord1) / ord1;
     for (const t of L.teams) {
       if (t.isMe) continue;
       const slot = order.indexOf(t) + 1;
@@ -206,7 +204,7 @@ async function futureTargets(leagues) {
       if (!holder || holder.isMe || slot > Math.ceil(n / 2)) continue;
       const competing = (t.playoff ?? 0) >= 0.4 || t.winPct >= 0.5;
       if (!competing) continue; // a rebuilder already knows his pick is valuable
-      const edge = gen2 * tierShare(slot) - gen2;
+      const pa = asset(L, key), edge = pa.tat - pa.fcGeneric;
       if (edge < 200) continue;
       const nSent = sent[t.ownerId] || 0;
       const why = [];

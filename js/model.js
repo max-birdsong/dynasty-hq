@@ -32,6 +32,8 @@ export async function loadAll(progress = () => {}) {
   progress('Player database');
   M.players = await api.players();
 
+  progress('Pick value curve');
+  M.slotShape = await loadSlotShape();
   progress('FantasyCalc values');
   const formats = new Map();
   for (const l of leagues) {
@@ -295,9 +297,48 @@ export function impliedSlot(L, rid) {
   const order = [...L.teams].sort((a, b) => (a.winPct - b.winPct) || (a.fpts - b.fpts));
   return order.findIndex(t => t.rid === +rid) + 1;
 }
+// Pick values are a power law: 1.01 is worth far more than 1.04, which is worth a bit more than 1.06.
+// FantasyCalc only prices Early/Mid/Late, so within each third we apply the slot-by-slot shape of
+// DynastyProcess's rookie pick values (latest class), keeping the market's level for each third.
+async function loadSlotShape() {
+  try {
+    const dp = await fetch('data/history/dp-values.json', { cache: 'no-cache' }).then(r => r.json());
+    const K = dp.picks.sf, i = dp.dates.length - 1;
+    const years = [...new Set(Object.keys(K).map(k => (k.match(/^(\d{4}) Pick 1\.01$/) || [])[1]).filter(Boolean))].sort();
+    const out = {};
+    for (const rd of [1, 2]) {
+      for (const y of years.reverse()) {
+        const v = Array.from({ length: 12 }, (_, s) => (K[`${y} Pick ${rd}.${String(s + 1).padStart(2, '0')}`] || [])[i] || 0);
+        if (v.every(x => x > 0)) {
+          const shape = v.map((x, s) => { const t = Math.floor(s / 4); const m = (v[t * 4] + v[t * 4 + 1] + v[t * 4 + 2] + v[t * 4 + 3]) / 4; return x / m; });
+          out[rd] = shape; break;
+        }
+      }
+      years.reverse();
+    }
+    return out;
+  } catch { return {}; }
+}
 function tierValue(L, y, ord, s) {
   const n = L.numTeams, g = L.fc.picks.get(`${y} ${ord}`);
-  return L.fc.picks.get(`${y} ${ord} (${s <= n / 3 ? 'Early' : s <= 2 * n / 3 ? 'Mid' : 'Late'})`) ?? g ?? 0;
+  const base = L.fc.picks.get(`${y} ${ord} (${s <= n / 3 ? 'Early' : s <= 2 * n / 3 ? 'Mid' : 'Late'})`) ?? g ?? 0;
+  const rd = ord === '1st' ? 1 : ord === '2nd' ? 2 : 0;
+  const shape = M.slotShape?.[rd];
+  if (!shape) return base;
+  // position of slot s on the 12-slot curve, keeping thirds aligned
+  const third = s <= n / 3 ? 0 : s <= 2 * n / 3 ? 1 : 2;
+  const lo = third === 0 ? 1 : Math.floor(third * n / 3) + 1, hi = Math.floor((third + 1) * n / 3);
+  const frac = hi > lo ? (s - lo) / (hi - lo) : 0.5;
+  const p = third * 4 + frac * 3, a = Math.floor(p), b = Math.min(11, a + 1);
+  return base * (shape[a] + (shape[b] - shape[a]) * (p - a));
+}
+
+// Base value thesis: a pick whose slot is uncertain is worth the average over its possible slots, which is more
+// than the value of its middle slot because pick value is convex.
+export function spreadValue(L, y, ord, center, sd) {
+  const n = L.numTeams; let w = 0, v = 0;
+  for (let s = 1; s <= n; s++) { const p = Math.exp(-0.5 * ((s - center) / sd) ** 2); w += p; v += p * tierValue(L, y, ord, s); }
+  return v / w;
 }
 
 // Where a team's pick the year after next is likely to land: rank teams by roster value a year from now
@@ -373,9 +414,10 @@ export function asset(L, key) {
     if (fix && v > fcLooks) v = v - fix * (v - fcLooks);
     // the 1st after next: market prices it generically, but a weak, aging roster makes an early pick likely
     if (+y === +L.season + 2 && +rd === 1 && L.slotDist && L.tatMap) {
-      const fs = futureSlot(L, orig), base1 = L.fc.picks.get(`${+L.season + 1} 1st`) || 1;
-      const share = tierValue(L, +L.season + 1, '1st', fs) / base1;
-      const proj = generic * share;
+      // a year further out: slot is very uncertain (wide spread), and the market discounts it for the wait (hold tax)
+      const fs = futureSlot(L, orig), ny = +L.season + 1;
+      const hold = generic / (L.fc.picks.get(`${ny} 1st`) || generic || 1);
+      const proj = hold * spreadValue(L, ny, '1st', fs, L.numTeams / 4);
       return { key, pick: true, orig: +orig, name: `${y} 1st (likely #${fs})` + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: `${y} 1st`, pos: 'PICK', fc: generic, tat: proj, fcGeneric: generic, fcLooks: generic, futureSlot: fs, age: null };
     }
     return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: v, fcGeneric: generic, fcLooks, looksSlot: looks, top3, fix, age: null, slot };
@@ -390,6 +432,24 @@ export function asset(L, key) {
     key, id, name: p.full_name || f?.name || id, pos: p.position || f?.pos || '?', team: p.team || '', age: f?.age ?? p.age ?? null,
     fc, tat, tatRank: L.tatRank?.get(id) ?? null, tatMove: L.tatMove?.get(id) || '', inj: p.injury_status || '', trend: f?.trend || 0,
   };
+}
+
+// Sanderson's three currencies: picks, productive value (this season) and EYR value (expected years remaining).
+// Expected years remaining by position follows typical career ends (Harstad): production stays roughly flat until
+// a sharp drop, so a player's value is spread evenly over his remaining years.
+const CAREER_END = { QB: 37, RB: 28.5, WR: 30.5, TE: 31.5 };
+export function currencies(a) {
+  if (a.pick) return { picks: a.tat, now: 0, future: 0 };
+  const end = CAREER_END[a.pos] ?? 30;
+  const years = Math.max(1, Math.min(10, end - (a.age || 25) + 1));
+  const now = a.tat / years;
+  return { picks: 0, now, future: a.tat - now, years };
+}
+export function mixOf(assets) {
+  const m = { picks: 0, now: 0, future: 0 };
+  for (const a of assets) { const c = currencies(a); m.picks += c.picks; m.now += c.now; m.future += c.future; }
+  m.total = m.picks + m.now + m.future;
+  return m;
 }
 
 export function teamAssets(L, t) {
@@ -467,6 +527,7 @@ export function computePower(L) {
     t.fcTotal = sum(A.map(a => a.fc)); t.tatTotal = sum(A.map(a => a.tat));
     t.fcPlayers = sum(A.filter(a => !a.pick).map(a => a.fc));
     t.pickFc = sum(A.filter(a => a.pick).map(a => a.fc));
+    t.mix = mixOf(A);
     const top = A.filter(a => !a.pick).sort((a, b) => b.fc - a.fc).slice(0, 15);
     const tv = sum(top.map(a => a.fc));
     t.coreAge = tv ? sum(top.map(a => (a.age || 26) * a.fc)) / tv : null;
