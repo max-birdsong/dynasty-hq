@@ -2,6 +2,7 @@ import { M, leagueById, teamAssets, startersNow, playerWeekPts, simParams } from
 import { state } from '../state.js';
 import { h, fmt, pct, sgn, lineChart, PALETTE } from '../util.js';
 import { table, adviceTag, modeTag, pctBar, posB, empty } from '../components.js';
+import { planPanel } from './trades.js';
 
 export default function leagueView(id, tab = 'power') {
   if (!id) {
@@ -22,7 +23,8 @@ export default function leagueView(id, tab = 'power') {
     me ? h('div', { class: 'kpis', style: { marginTop: '12px' } },
       kpi(`${me.wins}-${me.losses}`, 'record'), kpi(pct(me.playoff), 'playoff odds'), kpi(pct(me.bye), 'bye odds'), kpi(pct(me.title), 'title odds'),
       kpi(`#${me.fcTotalRank}`, 'FantasyCalc'), kpi(`#${me.tatTotalRank}`, 'Sanderson'), kpi(`${fmt(me.ros, 1)} (#${me.rosRank})`, 'proj pts/wk')) : '',
-    me ? h('p', { class: 'muted small', style: { marginBottom: 0 } }, me.advice.text) : ''));
+    ''));
+  if (me) root.append(planPanel(L));
 
   const tabs = [['power', 'Power rankings'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
   root.append(h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: k === tab ? 'on' : '', onclick: () => location.hash = `#/league/${id}/${k}` }, l))));

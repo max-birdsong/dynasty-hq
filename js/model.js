@@ -390,6 +390,7 @@ function valueTat(L, set) {
 
 // ---------------- power rankings / modes ----------------
 export function computePower(L) {
+  L.plan = null; // recomputed lazily from the fresh numbers
   const rules = settings().rules;
   const playoffWeeks = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) playoffWeeks.push(w);
   for (const t of L.teams) {

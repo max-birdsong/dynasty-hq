@@ -1,6 +1,7 @@
 import { M, leagueById, teamAssets, asset, isPick } from '../model.js';
 import { state, logTrade, updateTrade, deleteTrade, settings, save } from '../state.js';
-import { evalTrade, simDelta, suggest } from '../trade.js';
+import { evalTrade, simDelta, suggest, tradeValue } from '../trade.js';
+import { teamPlan } from '../plan.js';
 import { loadTrades, tradeSides } from '../owners.js';
 import { h, fmt, sgn, pct, toast, sleep } from '../util.js';
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
@@ -85,7 +86,7 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
   if (showSim && r.me) {
     simBox.replaceChildren(h('div', { class: 'muted small', style: { marginTop: '10px' } }, 'Simulating the season with and without this trade…'));
     clearTimeout(evalPanel._t);
-    evalPanel._t = setTimeout(() => { if (!simBox.isConnected) return; const d = simDelta(L, r); simBox.replaceChildren(simTable(d, partner)); }, 250);
+    evalPanel._t = setTimeout(() => { if (!simBox.isConnected) return; const d = simDelta(L, r); d.value = tradeValue(L, r, d); simBox.replaceChildren(simTable(d, partner)); }, 250);
   }
   return el;
 }
@@ -111,9 +112,11 @@ function simTable(d, partner) {
   const team = (who, x) => h('div', { class: 'card' }, h('h3', {}, who),
     bar(x[0].playoff, x[1].playoff, 'Playoffs'), bar(x[0].bye, x[1].bye, 'Bye'), bar(x[0].title, x[1].title, 'Title'));
   const me = d.me, dT = me[1].title - me[0].title, dP = me[1].playoff - me[0].playoff;
-  const headline = Math.abs(dT) >= 0.01
+  const headline0 = Math.abs(dT) >= 0.01
     ? `Your title chances get ${word(dT)}: ${P(me[0].title)}% → ${P(me[1].title)}%.`
     : `Your title chances don't really change (${P(me[0].title)}% → ${P(me[1].title)}%)` + (Math.abs(dP) >= 0.01 ? `, but your playoff chances get ${word(dP)}: ${P(me[0].playoff)}% → ${P(me[1].playoff)}%.` : '.');
+  const v = d.value;
+  const headline = headline0 + (v ? ` Overall worth ${sgn(v.total)} to you (Sanderson ${sgn(v.tat)}, this season ${sgn(v.now)}).` : '');
   return h('div', { style: { marginTop: '12px' } },
     h('div', { class: 'verdict' }, headline),
     h('div', { class: 'sides', style: { marginTop: '10px' } }, team('You', d.me), team(partner.owner, d.them)),
@@ -132,6 +135,13 @@ export function toLog(r) {
 }
 
 // ---------------- suggestions ----------------
+export function planPanel(L) {
+  const p = teamPlan(L);
+  if (!p) return '';
+  return h('div', { class: 'panel plan' }, h('div', { class: 'row spread' }, h('h2', { style: { margin: 0 } }, `${L.nick}: ${p.headline}`)),
+    h('ul', { class: 'small', style: { margin: '8px 0 0', paddingLeft: '18px' } }, p.lines.map(l => h('li', {}, l))));
+}
+
 function suggestions(L) {
   const S = settings();
   const box = h('div');
@@ -147,9 +157,10 @@ function suggestions(L) {
   };
   box.append(h('div', { class: 'panel' },
     h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, 'Suggested trades'),
-      h('div', { class: 'muted small' }, `Sanderson gain ≥ ${S.rules.minTatGain}, partner ahead on FantasyCalc (rebuilders by ${Math.round(S.rules.rebuilderFcMargin * 100)}%+), contenders don't lose points or a starting QB, rebuilders only get players under ${S.rules.rebuildMaxAge}, old RBs only go to contenders, your lineup protected when you're contending. Offers already rejected are skipped. ${S.targets.length ? S.targets.length + ' targets get priority.' : ''}`)),
+      h('div', { class: 'muted small' }, `Ranked by what each trade is worth to you: Sanderson value gained plus what it does to your odds this season, valued for your situation in that league (a title = ${fmt(S.titleWorth ?? 4500)} TAT). Partners must come out ahead on FantasyCalc and the deal has to make sense for their team. Offers already rejected are skipped.`)),
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues')))),
     out);
+  box.insertBefore(planPanel(L), box.firstChild);
   if (!state().tatSets.length) out.append(h('div', { class: 'panel' }, 'Upload Sanderson rankings on the ', h('a', { href: '#/values' }, 'Values page'), ' first. Without them every player is valued at half his FC value, so suggestions are meaningless.'));
   return box;
 }
@@ -157,7 +168,11 @@ function suggestions(L) {
 function suggestionCard(r) {
   return h('div', { class: 'card' },
     h('div', { class: 'row spread', style: { marginBottom: '8px' } }, h('div', {}, h('b', {}, r.L.nick), ' · ', r.partner.owner, ' ', modeTag(r.partner.mode)),
-      h('span', { class: 'pos', style: { fontWeight: 700 } }, sgn(r.tatGain) + ' TAT')),
+      h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Total value to you, in Sanderson points' }, sgn(r.value?.total ?? r.tatGain))),
+    h('div', { class: 'small', style: { marginBottom: '8px' } },
+      h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg' }, `Sanderson ${sgn(r.tatGain)}`), ' + ',
+      h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${sgn(r.value?.now ?? 0)}`),
+      r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%, playoffs ${Math.round(r.sim.me[0].playoff * 100)}% → ${Math.round(r.sim.me[1].playoff * 100)}%)`) : ''),
     h('div', { class: 'small muted' }, 'You send'), h('div', { class: 'assets' }, r.give.map(a => assetLine(a))),
     h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'You get'), h('div', { class: 'assets' }, r.get.map(a => assetLine(a))),
     h('div', { class: 'small', style: { marginTop: '8px' } },

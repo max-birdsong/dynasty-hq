@@ -2,6 +2,7 @@
 import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid } from './model.js';
 import { settings, state } from './state.js';
 import { simulate } from './sim.js';
+import { teamPlan, winNowValue } from './plan.js';
 import { sum } from './util.js';
 
 // FantasyCalc-style consolidation adjustment: the side giving fewer pieces gets credit
@@ -65,10 +66,6 @@ export function checkRules(L, partner, r) {
   if (mode !== 'contend') for (const a of r.give) if (a.pos === 'RB' && (a.age || 0) >= R.oldRbAge) f.push({ bad: true, msg: `Old RB ${a.name} to a non-contender` });
   if (r.them && mode === 'contend' && r.them.rosAfter < r.them.rosBefore - R.contenderMaxDrop) f.push({ bad: true, msg: `Contender loses ${(r.them.rosBefore - r.them.rosAfter).toFixed(1)} pts/wk` });
   if (r.takesStartingQb && mode !== 'rebuild') f.push({ bad: true, msg: 'Takes their starting QB without one going back' });
-  if (r.me && L.me && ['push', 'mid'].includes(L.me.advice?.cls)) {
-    const d = Math.max(r.me.rosBefore - r.me.rosAfter, r.me.poBefore - r.me.poAfter);
-    if (d > R.myMaxDrop) f.push({ bad: true, msg: `Your lineup drops ${d.toFixed(1)} pts/wk while contending` });
-  }
   if (r.tatGain < 0) f.push({ bad: false, msg: 'Sanderson loss' });
   return f;
 }
@@ -99,44 +96,86 @@ function combos(arr, k) {
   return out;
 }
 
-export function suggest(L, { partners = null, targets = null, maxPerPartner = 8, limit = 30, poolSize = 14 } = {}) {
+// Total value of a trade to you, in Sanderson (TAT) points: long-term value + what it does to this season
+export function tradeValue(L, r, exact = null) {
+  const plan = teamPlan(L);
+  let now;
+  if (exact) now = plan.lambdaT * (exact.me[1].title - exact.me[0].title) + plan.lambdaP * (exact.me[1].playoff - exact.me[0].playoff);
+  else now = r.me ? winNowValue(plan, r.me.rosAfter - r.me.rosBefore, r.me.poAfter - r.me.poBefore) : 0;
+  return { total: r.tatGain + now, tat: r.tatGain, now };
+}
+
+export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10 } = {}) {
   if (!L.me) return [];
   const S = settings(), R = S.rules;
+  const plan = teamPlan(L);
   const untouch = new Set(S.untouchable.map(String));
-  const tg = new Set((targets || S.targets).map(String));
-  const mine = teamAssets(L, L.me).filter(a => a.fc > 250 && !(a.id && untouch.has(a.id))).sort((a, b) => b.fc - a.fc).slice(0, poolSize);
+  const tg = new Set(S.targets.map(String));
+  const po = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) po.push(w);
+  const reg = L.regWeeks.length ? L.regWeeks : po;
+  const base = L.weekly[L.me.rid], bReg = mean(base, reg), bPo = mean(base, po);
+  // what each single player is worth to MY lineup this season (added or removed), as a quick first pass
+  const marg = new Map();
+  const margOf = (a, adding) => {
+    if (a.pick) return { reg: 0, po: 0 };
+    const k = (adding ? '+' : '-') + a.id;
+    if (!marg.has(k)) {
+      const ids = adding ? [...L.me.players, a.id] : L.me.players.filter(x => x !== a.id);
+      const wk = teamWeekly(L, ids);
+      marg.set(k, { reg: mean(wk, reg) - bReg, po: mean(wk, po) - bPo });
+    }
+    return marg.get(k);
+  };
+  const holeGroups = new Set(plan.holes.map(x => x.g));
+  const mine = teamAssets(L, L.me).filter(a => (a.fc > 250 || a.tat > 250) && !(a.id && untouch.has(a.id))).sort((a, b) => Math.max(b.fc, b.tat) - Math.max(a.fc, a.tat)).slice(0, poolSize);
   const out = [];
   for (const p of L.teams) {
     if (p.isMe || (partners && !partners.includes(p.rid))) continue;
-    const theirs = teamAssets(L, p).filter(a => a.fc > 250).sort((a, b) => b.fc - a.fc).slice(0, poolSize);
+    const all = teamAssets(L, p);
+    const top = all.filter(a => a.fc > 250).sort((a, b) => b.fc - a.fc).slice(0, poolSize);
+    // plus players who would fill my holes right now, even if they're cheap in dynasty terms
+    const fillers = all.filter(a => !a.pick && holeGroups.has(a.pos) && !top.includes(a)).map(a => ({ a, m: margOf(a, true) })).filter(x => x.m.reg > 3).sort((x, y) => y.m.reg - x.m.reg).slice(0, 5).map(x => x.a);
+    const theirs = [...top, ...fillers];
     const cands = [];
     for (const gs of [1, 2]) for (const ts of [1, 2]) {
-      const G = combos(mine, gs), T = combos(theirs, ts);
-      for (const g of G) for (const t of T) {
+      for (const g of combos(mine, gs)) for (const t of combos(theirs, ts)) {
         const fc = fcSides(g.map(a => a.fc), t.map(a => a.fc));
-        const tat = sum(t.map(a => a.tat)) - sum(g.map(a => a.tat));
-        if (tat < R.minTatGain) continue;
         const need = p.mode === 'rebuild' ? R.rebuilderFcMargin * Math.max(fc.A, fc.B) : 0;
         if (fc.partnerMargin < need || fc.partnerMargin > need + 0.3 * fc.B + 400) continue;
         if (p.mode === 'rebuild' && g.some(a => !a.pick && (a.age || 0) >= R.rebuildMaxAge)) continue;
         if (p.mode !== 'contend' && g.some(a => a.pos === 'RB' && (a.age || 0) >= R.oldRbAge)) continue;
-        const bonus = t.some(a => a.id && tg.has(a.id)) ? 1500 : 0;
-        cands.push({ g, t, tat, score: tat + bonus - 0.3 * Math.max(0, fc.partnerMargin - need) });
+        const tat = sum(t.map(a => a.tat)) - sum(g.map(a => a.tat));
+        const dReg = sum(t.map(a => margOf(a, true).reg)) + sum(g.map(a => margOf(a, false).reg));
+        const dPo = sum(t.map(a => margOf(a, true).po)) + sum(g.map(a => margOf(a, false).po));
+        const score = tat + winNowValue(plan, dReg, dPo) + (t.some(a => a.id && tg.has(a.id)) ? 1500 : 0) - 0.3 * Math.max(0, fc.partnerMargin - need);
+        if (score < R.minTatGain * 0.5) continue;
+        cands.push({ g, t, score });
       }
     }
     cands.sort((a, b) => b.score - a.score);
     let kept = 0;
-    for (const c of cands.slice(0, 80)) {
+    for (const c of cands.slice(0, 60)) {
       const r = evalTrade(L, p, c.g.map(a => a.key), c.t.map(a => a.key));
       if (r.flags.some(f => f.bad)) continue;
       if (r.memory.same && ['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status)) continue;
-      r.score = c.score; out.push(r);
-      if (++kept >= maxPerPartner) break;
+      r.value = tradeValue(L, r);
+      r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0);
+      if (r.value.total < R.minTatGain) continue;
+      out.push(r);
+      if (++kept >= 4) break;
     }
+  }
+  out.sort((a, b) => b.score - a.score);
+  // the best few get a full season simulation, so their this-season value is exact rather than estimated
+  for (const r of out.slice(0, exactTop)) {
+    r.sim = simDelta(L, r, 1200);
+    r.value = tradeValue(L, r, r.sim);
+    r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0);
   }
   // keep the list varied: each asset appears in at most two suggestions
   const used = new Map(), final = [];
   for (const r of out.sort((a, b) => b.score - a.score)) {
+    if (r.value.total < R.minTatGain) continue;
     const keys = [...r.giveKeys, ...r.getKeys];
     if (keys.some(k => (used.get(k) || 0) >= 2)) continue;
     keys.forEach(k => used.set(k, (used.get(k) || 0) + 1));

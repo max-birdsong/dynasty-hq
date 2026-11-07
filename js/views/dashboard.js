@@ -3,7 +3,18 @@ import { state, syncReady } from '../state.js';
 import { h, fmt, pct, sgn } from '../util.js';
 import { table, adviceTag, pctBar, posB, heat, empty } from '../components.js';
 
+let planning = false;
 export default function dashboard() {
+  // team plans need a few extra simulations each; work them out in the background and redraw when ready
+  if (!planning && M.leagues.some(L => L.me && !L.plan)) {
+    planning = true;
+    (async () => {
+      const { teamPlan } = await import('../plan.js');
+      for (const L of M.leagues) { if (L.me && !L.plan) teamPlan(L); await new Promise(r => setTimeout(r, 0)); }
+      planning = false;
+      if (!location.hash || location.hash === '#/') window.DHQ.route();
+    })();
+  }
   const root = h('div');
   const S = state();
   const mine = M.leagues.filter(L => L.me);
@@ -28,7 +39,7 @@ export default function dashboard() {
   ));
 
   // league overview
-  const rows = mine.map(L => ({ L, bye: L.me.bye, nick: L.nick, rec: `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`, fpts: L.me.fptsRank, playoff: L.me.playoff, title: L.me.title, fc: L.me.fcTotalRank, tat: L.me.tatTotalRank, ros: L.me.rosRank, adv: L.me.advice, n: L.teams.length }));
+  const rows = mine.map(L => ({ L, bye: L.me.bye, nick: L.nick, rec: `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`, fpts: L.me.fptsRank, playoff: L.me.playoff, title: L.me.title, fc: L.me.fcTotalRank, tat: L.me.tatTotalRank, ros: L.me.rosRank, adv: L.plan ? { tag: L.plan.headline, cls: L.plan.tanking ? 'tank' : (L.me.title ?? 0) >= 0.15 ? 'push' : (L.me.playoff ?? 0) >= 0.4 ? 'mid' : 'sell', text: L.plan.lines.join(' ') } : L.me.advice, n: L.teams.length }));
   root.append(h('div', { class: 'panel' }, h('h2', {}, 'Your leagues'),
     table([
       { key: 'nick', label: 'League', n: false },

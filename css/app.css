@@ -106,3 +106,5 @@ code { font-family: var(--mono); font-size: 12px; background: var(--panel2); pad
 .oddbar i.before { background: color-mix(in srgb, var(--muted) 45%, transparent); }
 .oddbar i.after { height: 6px; top: 4px; }
 .oddnum { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.panel.plan { border-left: 3px solid var(--accent); }

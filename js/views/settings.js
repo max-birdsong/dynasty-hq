@@ -22,16 +22,18 @@ export default function settingsView() {
         h('span', { class: 'muted small' }, L.name))))));
   }
 
-  root.append(h('div', { class: 'panel' }, h('h2', {}, 'Trade rules'),
-    h('div', { class: 'grid g3' },
-      num(st.rules, 'minTatGain', 'Minimum Sanderson gain', 50),
+  root.append(h('div', { class: 'panel' }, h('h2', {}, 'How trades are valued'),
+    h('p', { class: 'small', style: { marginTop: 0 } }, 'Every trade is scored in one currency: Sanderson value gained, plus what it does to your title and playoff odds this season. How much this season counts is worked out per league from your situation (whether you can win, whether you own your next 1st, how strong you are long-term). The one thing to set is what a title is worth to you.'),
+    h('div', { class: 'grid g3' }, num(st, 'titleWorth', 'A title is worth (TAT points)', 250, '4,500 ≈ 1.5 base 1sts. Raise it to chase titles harder.')),
+    h('details', { style: { marginTop: '12px' } }, h('summary', { class: 'small' }, 'Advanced: partner-fit rules'),
+    h('div', { class: 'grid g3', style: { marginTop: '8px' } },
+      num(st.rules, 'minTatGain', 'Minimum total gain to suggest', 50),
       num(st.rules, 'rebuilderFcMargin', 'Rebuilder FC win (share of deal)', 0.01, '0.05 = they win by 5%'),
       num(st.rules, 'contenderMaxDrop', 'Contender may lose (pts/wk)', 0.1),
-      num(st.rules, 'myMaxDrop', 'You may lose when contending (pts/wk)', 0.1),
       num(st.rules, 'rebuildMaxAge', 'Rebuilders only take players younger than', 0.5),
       num(st.rules, 'oldRbAge', 'Old RB age (only to contenders)', 0.5),
       num(st.rules, 'contenderWinPct', 'Contender if win % at least', 0.025, 'median-game leagues count both games'),
-      num(st.rules, 'rebuilderWinPct', 'Rebuilder if win % at most', 0.025))));
+      num(st.rules, 'rebuilderWinPct', 'Rebuilder if win % at most', 0.025)))));
 
   root.append(h('div', { class: 'panel' }, h('h2', {}, 'Simulator & FantasyCalc adjustment'),
     h('div', { class: 'grid g3' },

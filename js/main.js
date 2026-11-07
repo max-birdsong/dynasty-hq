@@ -38,6 +38,7 @@ async function boot(force = false) {
     await loadAll(prog);
     if (M.errors.length) console.warn(M.errors);
     route();
+
   } catch (e) {
     console.error(e);
     app.replaceChildren(h('div', { class: 'panel' }, h('div', { class: 'err-box' }, 'Could not load data: ' + e.message),
