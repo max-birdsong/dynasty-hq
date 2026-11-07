@@ -1,8 +1,7 @@
 name: Waiver watch
 on:
   schedule:
-    - cron: '23 6 * * *'    # daily 06:23 UTC (07:23 Berlin)
-    - cron: '23 15 * * 3'   # Wednesdays 15:23 UTC, after most waivers clear
+    - cron: '23 * * * *'    # hourly: r/DynastyFF buzz and injury openings, posted as soon as they appear
   workflow_dispatch: {}
 permissions:
   contents: write

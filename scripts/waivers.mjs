@@ -2,6 +2,7 @@
 // data/waivers.json, and comments new finds on the "Waiver watch" issue so GitHub emails you.
 import fs from 'node:fs';
 import { scanLeague, indexTeams } from '../js/waiverscan.js';
+import { buzz, norm } from './reddit.mjs';
 
 const USER = process.env.SLEEPER_USER || 'boximax';
 const SL = 'https://api.sleeper.app/v1';
@@ -19,7 +20,9 @@ const me = await get(`${SL}/user/${USER}`);
 const leagues = await get(`${SL}/user/${me.user_id}/leagues/nfl/${season}`);
 const players = await get(`${SL}/players/nfl`);
 const trending = new Map((await get(`${SL}/players/nfl/trending/add?lookback_hours=48&limit=200`).catch(() => [])).map(x => [String(x.player_id), x.count]));
-const env = { players, byTeamPos: indexTeams(players), trending };
+const names = new Map();
+for (const [id, p] of Object.entries(players)) if (p?.active && p.team && ['QB', 'RB', 'WR', 'TE'].includes(p.position) && p.first_name && p.last_name) names.set(norm(`${p.first_name} ${p.last_name}`), id);
+const env = { players, byTeamPos: indexTeams(players), trending, buzz: await buzz(names) };
 
 const fcCache = {};
 async function fc(n, q, ppr) {
@@ -49,7 +52,7 @@ for (const lg of leagues) {
   const res = scanLeague({ id: lg.league_id, nick, ny: +season + 1, sf, rostered: new Set(ros.flatMap(r => (r.players || []).map(String))), mine: myIds, protect,
     fc: id => V.byId.get(id), pick: n => V.picks.get(n) }, env);
   const base = V.picks.get(`${+season + 1} 1st`) || 3000;
-  for (const r of res) finds.push({ lid: lg.league_id, nick, id: r.id, name: r.name, pos: r.pos, team: r.team, v: r.v, firsts: +(r.v / base).toFixed(2), price: r.price, tags: r.tags, hurt: r.hurt, score: Math.round(r.score), drop: r.drop?.name || null });
+  for (const r of res) finds.push({ lid: lg.league_id, nick, id: r.id, name: r.name, pos: r.pos, team: r.team, v: r.v, firsts: +(r.v / base).toFixed(2), price: r.price, tags: r.tags, hurt: r.hurt, score: Math.round(r.score), drop: r.drop?.name || null, buzz: r.buzz || null });
 }
 
 fs.mkdirSync('data', { recursive: true });
@@ -57,10 +60,13 @@ let prev = { seen: {} };
 try { prev = JSON.parse(fs.readFileSync('data/waivers.json', 'utf8')); } catch {}
 // "new" = not reported for this league in the last 7 days
 const now = Date.now(), seen = Object.fromEntries(Object.entries(prev.seen || {}).filter(([, t]) => now - t < 7 * 864e5));
-const worth = finds.filter(f => f.hurt || f.price || f.score >= 600);
-const fresh = worth.filter(f => !seen[`${f.lid}:${f.id}`]);
-for (const f of worth) seen[`${f.lid}:${f.id}`] ||= now;
-fs.writeFileSync('data/waivers.json', JSON.stringify({ updated: new Date().toISOString(), finds, seen }, null, 0));
+const worth = finds.filter(f => f.hurt || f.price || f.score >= 600 || f.buzz?.news || f.buzz?.n >= 2);
+// new = not posted for this league in 7 days, or it just got hotter (injury opening, news on Reddit)
+const keys = f => { const k = `${f.lid}:${f.id}`; return [k, ...(f.hurt ? [k + ':hurt'] : []), ...(f.buzz?.news ? [k + ':news'] : [])]; };
+const fresh = worth.filter(f => keys(f).some(k => !seen[k]));
+for (const f of worth) for (const k of keys(f)) seen[k] ||= now;
+const buzzOut = Object.fromEntries([...env.buzz].map(([id, b]) => [id, b]));
+if (fresh.length || new Date().getUTCHours() === 6 || process.env.FORCE_WRITE) fs.writeFileSync('data/waivers.json', JSON.stringify({ updated: new Date().toISOString(), finds, seen, buzz: buzzOut }, null, 0));
 console.log(`${finds.length} finds, ${fresh.length} new`);
 
 // comment on the "Waiver watch" issue
@@ -72,7 +78,7 @@ if (token && repo && fresh.length) {
   if (!num) num = (await gh('/issues', { method: 'POST', body: JSON.stringify({ title: 'Waiver watch', labels: ['waiver-watch'], body: `New free agents worth a roster spot get posted here daily, so GitHub emails you. Full list: ${SITE}#/waivers` }) })).number;
   const by = new Map();
   for (const f of fresh.sort((a, b) => b.score - a.score)) (by.get(f.id) || by.set(f.id, { ...f, ls: [] }).get(f.id)).ls.push(f);
-  const lines = [...by.values()].slice(0, 12).map(f => `- **${f.name}** (${f.pos} ${f.team})${f.firsts ? ` · ${f.firsts} 1sts` : ''}${f.price ? ` ${f.price}` : ''}${f.tags.length ? ` · ${f.tags.join(', ')}` : ''}\n  Free in: ${f.ls.map(x => `${x.nick}${x.drop ? ` (drop ${x.drop})` : ''}`).join(', ')}`);
+  const lines = [...by.values()].slice(0, 12).map(f => `- ${f.hurt || f.buzz?.news ? '🚨 ' : ''}**${f.name}** (${f.pos} ${f.team})${f.firsts ? ` · ${f.firsts} 1sts` : ''}${f.price ? ` ${f.price}` : ''}${f.tags.length ? ` · ${f.tags.join(', ')}` : ''}\n  Free in: ${f.ls.map(x => `${x.nick}${x.drop ? ` (drop ${x.drop})` : ''}`).join(', ')}${f.buzz?.posts?.length ? `\n  Reddit: ${f.buzz.posts.slice(0, 2).map(p => `[${p.title.slice(0, 70)}](${p.link})`).join(' · ')}` : ''}`);
   await gh(`/issues/${num}/comments`, { method: 'POST', body: JSON.stringify({ body: `**${fresh.length} new waiver find${fresh.length > 1 ? 's' : ''}** (${new Date().toISOString().slice(0, 10)})\n\n${lines.join('\n')}\n\n[Open the Waivers page](${SITE}#/waivers)` }) });
   console.log(`Commented on issue #${num}`);
 }

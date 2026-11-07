@@ -7,6 +7,7 @@
 //  - backups whose starter just got hurt (value jumps before the calculators catch up)
 //  - backup RBs and QBs in general (option value: one injury away from starting)
 //  - players rising fast in FantasyCalc or being added across Sleeper right now
+//  - players being talked about on r/DynastyFF (earlier than Sleeper adds)
 
 export const OUT = new Set(['Out', 'IR', 'PUP', 'Sus', 'Doubtful', 'NFI', 'COV']);
 const SKIP = new Set(['K', 'DEF', 'DL', 'LB', 'DB', 'IDP']);
@@ -57,21 +58,23 @@ export function scanLeague(lg, env) {
     const f = lg.fc(id), v = f?.value || 0, trend = f?.trend || 0;
     const d = depthInfo(players, byTeamPos, p);
     const adds = trending?.get(id) || 0;
+    const bz = env.buzz?.get?.(id) || env.buzz?.[id] || null; // r/DynastyFF mentions (from the hourly job)
     const tags = [];
     if (d?.starterOut && (p.position === 'RB' || p.position === 'QB' || p.position === 'TE') && d.order === 2) tags.push(`${d.starter.last_name || 'starter'} ${d.starter.injury_status}: next man up`);
     else if (d?.order === 2 && p.position === 'RB') tags.push('RB2 on depth chart');
     else if (d?.order === 2 && p.position === 'QB') tags.push(lg.sf ? 'Backup QB (superflex)' : 'Backup QB');
     if (trend >= Math.max(100, v * 0.2)) tags.push(`FC +${Math.round(trend)} in 30 days`);
     if (adds >= 1000) tags.push(`${adds >= 10000 ? Math.round(adds / 1000) + 'k' : adds.toLocaleString()} adds on Sleeper`);
+    if (bz) tags.push(bz.news ? 'r/DynastyFF news' : `r/DynastyFF: ${bz.n} mention${bz.n > 1 ? 's' : ''}`);
     if (OUT.has(p.injury_status)) tags.push(p.injury_status);
     const hurt = tags.some(t => t.endsWith('next man up'));
     // worth a roster spot if: valued above your worst player, or a real injury opening, or hot
     const gain = v - floor;
-    const interesting = (v >= fourth * 0.5 && gain > 50) || hurt || (adds >= 2000 && v > 0) || (d?.order === 2 && (p.position === 'RB' || (p.position === 'QB' && lg.sf)) && v > 0);
+    const interesting = (v >= fourth * 0.5 && gain > 50) || hurt || (adds >= 2000 && v > 0) || (d?.order === 2 && (p.position === 'RB' || (p.position === 'QB' && lg.sf)) && v > 0) || (bz && (bz.news || bz.n >= 2));
     if (!interesting || OUT.has(p.injury_status) && !v) continue;
-    const score = gain + (hurt ? 800 : 0) + Math.min(400, adds / 50) + Math.max(0, trend) * 0.5 + (d?.order === 2 ? 100 : 0);
+    const score = gain + (hurt ? 800 : 0) + Math.min(400, adds / 50) + Math.max(0, trend) * 0.5 + (d?.order === 2 ? 100 : 0) + (bz ? (bz.news ? 700 : 150 * Math.min(3, bz.n)) : 0);
     out.push({ id, name: p.full_name || `${p.first_name} ${p.last_name}`, pos: p.position, team: p.team, age: p.age, v, trend, adds, tags, hurt,
-      price: pickLabel(lg.pick, lg.ny, v), gain, score, drop: cut, lid: lg.id, nick: lg.nick });
+      price: pickLabel(lg.pick, lg.ny, v), gain, score, buzz: bz, drop: cut, lid: lg.id, nick: lg.nick });
   }
   return out.sort((a, b) => b.score - a.score).slice(0, 25);
 }

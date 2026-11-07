@@ -10,7 +10,7 @@ export default function waiversView() {
   const root = h('div');
   const out = h('div', { class: 'loading' }, h('div', { class: 'spinner' }), 'Checking who is unrostered in each league…');
   root.append(h('div', { class: 'row spread', style: { marginBottom: '10px' } },
-    h('div', {}, h('h1', {}, 'Waivers'), h('div', { class: 'muted small' }, 'Free agents worth a roster spot: injury openings, backup RBs and QBs, risers. Pick up, flip for a 3rd or 4th when someone needs them.'))),
+    h('div', {}, h('h1', {}, 'Waivers'), h('div', { class: 'muted small' }, 'Free agents worth a roster spot: injury openings, r/DynastyFF buzz, backup RBs and QBs, risers. Pick up, flip for a 3rd or 4th when someone needs them.'))),
     out);
   run(out);
   return root;
@@ -20,7 +20,10 @@ async function run(out) {
   const mine = M.leagues.filter(L => L.me);
   const tr = await api.trending().catch(() => []);
   const trending = new Map((Array.isArray(tr) ? tr : []).map(x => [String(x.player_id), x.count]));
-  const env = { players: M.players, byTeamPos: indexTeams(M.players), trending };
+  // Reddit can't be read from the browser; the hourly GitHub job saves who's being talked about
+  const job = await fetch('data/waivers.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const env = { players: M.players, byTeamPos: indexTeams(M.players), trending, buzz: job?.buzz || {} };
+  if (job?.updated) out.dataset.checked = new Date(job.updated).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
   const all = [];
   const faab = {};
   for (const L of mine) {
@@ -50,13 +53,14 @@ async function run(out) {
         h('div', { class: 'row spread' },
           h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` ${r.team}${r.age ? ' · ' + r.age : ''}`)),
           h('div', { class: 'small', style: { textAlign: 'right' } }, r.v ? h('b', {}, f1(r.L, r.v, false)) : h('span', { class: 'muted' }, 'no market value yet'), r.price ? h('span', { class: 'muted' }, ` · ${r.price}`) : '')),
-        h('div', { class: 'row', style: { gap: '4px', margin: '6px 0' } }, r.tags.map(t => h('span', { class: 'tag' + (t.endsWith('next man up') ? ' bad' : '') }, t))),
+        h('div', { class: 'row', style: { gap: '4px', margin: '6px 0' } }, r.tags.map(t => h('span', { class: 'tag' + (t.endsWith('next man up') || t === 'r/DynastyFF news' ? ' bad' : '') }, t))),
+        r.buzz?.posts?.length ? h('div', { class: 'small', style: { marginBottom: '4px' } }, r.buzz.posts.slice(0, 2).map(p => h('a', { href: p.link, target: '_blank', rel: 'noopener', style: { display: 'block' } }, '💬 ' + p.title.slice(0, 90)))) : '',
         h('div', { class: 'small' }, h('span', { class: 'muted' }, `Available in ${r.leagues.length}: `),
           r.leagues.sort((a, b) => b.gain - a.gain).map(x => h('a', { class: 'pill', style: { marginRight: '6px', display: 'inline-block', marginBottom: '4px' }, href: `https://sleeper.com/leagues/${x.lid}/players`, target: '_blank', rel: 'noopener',
             title: x.drop ? `Drop ${x.drop.name} (${f1(x.L, x.drop.v, false)})` : '' },
             x.nick, x.drop ? h('span', { class: 'muted' }, ` · drop ${x.drop.name.split(' ').slice(-1)[0]}`) : '', faab[x.lid] != null ? h('span', { class: 'muted' }, ` · $${faab[x.lid]}`) : ''))))))
         : empty(filter === 'All' ? 'Nothing worth a roster spot right now.' : 'Nothing in this group right now.'),
-      h('p', { class: 'muted small' }, 'Value is FantasyCalc in generic 1sts; the price is the pick it would roughly fetch. Each league chip opens Sleeper and shows who you\'d drop (your lowest-value non-starter, never IR or taxi) and your FAAB left. A daily job also posts new finds to the "Waiver watch" issue on GitHub, so you get an email.'));
+      h('p', { class: 'muted small' }, (out.dataset.checked ? `r/DynastyFF last checked ${out.dataset.checked}. ` : '') + 'Value is FantasyCalc in generic 1sts; the price is the pick it would roughly fetch. Each league chip opens Sleeper and shows who you\'d drop (your lowest-value non-starter, never IR or taxi) and your FAAB left. A daily job also posts new finds to the "Waiver watch" issue on GitHub, so you get an email.'));
   };
   draw();
 }
