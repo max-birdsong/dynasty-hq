@@ -55,6 +55,37 @@ export function calibrate(leagues, projPast, players, posOf, { minN = 150 } = {}
   const varSeason = Math.max(0, (msb - msw) / n0);
   const sdWeek = Math.sqrt(msw), sdSeason = Math.sqrt(varSeason);
 
+  // ---- shape and scale of the weekly noise ----
+  // Fit how the spread grows with the projection: sd(points) = c * proj^gamma (gamma 1 = proportional, 0 = same for everyone)
+  const pts = rows.map(x => ({ x, e: x.actual - x.proj * (1 + bias) }));
+  const sorted = [...pts].sort((a, b) => a.x.proj - b.x.proj);
+  const nb = 6, bins6 = [];
+  for (let i = 0; i < nb; i++) {
+    const g = sorted.slice(Math.floor(i * N / nb), Math.floor((i + 1) * N / nb));
+    if (g.length < 10) continue;
+    const m = g.reduce((s, p) => s + p.e, 0) / g.length;
+    bins6.push({ proj: g.reduce((s, p) => s + p.x.proj, 0) / g.length, rms: Math.sqrt(g.reduce((s, p) => s + (p.e - m) ** 2, 0) / (g.length - 1)) });
+  }
+  let gamma = 1, c = sdWeek;
+  if (bins6.length >= 3) {
+    const X = bins6.map(b => Math.log(b.proj)), Y = bins6.map(b => Math.log(b.rms));
+    const mx = X.reduce((a, b) => a + b) / X.length, my = Y.reduce((a, b) => a + b) / Y.length;
+    const sxy = X.reduce((s, x, i) => s + (x - mx) * (Y[i] - my), 0), sxx = X.reduce((s, x) => s + (x - mx) ** 2, 0);
+    gamma = Math.max(0, Math.min(1.3, sxx ? sxy / sxx : 1));
+    c = Math.exp(my - gamma * mx);
+  }
+  // Standardised residuals, with each team's own average removed (that part is season-long, handled separately).
+  // The simulator resamples these, so it reproduces the real shape of good and bad weeks (skew, fat tails).
+  const byTeam = new Map();
+  for (const p of pts) { const z = p.e / (c * p.x.proj ** gamma); if (!byTeam.has(p.x.key)) byTeam.set(p.x.key, []); byTeam.get(p.x.key).push(z); }
+  let zs = [];
+  for (const g of byTeam.values()) { if (g.length < 2) continue; const m = g.reduce((a, b) => a + b) / g.length, k = Math.sqrt(g.length / (g.length - 1)); for (const z of g) zs.push((z - m) * k); }
+  const zm = zs.reduce((a, b) => a + b, 0) / zs.length, zsd = Math.sqrt(zs.reduce((s, z) => s + (z - zm) ** 2, 0) / (zs.length - 1));
+  zs = zs.map(z => (z - zm) / zsd);
+  const zsorted = [...zs].sort((a, b) => a - b), q = p => zsorted[Math.floor(p * (zsorted.length - 1))];
+  const skew = zs.reduce((s, z) => s + z ** 3, 0) / zs.length;
+  const shape = { gamma, c, bins: bins6, skew, p05: q(0.05), p95: q(0.95), p01: q(0.01), p99: q(0.99), n: zs.length };
+
   const teamAdj = {};
   for (const [k, s] of gm) {
     const shrink = varSeason / (varSeason + msw / s.n);
@@ -78,7 +109,8 @@ export function calibrate(leagues, projPast, players, posOf, { minN = 150 } = {}
 
   return {
     ok: true, n: N, teams: G, games: games.length, weeks: [...new Set(rows.map(x => x.w))].length,
-    params: { ...DEFAULT_PARAMS, bias, sdWeek, sdSeason },
+    params: { ...DEFAULT_PARAMS, bias, sdWeek, sdSeason, noise: { c, gamma, z: zs } },
+    shape,
     teamAdj, brier, bins, favRight,
     meanAbsErr: rows.reduce((s, x) => s + Math.abs(x.actual - x.proj * (1 + bias)), 0) / N,
   };

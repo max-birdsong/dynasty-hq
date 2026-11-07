@@ -56,7 +56,12 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
             if (out) loss += d;
           }
         }
-        score[rid][wk] = Math.max(0, (mu - loss) * (mult[rid] + P.sdWeek * randn()));
+        const base = (mu - loss) * mult[rid];
+        // weekly luck: resample real standardised residuals from your leagues (keeps skew and fat tails),
+        // scaled the way the data says spread grows with the projection; normal curve if not calibrated
+        const noise = P.noise ? P.noise.c * Math.pow(Math.max(1, base), P.noise.gamma) * P.noise.z[Math.floor(rand() * P.noise.z.length)]
+          : base * P.sdWeek * randn();
+        score[rid][wk] = Math.max(0, base + noise);
       }
     }
     const W = {}, PF = {};

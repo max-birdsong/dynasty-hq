@@ -123,7 +123,7 @@ function simTab(L) {
     h('p', { class: 'small' }, `Each team's weekly projection is its best lineup from Sleeper's projections, scored with this league's settings. The rest of the season and the playoffs are played out ${fmt(state().settings.simRuns)} times. In each simulated season every team gets three kinds of luck:`),
     h('ul', { class: 'small' },
       h('li', {}, h('b', {}, 'Season-long error '), `(±${pc(P.sdSeason)}): the projection is simply wrong about the team for the rest of the year. Drawn once per simulated season, so it doesn't average out. Made of what your leagues show persists (±${pc(P.measuredSeason ?? 0)}) plus ±${pc(P.horizon ?? 0)} because forecasting weeks ahead is harder than the pre-game projections the calibration is measured on.`),
-      h('li', {}, h('b', {}, 'Week-to-week luck '), `(±${pc(P.sdWeek)}): drawn fresh every week; this part carries no information about the future.`),
+      h('li', {}, h('b', {}, 'Week-to-week luck '), P.noise ? `(about ±${pc(P.sdWeek)}): drawn fresh every week by resampling the real good and bad weeks from your leagues, so it has the same lopsided shape as real fantasy scores. Carries no information about the future.` : `(±${pc(P.sdWeek)}): drawn fresh every week from a bell curve; this part carries no information about the future.`),
       h('li', {}, h('b', {}, 'Injuries: '), `each projected starter has a ${pc(P.injRate)} chance per future week of getting hurt and is out ~${(1 / P.injRecover).toFixed(1)} weeks on average, costing the points between him and his bench replacement. Stars-and-scrubs rosters get hit harder.`)),
     h('p', { class: 'small' }, P.bias ? `Projections have run ${pc(Math.abs(P.bias))} ${P.bias < 0 ? 'high' : 'low'} on average (perfect-hindsight lineups vs real lineups), so every team is scaled by the same amount. That doesn't change who's favoured.` : ''));
   if (!C?.ok) {
@@ -141,6 +141,17 @@ function simTab(L) {
     h('p', { class: 'small muted' }, 'All 11 leagues are pooled, because how wrong projections are is a property of projections, not of any one league. Below: when the model gave the favourite X%, how often did the favourite actually win? Close numbers mean the odds are honest.'),
     h('table', { style: { maxWidth: '520px' } }, h('thead', {}, h('tr', {}, ['Model said', 'Games', 'Model avg', 'Favourite actually won'].map(x => h('th', {}, x)))),
       h('tbody', {}, C.bins.map(b => h('tr', {}, h('td', {}, `${Math.round(b.lo * 100)}–${Math.min(100, Math.round(b.hi * 100))}%`), h('td', { class: 'n' }, b.n), h('td', { class: 'n' }, b.p != null ? pc(b.p) : '–'), h('td', { class: 'n' }, b.rate != null ? pc(b.rate) : '–'))))));
+  const S = C.shape;
+  if (S) {
+    const g = S.gamma;
+    wrap.append(h('h3', { style: { marginTop: '16px' } }, 'Shape of weekly luck'),
+      h('p', { class: 'small' }, `How the spread grows with a team's projection: exponent ${g.toFixed(2)} (1 = proportional to the projection, 0 = the same number of points for everyone). ` +
+        (g > 0.8 ? 'Your leagues look close to proportional.' : g < 0.4 ? 'Strong and weak teams swing by a similar number of points, so favourites are a bit safer than a proportional model says.' : 'Somewhere in between: better teams swing more in points, but less than proportionally.')),
+      h('table', { style: { maxWidth: '420px' } }, h('thead', {}, h('tr', {}, ['Projected', 'Typical swing (sd)', 'as %'].map(x => h('th', {}, x)))),
+        h('tbody', {}, S.bins.map(b => h('tr', {}, h('td', { class: 'n' }, fmt(b.proj, 0)), h('td', { class: 'n' }, '±' + fmt(b.rms, 1)), h('td', { class: 'n' }, pc(b.rms / b.proj)))))),
+      h('p', { class: 'small muted' }, `Shape of the ${fmt(S.n)} real weekly misses (standardised): skew ${S.skew.toFixed(2)} (0 = symmetric, positive = more big blow-up weeks than duds). ` +
+        `5th–95th percentile ${S.p05.toFixed(2)} to +${S.p95.toFixed(2)} (a bell curve is −1.64 to +1.64); 1st–99th ${S.p01.toFixed(2)} to +${S.p99.toFixed(2)} (bell curve ±2.33). The simulator resamples these real misses instead of assuming a bell curve.`));
+  }
   const rows = L.teams.map(t => { const a = C.teamAdj[L.id + ':' + t.rid] || {}; return { owner: t.owner, isMe: t.isMe, n: a.n, proj: a.proj, actual: a.actual, diff: a.mean != null ? a.mean - C.params.bias : null, shrink: a.shrink, adj: a.adj }; });
   wrap.append(h('h3', { style: { marginTop: '16px' } }, 'Did teams beat their projections?'),
     h('p', { class: 'small muted' }, `"Applied" is how much of each team's over/under-performance the simulator carries forward. It is shrunk toward zero by how much of the error persists in the data (${pc(C.params.sdSeason)} season vs ${pc(C.params.sdWeek)} weekly), so a team that's just been unlucky isn't marked down.` + (state().settings.sim.teamAdj ? '' : ' (Currently switched off in Settings.)')),
