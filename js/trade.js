@@ -1,5 +1,5 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
-import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf } from './model.js';
+import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies } from './model.js';
 import { settings, state } from './state.js';
 import { simulate } from './sim.js';
 import { teamPlan, winNowValue } from './plan.js';
@@ -141,6 +141,16 @@ function combos(arr, k) {
   return out;
 }
 
+// Share of this season still to be played (regular season + playoffs)
+function seasonLeft(L) { return Math.max(0, Math.min(1, (M.lastWeek - M.week + 1) / 17)); }
+export function offseasonValue(L, a) {
+  if (a.pick) return a.tat;
+  return a.tat - currencies(a).now * seasonLeft(L);
+}
+function offseasonGain(L, r) {
+  return r.get.reduce((s, a) => s + offseasonValue(L, a), 0) - r.give.reduce((s, a) => s + offseasonValue(L, a), 0);
+}
+
 // Total value of a trade to you, in Sanderson (TAT) points: long-term value + what it does to this season
 export function tradeValue(L, r, exact = null) {
   const plan = teamPlan(L);
@@ -161,9 +171,14 @@ export function tradeValue(L, r, exact = null) {
   const vals = L.teams.map(x => x.tatTotal).sort((a, b) => a - b);
   const p75 = vals[Math.floor(vals.length * 0.75)], med = vals[Math.floor(vals.length / 2)] || 1;
   const lead = Math.max(0, (L.me.tatTotal - p75) / med);
-  const dr = r.tatGain > 0 ? Math.max(0.5, 1 - lead) : 1; // losses always count in full
-  const tat = r.tatGain * dr;
-  return { total: tat + now, tat, tatRaw: r.tatGain, dr, now, pickShift };
+  // Value to YOU, not market value (Sanderson, "Tearing Down"): a player's market price includes the rest of this
+  // season's production, which he'll have used up by the off-season. That production only matters to you through
+  // title odds and draft slot, which `now` already counts from the simulation. So the long-term side of the ledger
+  // is each asset's value after this season: market value minus the share tied to the games left this year.
+  const off = offseasonGain(L, r);
+  const dr = off > 0 ? Math.max(0.5, 1 - lead) : 1; // losses always count in full
+  const tat = off * dr;
+  return { total: tat + now, tat, tatRaw: off, tatMarket: r.tatGain, dr, now, pickShift };
 }
 
 // Sanderson: rankings aren't a price list; every trade should serve a goal. Your goals come from the league plan.

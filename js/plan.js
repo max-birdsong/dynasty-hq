@@ -101,6 +101,19 @@ export function teamPlan(L) {
   // Tanking is a one-year reload at most.
   let headline;
   const bpOk = dynRank <= Math.ceil(n / 2);
+  const highValue = dynRank <= 3, lowValue = dynRank > n * 0.6;
+  // "Tearing Down": high-value teams should buy mid-season (future contention is already assured; extend the
+  // window into this year); low-value teams should sell now, hard, before more depreciation, to shorten the rebuild.
+  if (highValue && !tanking && (t.title ?? 0) < 0.15 && (t.playoff ?? 0) >= 0.25) lines.push(`Your buying power is top-3 (${dynRank} of ${n}), so you're assured of contending in future years. Sanderson: high-value teams should buy now and bring that window into this season, ideally early enough to chase a bye.`);
+  if (lowValue && outOfIt) lines.push(`Low buying power (${dynRank} of ${n}) and out of it: sell hard now, including young players if the price is right, before more depreciation. The faster value moves into picks and other assets that gain value, the shorter the rebuild.`);
+  if (tanking && L.draftOrder !== 'record') {
+    // max PF tactics: cheap producers only hurt draft position
+    const e3 = L.fc.picks.get(`${ny} 3rd (Early)`) ?? L.fc.picks.get(`${ny} 3rd`) ?? 1000;
+    const st = new Set(); for (const w of weeks) { const pts = {}; for (const id of t.players) pts[id] = playerWeekPts(L, id, w); for (const [, id] of bestLineup(t.players, pts, posOf, L.slots).lineup) if (id) st.add(id); }
+    const cheap = [...st].map(id => teamAssets(L, { players: [id], picks: [] })[0]).filter(a => a && a.tat < e3).sort((a, b) => a.tat - b.tat).slice(0, 6);
+    if (cheap.length) lines.push(`Draft order is by max PF, so cheap players who still make your best lineup only push your pick back: ${cheap.map(a => a.name).join(', ')}. Sell them for anything (attach them to other deals) or drop them.`);
+    if (dead.length) lines.push(`Keep injured stars (${dead.map(a => a.name).join(', ')}): they hold value like a pick and add nothing to your max PF.`);
+  }
   const middle = false;
   const lastYearBad = L.prevRecord && L.prevRecord.winPct < 0.4;
   if ((t.title ?? 0) >= 0.15 && (t.bye ?? 0) >= 0.5) headline = 'Bye secured: extend the window, don\'t chase the last piece';

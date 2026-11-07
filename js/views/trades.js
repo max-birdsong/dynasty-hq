@@ -118,7 +118,7 @@ function simTable(d, partner) {
     ? `Your title chances get ${word(dT)}: ${P(me[0].title)}% → ${P(me[1].title)}%.`
     : `Your title chances don't really change (${P(me[0].title)}% → ${P(me[1].title)}%)` + (Math.abs(dP) >= 0.01 ? `, but your playoff chances get ${word(dP)}: ${P(me[0].playoff)}% → ${P(me[1].playoff)}%.` : '.');
   const v = d.value;
-  const headline = headline0 + (v ? ` Overall worth ${sgn(v.total)} to you (Sanderson ${sgn(v.tat)}, this season ${sgn(v.now)}${v.pickShift && Math.abs(v.pickShift) >= 50 ? `, of which draft-slot shift ${sgn(v.pickShift)}` : ''}).` : '');
+  const headline = headline0 + (v ? ` Overall worth ${sgn(v.total)} to you (long-term ${sgn(v.tat)} after this season's games are used up, this season ${sgn(v.now)}${v.pickShift && Math.abs(v.pickShift) >= 50 ? `, of which draft-slot shift ${sgn(v.pickShift)}` : ''}).` : '');
   return h('div', { style: { marginTop: '12px' } },
     h('div', { class: 'verdict' }, headline),
     h('div', { class: 'sides', style: { marginTop: '10px' } }, team('You', d.me), team(partner.owner, d.them)),
@@ -190,7 +190,7 @@ function suggestionCard(r) {
       r.theirGoal ? h('span', { class: 'tag good', title: "Why it makes sense for them" }, r.theirGoal) : '',
       r.type && r.type.id !== 'other' ? h('span', { class: 'tag', title: r.type.tip }, r.type.label) : ''),
     h('div', { class: 'small', style: { marginBottom: '8px' } },
-      h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg' }, `Sanderson ${sgn(r.value?.tat ?? r.tatGain)}`), r.value?.dr < 0.99 ? h('span', { class: 'muted', title: "You're already well ahead of this league in value, so more of it adds little title equity" }, ` (of ${sgn(r.value.tatRaw)}, diminishing returns)`) : '', ' + ',
+      h('span', { class: (r.value?.tat ?? r.tatGain) >= 0 ? 'pos' : 'neg', title: "Sanderson value after this season (market value minus the production the players will use up this year). This season's production is counted in the next number instead." }, `Long-term ${sgn(r.value?.tat ?? r.tatGain)}`), r.value?.dr < 0.99 ? h('span', { class: 'muted', title: "You're already well ahead of this league in value, so more of it adds little title equity" }, ` (of ${sgn(r.value.tatRaw)}, diminishing returns)`) : '', ' + ',
       h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${sgn(r.value?.now ?? 0)}`),
       r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%` + (Math.abs(r.value?.pickShift || 0) >= 50 ? `, draft-slot shift ${sgn(r.value.pickShift)}` : '') + ')') : ''),
     h('div', { class: 'small muted' }, 'You send'), h('div', { class: 'assets' }, r.give.map(a => assetLine(a))),
