@@ -1,4 +1,4 @@
-import { M, refreshValues, runSim, computePower, CLASS_TOP, classOf, applyTat, sandersonScale } from '../model.js';
+import { M, refreshValues, runSim, computePower, CLASS_TOP, classOf, applyTat, sandersonScale, titleWorthFor } from '../model.js';
 import { state, settings, save, ghToken, setGhToken, push, pull, setupLink, syncInfo, exportJson, importJson } from '../state.js';
 import { h, toast } from '../util.js';
 import { cclear } from '../db.js';
@@ -26,7 +26,11 @@ export default function settingsView() {
 
   root.append(h('div', { class: 'panel' }, h('h2', {}, 'How trades are valued'),
     h('p', { class: 'small', style: { marginTop: 0 } }, 'Every trade is scored in one currency: Sanderson value gained, plus what it does to your title and playoff odds this season. How much this season counts is worked out per league from your situation (whether you can win, whether you own your next 1st, how strong you are long-term). The one thing to set is what a title is worth to you.'),
-    h('div', { class: 'grid g3' }, num(st, 'titleWorth', 'A title is worth (TAT points)', 250, '4,500 ≈ 1.5 base 1sts. Raise it to chase titles harder.'),
+    h('div', { class: 'grid g3' }, h('label', { class: 'f' }, 'What a title is worth',
+        h('select', { onchange: e => { st.titleAuto = e.target.value === 'auto'; save({ settingsChanged: true }); M.leagues.forEach(L => computePower(L)); toast('Updated'); } },
+          h('option', { value: 'auto', selected: st.titleAuto !== false }, 'Work it out per league (recommended)'), h('option', { value: 'manual', selected: st.titleAuto === false }, 'Fixed number below')),
+        h('span', { class: 'small' }, M.leagues.filter(L => L.me).map(L => `${L.nick} ${Math.round(titleWorthFor(L) / (L.fc.picks.get(`${+L.season + 1} 1st`) || 3000))}`).join(' · ') + ' base 1sts per title')),
+      num(st, 'titleWorth', 'Fixed title worth (TAT points)', 250, 'Only used when set to a fixed number.'),
       h('label', { class: 'f' }, 'Sanderson: a base 2nd is worth (base 1sts)',
         h('input', { type: 'number', step: 0.01, min: 0.1, max: 0.6, value: st.sandersonB2 ?? 0.33, onchange: e => { st.sandersonB2 = +e.target.value; save({ settingsChanged: true }); M.leagues.forEach(L => { L.tatSetCache = null; }); applyTat(); M.leagues.forEach(L => computePower(L)); toast('Sanderson values updated'); } }),
         h('span', { class: 'small' }, (() => { const sc = sandersonScale(); return `Late 1st 0.75 · early 2nd ${sc.E2.toFixed(2)} · base 2nd ${sc.B2.toFixed(2)} · late 2nd ${sc.L2.toFixed(2)} · base 3rd ${sc.B3.toFixed(2)} · 4th ${sc.R4.toFixed(2)}. Prices his tiers and your view of picks; FantasyCalc stays the market price.`; })())),

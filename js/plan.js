@@ -5,7 +5,7 @@
 //  - where the lineup is short (position groups producing far less than the league's typical starters)
 //  - players who are out for the season (zero points now, value later)
 // Everything is turned into one currency: Sanderson (TAT) value. A title is worth `titleWorth` TAT.
-import { M, simInput, simParams, playerWeekPts, posOf, teamAssets, expectedFromDist, classOf } from './model.js';
+import { M, simInput, simParams, playerWeekPts, posOf, teamAssets, expectedFromDist, classOf, titleWorthFor } from './model.js';
 import { simulate } from './sim.js';
 import { bestLineup } from './lineup.js';
 import { settings } from './state.js';
@@ -27,7 +27,8 @@ export function teamPlan(L) {
   if (L.plan) return L.plan;
   const t = L.me; if (!t) return null;
   const S = settings();
-  const TITLE = S.titleWorth ?? 4500;
+  const TITLE = titleWorthFor(L);
+  const base1 = L.fc.picks.get(`${+L.season + 1} 1st`) || 3000;
   const runs = 1200, params = simParams(), seed = 4242;
   const po = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) po.push(w);
   const reg = L.regWeeks;
@@ -74,8 +75,8 @@ export function teamPlan(L) {
   const pc = x => Math.round(x * 100) + '%';
   lines.push(`Playoff odds ${pc(t.playoff)}, title odds ${pc(t.title)}; long-term (Sanderson) rank ${dynRank} of ${n}.`);
   lines.push(ownFirst
-    ? `This season pays off two ways: the title (${pc(t.title)}, worth ${Math.round(TITLE * (t.title || 0)).toLocaleString()} TAT in expectation) and your own ${ny} 1st (projects #${slotNow.toFixed(1)}, worth about ${Math.round(pickNow).toLocaleString()}). Staying in contention keeps the title chance alive; a reload only pays if the pick gains more than the title equity you give up.`
-    : `You don't own your ${ny} 1st, so a bad finish earns you nothing; the only payoff left this season is the title (${pc(t.title)}).`);
+    ? `This season pays off two ways: the title (${pc(t.title)}; a title here is worth about ${Math.round(TITLE / base1)} base 1sts, so 1% of title odds ≈ ${(TITLE / base1 / 100).toFixed(2)} 1sts) and your own ${ny} 1st (projects #${slotNow.toFixed(1)}, worth about ${Math.round(pickNow).toLocaleString()}). Staying in contention keeps the title chance alive; a reload only pays if the pick gains more than the title equity you give up.`
+    : `You don't own your ${ny} 1st, so a bad finish earns you nothing; the only payoff left this season is the title (${pc(t.title)}; a title here is worth about ${Math.round(TITLE / base1)} base 1sts).`);
   if (tanking) lines.push(`Points now mostly cost you draft position: adding 10 pts/wk changes your pick's value by about ${Math.round(sens.pickReg * 10).toLocaleString()} and your title equity by ${Math.round(TITLE * sens.titleReg * 10).toLocaleString()}.`);
   else {
     const parts = [];

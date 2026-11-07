@@ -209,7 +209,8 @@ export function myGoals(L, plan) {
   if (!plan.tanking && (t.title ?? 0) >= 0.06) g.push({ id: 'points', label: 'Buy points' });
   if (plan.tanking || plan.weakLongTerm) g.push({ id: 'younger', label: 'Get younger' });
   if (plan.tanking || ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15)) g.push({ id: 'picks', label: 'Turn players into picks' });
-  if ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15) g.push({ id: 'window', label: 'Extend the window' });
+  // extend the window: add long-term value at a minimal cost to this season's title odds (any contender)
+  if (!plan.tanking && (t.title ?? 0) >= 0.06) g.push({ id: 'window', label: 'Extend the window' });
   // Sanderson's first reason to buy: it materially raises your bye odds. Only meaningful while a bye is in play.
   if (!plan.tanking && (t.playoff ?? 0) >= 0.25 && (t.bye ?? 0) >= 0.05 && (t.bye ?? 0) <= 0.8) g.push({ id: 'bye', label: 'Win a bye' });
   return g;
@@ -224,7 +225,7 @@ export function goalsMet(L, r, goals) {
     else if (g.id === 'points' && (dReg > 1.5 || dPo > 1.5)) met.push(g);
     else if (g.id === 'younger' && r.mix.future > 300 && (ag == null || av == null || ag < av - 1.5)) met.push(g);
     else if (g.id === 'picks' && r.mix.picks > 300) met.push(g);
-    else if (g.id === 'window' && r.mix.future + r.mix.picks > 300 && (r.value?.now ?? 0) > -150) met.push(g);
+    else if (g.id === 'window' && (r.value?.tat ?? r.tatGain) > 300 && (r.sim ? r.sim.me[1].title - r.sim.me[0].title >= -0.02 : (r.value?.now ?? 0) >= -0.02 * (L.plan?.TITLE || 0))) met.push(g);
   }
   // the partner's side: contenders want points, rebuilders want picks and youth
   const p = r.partner, theirReg = r.them ? r.them.rosAfter - r.them.rosBefore : 0;
@@ -291,7 +292,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
         const score = tat + winNowValue(plan, dReg, dPo) + (t.some(a => a.id && tg.has(a.id)) ? 1500 : 0) - 0.3 * Math.max(0, fc.partnerMargin - need);
         if (T) {
           // points gained now; sell-side long-term cost capped at a title's worth so it stays a sane price
-          if (dReg + dPo < 3 || tat < -(S.titleWorth ?? 4500)) continue;
+          if (dReg + dPo < 3 || tat < -plan.TITLE * 0.25) continue;
           cands.push({ g, t, score: dReg + dPo + tat / 2000 });
           continue;
         }
@@ -343,7 +344,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   }
   // keep the list varied: each asset appears in at most two suggestions
   const used = new Map(), final = [];
-  const pool2 = T ? out.slice(0, exactTop).filter(r => r.dTitle >= 0.01 && r.value.total > -(S.titleWorth ?? 4500) / 2) : out;
+  const pool2 = T ? out.slice(0, exactTop).filter(r => r.dTitle >= 0.01 && r.value.total > -plan.TITLE * 0.1) : out;
   for (const r of pool2.sort((a, b) => b.score - a.score)) {
     if (!T && r.value.total < R.minTatGain) continue;
     const keys = [...r.giveKeys, ...r.getKeys];

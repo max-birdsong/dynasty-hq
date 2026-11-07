@@ -368,6 +368,36 @@ function tierValue(L, y, ord, s) {
 // Sanderson's slot curve for 1st-round picks, in base 1sts (from "Tearing Down your Dynasty Team"). The 1.01 depends
 // on the class: 4 base 1sts in an elite class (his number for the Caleb Williams class), 3 in a normal one, 2.5 in a
 // weak one. This is YOUR valuation of a pick, while FantasyCalc's early/mid/late prices remain the market's view.
+// What a title is worth, in Sanderson points, worked out from the league's own values.
+// Long-term value turns into titles over the next few seasons: a team's title chances rise roughly with its share of
+// league value to the power alpha (alpha fitted across your leagues: how top-heavy title odds are by value share).
+// The marginal titles per point of value, summed over an effective horizon of a few seasons, gives the exchange
+// rate. Typical result: a title is worth tens of base 1sts, so 1% of title odds ≈ a few tenths of a 1st.
+const TITLE_HORIZON = 4; // seasons over which today's value keeps buying title chances (decaying, via trades)
+let _alpha = null;
+export function titleAlpha() {
+  if (_alpha) return _alpha;
+  const xs = [], ys = [];
+  for (const L of M.leagues) {
+    const tot = L.teams.reduce((s, t) => s + (t.tatTotal || t.fcTotal || 0), 0);
+    if (!tot) continue;
+    for (const t of L.teams) { const sh = (t.tatTotal || t.fcTotal || 0) / tot; if ((t.title ?? 0) >= 0.01 && sh > 0) { xs.push(Math.log(sh * L.teams.length)); ys.push(Math.log(t.title * L.teams.length)); } }
+  }
+  if (xs.length < 12) return 2;
+  const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
+  const b = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0) / Math.max(1e-9, xs.reduce((s, x) => s + (x - mx) ** 2, 0));
+  _alpha = Math.max(1, Math.min(4, b || 2));
+  return _alpha;
+}
+export function resetTitleWorth() { _alpha = null; }
+export function titleWorthFor(L) {
+  const S = settings();
+  if (S.titleAuto === false) return S.titleWorth ?? 4500;
+  const n = L.teams.length, vbar = L.teams.reduce((s, t) => s + (t.tatTotal || t.fcTotal || 0), 0) / n, p = 1 / n;
+  if (!vbar) return S.titleWorth ?? 4500;
+  return vbar / (TITLE_HORIZON * titleAlpha() * p * (1 - p));
+}
+
 export const CLASS_TOP = { weak: 2.5, normal: 3, strong: 4 };
 // Sanderson's scale below one base 1st, in base 1sts: late 1st = 0.75 (his slot curve), base 2nd from Settings
 // (default 0.33, a third of a 1st), and every half-round below steps down by the same ratio.
@@ -588,6 +618,7 @@ function valueTat(L, set) {
 
 // ---------------- power rankings / modes ----------------
 export function computePower(L) {
+  _alpha = null; // values changed: refit how title odds scale with value share
   L.plan = null; L._futOrder = null; // recomputed lazily from the fresh numbers
   const rules = settings().rules;
   const playoffWeeks = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) playoffWeeks.push(w);
