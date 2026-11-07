@@ -129,6 +129,11 @@ async function previousSeasons(leagues) {
   if (!Object.keys(proj).length) return [];
   const out = [];
   for (const l of lgs) {
+    // your record last season, for the "one-year reload" check
+    const cur = leagues.find(L => L.lg.previous_league_id === l.league_id);
+    const ros = cur ? await api.rosters(l.league_id).catch(() => []) : [];
+    const mineR = ros.find(r => r.owner_id === M.me.user_id);
+    if (cur && mineR) { const s = mineR.settings || {}, g = (s.wins || 0) + (s.losses || 0) + (s.ties || 0); cur.prevRecord = { wins: s.wins || 0, losses: s.losses || 0, winPct: g ? (s.wins + 0.5 * (s.ties || 0)) / g : 0.5 }; }
     const n = (l.settings?.playoff_week_start || 15) - 1;
     const ws = Array.from({ length: n }, (_, i) => i + 1);
     const mus = await pool(ws, 4, w => api.matchups(l.league_id, w, true).catch(() => []));
@@ -279,7 +284,7 @@ export function simParams() {
   // Calibration uses each week's final pre-game projections. Projecting week 15 from today is less accurate than that,
   // so add a forecast-horizon error on top of whatever season-long error the data shows.
   const horizon = s.horizonSd ?? 0.05;
-  return { ...base, measuredSeason: base.sdSeason, horizon, sdSeason: Math.sqrt(base.sdSeason ** 2 + horizon ** 2), injRates: { ...DEFAULT_PARAMS.injRates, ...(s.injRates || {}) }, injRecover: s.injRecover };
+  return { ...base, baseRateWeight: s.baseRateWeight ?? 0.5, measuredSeason: base.sdSeason, horizon, sdSeason: Math.sqrt(base.sdSeason ** 2 + horizon ** 2), injRates: { ...DEFAULT_PARAMS.injRates, ...(s.injRates || {}) }, injRecover: s.injRecover };
 }
 export function runSim(L) {
   L.sim = simulate(simInput(L), { runs: settings().simRuns, params: simParams(), seed: 777 });

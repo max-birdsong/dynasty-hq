@@ -120,5 +120,16 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
     [...non, ...po].forEach((rid, i) => { res[rid].slot += i + 1; res[rid].slotDist[i + 1]++; });
   }
   for (const rid of rids) { for (const k of Object.keys(res[rid])) if (k !== 'slotDist') res[rid][k] /= runs; res[rid].slotDist = res[rid].slotDist.map(c => c / runs); }
+  // Humility: blend the model's title odds with real-league base rates. Across 900 real-money 12-team leagues
+  // (6-team playoffs, 2 byes) a bye team won ~29% of the time and a non-bye playoff team ~10%, because one-week
+  // playoff games are close to coin flips. Base rates for other formats scale from those.
+  const w = P.baseRateWeight ?? 0;
+  if (w > 0) {
+    const byes = Math.max(0, size - n);
+    const byeW = byes ? 0.29 : 0, nonW = byes ? 0.10 : 1 / n;
+    const base = {}; let tot = 0;
+    for (const rid of rids) { const b = res[rid].bye || 0, np = Math.max(0, res[rid].playoff - b); base[rid] = b * byeW + np * nonW; tot += base[rid]; }
+    for (const rid of rids) { res[rid].titleModel = res[rid].title; res[rid].titleBase = tot ? base[rid] / tot : 0; res[rid].title = (1 - w) * res[rid].title + w * res[rid].titleBase; }
+  }
   return res;
 }

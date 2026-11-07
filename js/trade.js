@@ -135,7 +135,14 @@ export function tradeValue(L, r, exact = null) {
     }
     now = plan.TITLE * (exact.me[1].title - exact.me[0].title) + pickShift;
   } else now = r.me ? winNowValue(plan, r.me.rosAfter - r.me.rosBefore, r.me.poAfter - r.me.poBefore) : 0;
-  return { total: r.tatGain + now, tat: r.tatGain, now, pickShift };
+  // Diminishing returns on buying power (the "utility monster"): once you're well ahead of the league in value,
+  // more value adds little title equity. Gains count fully up to the league's 75th percentile, less beyond it.
+  const vals = L.teams.map(x => x.tatTotal).sort((a, b) => a - b);
+  const p75 = vals[Math.floor(vals.length * 0.75)], med = vals[Math.floor(vals.length / 2)] || 1;
+  const lead = Math.max(0, (L.me.tatTotal - p75) / med);
+  const dr = r.tatGain > 0 ? Math.max(0.5, 1 - lead) : 1; // losses always count in full
+  const tat = r.tatGain * dr;
+  return { total: tat + now, tat, tatRaw: r.tatGain, dr, now, pickShift };
 }
 
 export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10 } = {}) {

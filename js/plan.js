@@ -31,8 +31,8 @@ export function teamPlan(L) {
   const po = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) po.push(w);
   const reg = L.regWeeks;
 
-  // A dynasty season pays off at the tails (Sanderson's "two rules"): the title, or a high pick from your own
-  // finish. The middle is worth little. So this season's value = title odds x title worth + expected value of
+  // This season pays out as title equity plus, if you own it, the value of your own next 1st.
+  // So this season's value = title odds x title worth + expected value of
   // your own next 1st (if you still own it), both read from the simulated seasons.
   const ny = +L.season + 1;
   const ownFirst = t.picks.includes(`k:${ny}:1:${t.rid}`);
@@ -70,7 +70,7 @@ export function teamPlan(L) {
   const pc = x => Math.round(x * 100) + '%';
   lines.push(`Playoff odds ${pc(t.playoff)}, title odds ${pc(t.title)}; long-term (Sanderson) rank ${dynRank} of ${n}.`);
   lines.push(ownFirst
-    ? `This season pays off two ways: the title (${pc(t.title)}, worth ${Math.round(TITLE * (t.title || 0)).toLocaleString()} TAT in expectation) and your own ${ny} 1st (projects #${slotNow.toFixed(1)}, worth about ${Math.round(pickNow).toLocaleString()}). Finishing in the middle gets you neither.`
+    ? `This season pays off two ways: the title (${pc(t.title)}, worth ${Math.round(TITLE * (t.title || 0)).toLocaleString()} TAT in expectation) and your own ${ny} 1st (projects #${slotNow.toFixed(1)}, worth about ${Math.round(pickNow).toLocaleString()}). Staying in contention keeps the title chance alive; a reload only pays if the pick gains more than the title equity you give up.`
     : `You don't own your ${ny} 1st, so a bad finish earns you nothing; the only payoff left this season is the title (${pc(t.title)}).`);
   if (tanking) lines.push(`Points now mostly cost you draft position: adding 10 pts/wk changes your pick's value by about ${Math.round(sens.pickReg * 10).toLocaleString()} and your title equity by ${Math.round(TITLE * sens.titleReg * 10).toLocaleString()}.`);
   else {
@@ -92,14 +92,22 @@ export function teamPlan(L) {
   }
   if (weakLongTerm) lines.push('Your roster ranks low long-term, so selling aging players for younger ones is still smart, even if you keep competing.');
 
+  // Sanderson's conveyor belt / "chip and a chair": if your buying power is middle or better, stay in the game every
+  // year; buy the minimum production needed to contend for a bye at the lowest cost, then store surplus in picks.
+  // Tanking is a one-year reload at most.
   let headline;
-  const middle = ownFirst && (t.title ?? 0) < 0.08 && (t.playoff ?? 0) >= 0.2 && (t.playoff ?? 0) <= 0.85;
-  if ((t.title ?? 0) >= 0.15) headline = 'Push for the title';
-  else if (tanking) headline = 'Build for next year';
-  else if (middle) headline = 'Stuck in the middle: pick a side';
-  else if (holes.length && (t.playoff ?? 0) >= 0.05) headline = `Fix ${holes[0].g} cheaply` + (weakLongTerm ? ', keep selling age' : '');
-  else if (weakLongTerm) headline = 'Sell age, stay competitive';
-  else headline = 'Improve without overpaying';
+  const bpOk = dynRank <= Math.ceil(n / 2);
+  const middle = false;
+  const lastYearBad = L.prevRecord && L.prevRecord.winPct < 0.4;
+  if ((t.title ?? 0) >= 0.15 && (t.bye ?? 0) >= 0.5) headline = 'Bye secured: extend the window, don\'t chase the last piece';
+  else if ((t.title ?? 0) >= 0.12) headline = 'Contend for a bye, at the lowest cost';
+  else if (tanking && !bpOk) headline = lastYearBad ? 'Second down year: get back to competing' : 'One-year reload';
+  else if (holes.length && (t.playoff ?? 0) >= 0.05) headline = `Stay at the table: fix ${holes[0].g} cheaply`;
+  else if (bpOk) headline = 'Chip and a chair: compete with what you have';
+  else headline = 'Reload for one year, then compete';
+  if ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15) lines.push("You're likely to get a bye, and that's where most of your title odds come from. One more stud adds only 1–2% (Adeiko), so spending future value now has sharply diminishing returns. Put surplus into picks and extending the window.");
+  if (tanking && lastYearBad) lines.push(`You were ${L.prevRecord.wins}-${L.prevRecord.losses} last year too. Sanderson's rule: a reload should last one year, because a second tank year rarely gains more than the title equity it gives up.`);
+  if (tanking && bpOk) lines.push(`Your buying power ranks ${dynRank} of ${n}, which is enough to compete. Conceding the season costs real win equity, and your pick only offsets part of it.`);
 
   L.plan = { sens, ownFirst, tanking, middle, pickNow, slotNow, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };
   return L.plan;

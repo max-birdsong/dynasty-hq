@@ -171,7 +171,7 @@ function suggestionCard(r) {
     h('div', { class: 'row spread', style: { marginBottom: '8px' } }, h('div', {}, h('b', {}, r.L.nick), ' · ', r.partner.owner, ' ', modeTag(r.partner.mode)),
       h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Total value to you, in Sanderson points' }, sgn(r.value?.total ?? r.tatGain))),
     h('div', { class: 'small', style: { marginBottom: '8px' } },
-      h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg' }, `Sanderson ${sgn(r.tatGain)}`), ' + ',
+      h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg' }, `Sanderson ${sgn(r.value?.tat ?? r.tatGain)}`), r.value?.dr < 0.99 ? h('span', { class: 'muted', title: "You're already well ahead of this league in value, so more of it adds little title equity" }, ` (of ${sgn(r.value.tatRaw)}, diminishing returns)`) : '', ' + ',
       h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${sgn(r.value?.now ?? 0)}`),
       r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%` + (Math.abs(r.value?.pickShift || 0) >= 50 ? `, draft-slot shift ${sgn(r.value.pickShift)}` : '') + ')') : ''),
     h('div', { class: 'small muted' }, 'You send'), h('div', { class: 'assets' }, r.give.map(a => assetLine(a))),
