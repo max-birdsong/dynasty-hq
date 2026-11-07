@@ -170,7 +170,7 @@ export default function dashboard() {
   futureTargets(mine).then(rows => {
     if (!rows.length) { fut.remove(); return; }
     fut.replaceChildren(h('h2', {}, '🔮 Future 1sts to target'),
-      h('div', { class: 'muted small', style: { marginBottom: '8px' } }, "The best time to buy a 1st is a season early. These teams are competing now but rank low long-term once age is taken into account, so their next-next 1st is likely to land early, and the market still prices it as an ordinary 1st. Owners who've traded 1sts before are ranked higher."),
+      h('div', { class: 'muted small', style: { marginBottom: '8px' } }, "The best time to buy a 1st is a season early. These teams are competing now but rank low long-term once age is taken into account, so their next-next 1st is likely to land early while the market prices it as an ordinary 1st. Ranked highest: teams whose record is better than their points and projections say (they think they're contenders, push with picks and try to keep it going next year), and owners who've traded 1sts before."),
       table([
         { key: 'lg', label: 'League', n: false, sort: r => r.L.nick, fmt: (v, r) => r.L.nick },
         { key: 'own', label: 'Owner', n: false, sort: r => r.t.owner, fmt: (v, r) => h('a', { href: `#/owners/${r.L.id}/${r.t.ownerId}` }, r.t.owner) },
@@ -194,7 +194,7 @@ export default function dashboard() {
 }
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
 
-async function futureTargets(leagues) {
+export async function futureTargets(leagues) {
   const rows = [];
   const decay = a => (!a || a <= 26) ? 1 : Math.max(0.35, 1 - 0.12 * (a - 26)); // value a player is likely to hold a year from now
   for (const L of leagues) {
@@ -202,6 +202,10 @@ async function futureTargets(leagues) {
     const n = L.teams.length, y2 = +L.season + 2, y1 = +L.season + 1;
     const strength = new Map(L.teams.map(t => [t.rid, teamAssets(L, t).filter(a => !a.pick).reduce((s, a) => s + a.tat * decay(a.age), 0)]));
     const order = [...L.teams].sort((a, b) => strength.get(a.rid) - strength.get(b.rid)); // weakest next year first
+    // overperformers: a record better than the team really is. They think they're contenders, buy with future picks,
+    // and keep pushing next year on a roster that's getting older. Their record rank vs their points and projection.
+    const rk = (f) => { const o = [...L.teams].sort((a, b) => f(b) - f(a)); return t => o.indexOf(t) + 1; };
+    const recR = rk(t => t.winPct + 1e-6 * (t.fpts || 0)), pfR = rk(t => t.fpts || 0), projR = rk(t => t.ros || 0);
     for (const t of L.teams) {
       if (t.isMe) continue;
       const slot = order.indexOf(t) + 1;
@@ -213,13 +217,15 @@ async function futureTargets(leagues) {
       const pa = asset(L, key), edge = pa.tat - pa.fcGeneric;
       if (edge < 200) continue;
       const nSent = sent[t.ownerId] || 0;
+      const real = Math.round((pfR(t) + projR(t)) / 2), luck = real - recR(t);
       const why = [];
+      if (luck >= 2) why.push(`record #${recR(t)}, really #${real}`);
       why.push(`long-term rank ${n - slot + 1}/${n}`);
       if ((t.coreAge || 0) >= 27) why.push(`core age ${t.coreAge.toFixed(1)}`);
       if (nSent) why.push(`traded ${nSent} 1st${nSent > 1 ? 's' : ''}`);
       if (holder !== t) why.push(`held by ${holder.owner}`);
-      const score = edge * (competing ? 1.5 : 0.7) * (1 + 0.25 * Math.min(4, nSent));
-      rows.push({ L, t, key, label: `${y2} 1st`, slot, edge, why, score });
+      const score = edge * (1 + 0.2 * Math.max(0, Math.min(5, luck))) * (1 + 0.25 * Math.min(4, nSent));
+      rows.push({ L, t, key, label: `${y2} 1st`, slot, edge, why, score, luck });
     }
   }
   return rows.sort((a, b) => b.score - a.score);

@@ -466,11 +466,11 @@ export function asset(L, key) {
     if (fix && v > fcLooks) v = v - fix * (v - fcLooks);
     if (fix && mine > fcLooks) mine = mine - fix * (mine - fcLooks);
     // the 1st after next: market prices it generically, but a weak, aging roster makes an early pick likely
-    if (+y === +L.season + 2 && +rd === 1 && L.slotDist && L.tatMap) {
+    if (+y === +L.season + 2 && +rd === 1 && L.slotDist) {
       // a year further out: slot is very uncertain (wide spread), and the market discounts it for the wait (hold tax)
-      const fs = futureSlot(L, orig), ny = +L.season + 1;
-      const hold = generic / (L.fc.picks.get(`${ny} 1st`) || generic || 1);
-      const proj = hold * spreadValue(L, ny, '1st', fs, L.numTeams / 4);
+      // (the market's lower price for a further-out year already carries the wait; the curve is that class's own)
+      const fs = futureSlot(L, orig);
+      const proj = spreadValue(L, y, '1st', fs, L.numTeams / 4);
       return { key, pick: true, orig: +orig, name: `${y} 1st (likely #${fs})` + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: `${y} 1st`, pos: 'PICK', fc: generic, tat: proj, fcGeneric: generic, fcLooks: generic, futureSlot: fs, age: null };
     }
     return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: mine, fcGeneric: generic, fcLooks, ask, looksSlot: looks, top3, fix, age: null, slot, p101: next ? (L.slotDist[orig]?.[1] || 0) : null };
