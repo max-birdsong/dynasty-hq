@@ -365,11 +365,22 @@ function tierValue(L, y, ord, s) {
   return base * (shape[a] + (shape[b] - shape[a]) * (p - a));
 }
 
+// Sanderson's slot curve for 1st-round picks, in base 1sts (from "Tearing Down your Dynasty Team"; 1.01 set to 3 for
+// a normal class instead of the 4 he used for the Caleb Williams class). This is YOUR valuation of a pick, while
+// FantasyCalc's early/mid/late prices remain the market's view that partners trade on.
+const SANDERSON_1ST = [3, 2, 2, 1.5, 1.5, 1, 1, 1, 0.75, 0.75, 0.75, 0.75];
+export function sandersonSlotValue(L, y, ord, s) {
+  if (ord !== '1st') return tierValue(L, y, ord, s);
+  const B = L.fc.picks.get(`${y} 1st`) ?? M.fc['12-2-1']?.picks.get(`${y} 1st`) ?? 0;
+  const n = L.numTeams, p = n > 1 ? (s - 1) * 11 / (n - 1) : 0, a = Math.floor(p), b = Math.min(11, a + 1);
+  return B * (SANDERSON_1ST[a] + (SANDERSON_1ST[b] - SANDERSON_1ST[a]) * (p - a));
+}
+
 // Base value thesis: a pick whose slot is uncertain is worth the average over its possible slots, which is more
 // than the value of its middle slot because pick value is convex.
 export function spreadValue(L, y, ord, center, sd) {
   const n = L.numTeams; let w = 0, v = 0;
-  for (let s = 1; s <= n; s++) { const p = Math.exp(-0.5 * ((s - center) / sd) ** 2); w += p; v += p * tierValue(L, y, ord, s); }
+  for (let s = 1; s <= n; s++) { const p = Math.exp(-0.5 * ((s - center) / sd) ** 2); w += p; v += p * sandersonSlotValue(L, y, ord, s); }
   return v / w;
 }
 
@@ -396,9 +407,9 @@ export function fixFactor(L, rid) {
   return Math.max(0, Math.min(0.6, gap * 1.5)) * Math.min(1, weeksLeft / 3);
 }
 
-export function expectedFromDist(L, y, ord, dist) {
+export function expectedFromDist(L, y, ord, dist, market = false) {
   if (!dist) return L.fc.picks.get(`${y} ${ord}`) ?? 0;
-  let v = 0; for (let s = 1; s <= L.numTeams; s++) v += (dist[s] || 0) * tierValue(L, y, ord, s);
+  let v = 0; for (let s = 1; s <= L.numTeams; s++) v += (dist[s] || 0) * (market ? tierValue(L, y, ord, s) : sandersonSlotValue(L, y, ord, s));
   return v;
 }
 
@@ -433,7 +444,9 @@ export function asset(L, key) {
     const fcName = pickName(L, key);
     const generic = L.fc.picks.get(`${y} ${ord}`) ?? 0;
     const next = +y === +L.season + 1 && L.slotDist;
-    let v = next ? expectedPickValue(L, y, ord, orig) : (L.fc.picks.get(fcName) ?? generic);
+    // market (FantasyCalc) and your (Sanderson) value of the pick, both spread over its likely slots
+    let v = next ? expectedFromDist(L, y, ord, L.slotDist[orig], true) : (L.fc.picks.get(fcName) ?? generic);
+    let mine = next ? expectedFromDist(L, y, ord, L.slotDist[orig]) : v;
     const ot = L.byRid[orig];
     const dist = next ? L.slotDist[orig] : null;
     const top3 = dist ? (dist[1] || 0) + (dist[2] || 0) + (dist[3] || 0) : null;
@@ -444,6 +457,7 @@ export function asset(L, key) {
     // a strong-value team with a weak lineup may trade its way out of a bad finish: shade the projection back
     const fix = next ? fixFactor(L, orig) : 0;
     if (fix && v > fcLooks) v = v - fix * (v - fcLooks);
+    if (fix && mine > fcLooks) mine = mine - fix * (mine - fcLooks);
     // the 1st after next: market prices it generically, but a weak, aging roster makes an early pick likely
     if (+y === +L.season + 2 && +rd === 1 && L.slotDist && L.tatMap) {
       // a year further out: slot is very uncertain (wide spread), and the market discounts it for the wait (hold tax)
@@ -452,7 +466,7 @@ export function asset(L, key) {
       const proj = hold * spreadValue(L, ny, '1st', fs, L.numTeams / 4);
       return { key, pick: true, orig: +orig, name: `${y} 1st (likely #${fs})` + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: `${y} 1st`, pos: 'PICK', fc: generic, tat: proj, fcGeneric: generic, fcLooks: generic, futureSlot: fs, age: null };
     }
-    return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: v, fcGeneric: generic, fcLooks, looksSlot: looks, top3, fix, age: null, slot };
+    return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: mine, fcGeneric: generic, fcLooks, looksSlot: looks, top3, fix, age: null, slot, p101: next ? (L.slotDist[orig]?.[1] || 0) : null };
   }
   const id = pid(key);
   const p = M.players[id] || {};

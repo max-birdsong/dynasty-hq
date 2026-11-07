@@ -108,7 +108,8 @@ export function checkRules(L, partner, r) {
   // don't hand out your own diamond
   for (const a of r.give) {
     if (!a.pick || a.orig !== L.me?.rid) continue;
-    if (a.slot && a.looksSlot && a.slot < a.looksSlot - 1.5) f.push({ bad: false, warn: true, msg: `Careful: your ${a.short.split(' (')[0]} looks like pick #${a.looksSlot} from the standings, but the simulator has it around #${Math.round(a.slot)}. It's worth ${Math.round(a.fc).toLocaleString()}, not the ${Math.round(a.fcLooks).toLocaleString()} it looks like.` });
+    if (a.slot && a.looksSlot && a.slot < a.looksSlot - 1.5) f.push({ bad: false, warn: true, msg: `Careful: your ${a.short.split(' (')[0]} looks like pick #${a.looksSlot} from the standings, but the simulator has it around #${Math.round(a.slot)}. It's worth ${Math.round(a.tat).toLocaleString()} to you, not the ${Math.round(a.fcLooks).toLocaleString()} it looks like.` });
+    if (a.p101 > 0.25) f.push({ bad: false, warn: true, msg: `Careful: your ${a.short.split(' (')[0]} has a ${Math.round(a.p101 * 100)}% chance of being the 1.01. On Sanderson's curve that's worth about ${Math.round(a.tat).toLocaleString()}, far more than any calculator's "early 1st" price.` });
     if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) f.push({ bad: false, warn: true, msg: `Careful: once age is factored in your roster ranks ${L.teams.length - a.futureSlot + 1} of ${L.teams.length} for next year, so your ${a.short} is likely an early pick (≈#${a.futureSlot}). The market prices it as an ordinary 1st.` });
   }
   return f;

@@ -123,7 +123,7 @@ export default function dashboard() {
         const [, y, rd, orig] = k.split(':');
         if (+y !== ny || +rd !== 1) continue;
         const a = asset(L, k), o = L.byRid[orig];
-        const gap = a.fc - a.fcLooks;
+        const gap = a.tat - a.fcLooks;
         if (gap < 300) continue;
         diamonds.push({ L, holder, o, a, gap });
       }
@@ -140,7 +140,7 @@ export default function dashboard() {
       { key: 'slot', label: 'Simulator says', n: true, sort: r => -r.a.slot, fmt: (v, r) => '#' + r.a.slot.toFixed(1) },
       { key: 'top3', label: 'Top 3', n: true, sort: r => r.a.top3, fmt: (v, r) => pct(r.a.top3) },
       { key: 'mkt', label: 'Priced as', n: true, sort: r => r.a.fcLooks, fmt: (v, r) => fmt(r.a.fcLooks) },
-      { key: 'val', label: 'Projected value', n: true, sort: r => r.a.fc, fmt: (v, r) => fmt(r.a.fc) },
+      { key: 'val', label: 'Worth (Sanderson)', n: true, sort: r => r.a.tat, fmt: (v, r) => fmt(r.a.tat) },
       { key: 'gap', label: 'Edge', n: true, sort: r => r.gap, fmt: (v, r) => h('span', { class: r.gap > 0 ? 'pos' : 'neg' }, sgn(r.gap)) },
       { key: 'go', label: '', n: false, sort: () => 0, fmt: (v, r) => h('a', { href: `#/trades/${r.L.id}/${r.holder.rid}/calc` }, 'Build offer →') },
     ], diamonds.slice(0, 12), { sortKey: 'gap' })));
@@ -151,7 +151,8 @@ export default function dashboard() {
     const [, y, rd, orig] = k.split(':');
     if (+rd !== 1 || +orig !== L.me.rid) continue;
     const a = asset(L, k);
-    if (a.slot && a.looksSlot && a.slot < a.looksSlot - 1.5) mineRisk.push({ L, a, msg: `looks like #${a.looksSlot} from the standings, simulator says #${Math.round(a.slot)}`, gap: a.fc - a.fcLooks });
+    if (a.slot && a.looksSlot && a.slot < a.looksSlot - 1.5) mineRisk.push({ L, a, msg: `looks like #${a.looksSlot} from the standings, simulator says #${Math.round(a.slot)}`, gap: a.tat - a.fcLooks });
+    else if (a.slot && a.tat > a.fcLooks * 1.25) mineRisk.push({ L, a, msg: `projects #${a.slot.toFixed(1)}${a.p101 > 0.2 ? ` (${Math.round(a.p101 * 100)}% chance of the 1.01)` : ''}: worth ${Math.round(a.tat).toLocaleString()} on Sanderson's slot curve vs the ${Math.round(a.fcLooks).toLocaleString()} the market prices it at`, gap: a.tat - a.fcLooks });
     else if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) mineRisk.push({ L, a, msg: `your roster ranks ${L.teams.length - a.futureSlot + 1}/${L.teams.length} for next year once age is factored in`, gap: a.tat - a.fc });
   }
   if (mineRisk.length) root.append(h('div', { class: 'panel', style: { borderLeft: '3px solid var(--warn)' } }, h('h2', {}, '⚠️ Your 1sts worth more than they look'),
