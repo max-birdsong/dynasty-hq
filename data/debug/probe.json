@@ -1,0 +1,235 @@
+{
+ "leagueKeys": {
+  "last_message_time": 1,
+  "avatar": 1,
+  "last_author_is_bot": 1,
+  "last_author_id": 1,
+  "last_read_id": 1,
+  "last_author_avatar": 1,
+  "last_message_attachment": 1,
+  "previous_league_id": 1,
+  "season": 1,
+  "status": 1,
+  "display_order": 1,
+  "settings": 1,
+  "bracket_id": 1,
+  "draft_id": 1,
+  "loser_bracket_overrides_id": 1,
+  "name": 1,
+  "league_id": 1,
+  "last_transaction_id": 1,
+  "last_pinned_message_id": 1,
+  "roster_positions": 1,
+  "sport": 1,
+  "group_id": 1,
+  "loser_bracket_id": 1,
+  "total_rosters": 1,
+  "last_author_display_name": 1,
+  "company_id": 1,
+  "metadata": 1,
+  "shard": 1,
+  "season_type": 1,
+  "last_message_text_map": 1,
+  "scoring_settings": 1,
+  "bracket_overrides_id": 1,
+  "last_message_id": 1,
+  "metadata.auto_continue": 1,
+  "metadata.is_open": 1,
+  "metadata.keeper_deadline": 1,
+  "metadata.latest_league_winner_roster_id": 1,
+  "metadata.promo_id": 1
+ },
+ "rosterMetaKeys": {
+  "p_nick_#": 1502,
+  "record": 130,
+  "streak": 130,
+  "allow_pn_scoring": 67,
+  "restrict_pn_scoring_starters_only": 47,
+  "allow_pn_inactive_starters": 36,
+  "allow_pn_player_injury_status": 36,
+  "league_avatar": 1,
+  "league_description": 1,
+  "league_name": 1,
+  "allow_pn_news": 5
+ },
+ "rosterKeys": {
+  "co_owners": 1,
+  "keepers": 1,
+  "league_id": 1,
+  "metadata": 1,
+  "owner_id": 1,
+  "player_map": 1,
+  "players": 1,
+  "reserve": 1,
+  "roster_id": 1,
+  "settings": 1,
+  "starters": 1,
+  "taxi": 1
+ },
+ "userMetaKeys": {
+  "allow_pn": 1,
+  "archived": 1,
+  "avatar": 1,
+  "mascot_item_type_id_leg_#": 1,
+  "mascot_message_emotion_leg_#": 1,
+  "mention_pn": 1,
+  "team_name": 1,
+  "allow_sms": 1,
+  "join_voice_pn": 1,
+  "mascot_message": 1,
+  "player_like_pn": 1,
+  "player_nickname_update": 1,
+  "team_name_update": 1,
+  "trade_block_pn": 1,
+  "transaction_commissioner": 1,
+  "transaction_free_agent": 1,
+  "transaction_trade": 1,
+  "transaction_waiver": 1,
+  "user_message_pn": 1,
+  "league_report_pn": 1,
+  "show_mascots": 1
+ },
+ "endpoints": {
+  "trade_block": {
+   "status": 404,
+   "sample": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta http-equiv=\"refresh\" content=\"0;url=https://sleeper.com/404\">\n  <title>Redirecting...</title>\n</head>\n<body>\n  <!-- Minimal redirect page -->\n</body>\n</html>\n"
+  },
+  "tradeblock": {
+   "status": 404,
+   "sample": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta http-equiv=\"refresh\" content=\"0;url=https://sleeper.com/404\">\n  <title>Redirecting...</title>\n</head>\n<body>\n  <!-- Minimal redirect page -->\n</body>\n</html>\n"
+  },
+  "trading_block": {
+   "status": 404,
+   "sample": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta http-equiv=\"refresh\" content=\"0;url=https://sleeper.com/404\">\n  <title>Redirecting...</title>\n</head>\n<body>\n  <!-- Minimal redirect page -->\n</body>\n</html>\n"
+  },
+  "trades": {
+   "status": 404,
+   "sample": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta http-equiv=\"refresh\" content=\"0;url=https://sleeper.com/404\">\n  <title>Redirecting...</title>\n</head>\n<body>\n  <!-- Minimal redirect page -->\n</body>\n</html>\n"
+  },
+  "activity": {
+   "status": 404,
+   "sample": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta http-equiv=\"refresh\" content=\"0;url=https://sleeper.com/404\">\n  <title>Redirecting...</title>\n</head>\n<body>\n  <!-- Minimal redirect page -->\n</body>\n</html>\n"
+  },
+  "messages": {
+   "status": 404,
+   "sample": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta http-equiv=\"refresh\" content=\"0;url=https://sleeper.com/404\">\n  <title>Redirecting...</title>\n</head>\n<body>\n  <!-- Minimal redirect page -->\n</body>\n</html>\n"
+  },
+  "transactions/1": {
+   "status": 200,
+   "sample": "[{\"status\":\"failed\",\"type\":\"waiver\",\"metadata\":{\"notes\":\"This player was claimed by another owner.\"},\"created\":1789496352509,\"settings\":{\"seq\":1,\"waiver_bid\":75},\"leg\":1,\"draft_picks\":[],\"creator\":\"652353138409443328\",\"transaction_id\":\"1405653219098537984\",\"adds\":{\"9486\":6},\"consenter_ids\":[6],\"drop"
+  }
+ },
+ "sampleRosterMeta": [
+  {
+   "allow_pn_scoring": "off",
+   "p_nick_1244": "Untouchable",
+   "p_nick_1426": "On The Block",
+   "p_nick_1535": "Clearance Sale",
+   "p_nick_167": "Untouchable",
+   "p_nick_2391": "Available",
+   "p_nick_24": "Available",
+   "p_nick_3242": "Available",
+   "p_nick_3257": "Available",
+   "p_nick_3271": "Rather Not",
+   "p_nick_4029": "Available",
+   "p_nick_4089": "Available",
+   "p_nick_4131": "On The Block",
+   "p_nick_4149": "Rather Not",
+   "p_nick_4199": "Untouchable",
+   "p_nick_4981": "Rather Not",
+   "p_nick_538": "Available",
+   "p_nick_5947": "Untouchable",
+   "p_nick_5980": "Rather Not",
+   "p_nick_5987": "Handcuff",
+   "p_nick_7528": "Untouchable",
+   "p_nick_7533": "Available",
+   "p_nick_7581": "Available",
+   "p_nick_827": "Available",
+   "record": "LLLLLLLLWWLLLLWL",
+   "restrict_pn_scoring_starters_only": "on",
+   "streak": "1L"
+  },
+  {
+   "record": "WWLLLWWWLWLLWWLL",
+   "streak": "2L"
+  },
+  {
+   "allow_pn_inactive_starters": "on",
+   "allow_pn_player_injury_status": "on",
+   "allow_pn_scoring": "on",
+   "p_nick_6806": "",
+   "record": "LLLLWLWWWWWWLLWW",
+   "restrict_pn_scoring_starters_only": "on",
+   "streak": "2W"
+  },
+  {
+   "allow_pn_inactive_starters": "off",
+   "allow_pn_player_injury_status": "off",
+   "allow_pn_scoring": "off",
+   "p_nick_11439": "",
+   "p_nick_5086": "Any 3rd",
+   "p_nick_7551": "Any 4th",
+   "p_nick_7610": "Trading 2day. Accepting best offer 2nite.",
+   "p_nick_8118": "3rd",
+   "p_nick_8130": "",
+   "p_nick_8189": "Any 4th",
+   "p_nick_9500": "",
+   "record": "WWWWWWWWLWWWWWLL",
+   "restrict_pn_scoring_starters_only": "on",
+   "streak": "2L"
+  },
+  {
+   "record": "WWWWLLLWWLLLLWWW",
+   "streak": "3W"
+  },
+  {
+   "p_nick_1466": "2023 1st",
+   "p_nick_2307": "OTB ",
+   "p_nick_4098": "Pick! ",
+   "p_nick_4131": "OTB lol ",
+   "p_nick_4197": "2023 4th ",
+   "p_nick_5000": "2023 3rd",
+   "p_nick_6943": "2023 2nd",
+   "p_nick_7607": "OTB ",
+   "p_nick_7608": "OTB! ",
+   "p_nick_8183": "2023 2nd ",
+   "p_nick_8225": "2023 3rd",
+   "record": "WWWWWWLLLLWWWLWW",
+   "streak": "2W"
+  },
+  {
+   "p_nick_1426": "",
+   "p_nick_2028": "2 2nds",
+   "p_nick_2306": "",
+   "p_nick_2309": "",
+   "p_nick_3163": "",
+   "p_nick_4039": "1st",
+   "p_nick_5967": "1st",
+   "record": "LLWWWLLLLLLLLWLW",
+   "streak": "1W"
+  },
+  {
+   "record": "LLLLLLWLWLWWWLLL",
+   "streak": "3L"
+  },
+  {
+   "p_nick_559": "TEAM LEADER/PREACHER🙏🏼",
+   "record": "WLLLWWLWLLLLLLWL",
+   "streak": "1L"
+  },
+  {
+   "allow_pn_inactive_starters": "on",
+   "allow_pn_player_injury_status": "on",
+   "allow_pn_scoring": "on",
+   "p_nick_461": "🙌🏼Locker Room Leader🙌🏼",
+   "p_nick_6797": "",
+   "record": "LWWWLWWLWWWWWWLW",
+   "restrict_pn_scoring_starters_only": "on",
+   "streak": "1W"
+  }
+ ],
+ "graphql": {
+  "status": 200,
+  "body": "{\"errors\":[{\"message\":\"Cannot query field \\\"league_trade_block\\\" on type \\\"RootQueryType\\\". Did you mean \\\"leagues_by_group\\\", \\\"league_transactions_by_status\\\", \\\"league_users\\\", \\\"league_dues_payout_plans\\\", or \\\"league_dues_users\\\"?\",\"locations\":[{\"line\":1,\"column\":0}]},{\"message\":\"Unknown argument \\\"league_id\\\" on field \\\"league_trade_block\\\" of type \\\"RootQueryType\\\".\",\"locations\":[{\"line\":1,\"column\":0}]}]}"
+ }
+}
