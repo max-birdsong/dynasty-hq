@@ -20,7 +20,7 @@ export default function leagueView(id, tab = 'power') {
       (L.scoring.bonus_rec_te ? ` · TEP ${L.scoring.bonus_rec_te}` : '') + (L.median ? ' · median game' : '') + ` · playoffs wk ${L.playoffStart} (${L.playoffTeams} teams)`)),
       me ? adviceTag(me.advice) : ''),
     me ? h('div', { class: 'kpis', style: { marginTop: '12px' } },
-      kpi(`${me.wins}-${me.losses}`, 'record'), kpi(pct(me.playoff), 'playoff odds'), kpi(pct(me.title), 'title odds'),
+      kpi(`${me.wins}-${me.losses}`, 'record'), kpi(pct(me.playoff), 'playoff odds'), kpi(pct(me.bye), 'bye odds'), kpi(pct(me.title), 'title odds'),
       kpi(`#${me.fcTotalRank}`, 'FantasyCalc'), kpi(`#${me.tatTotalRank}`, 'Sanderson'), kpi(`${fmt(me.ros, 1)} (#${me.rosRank})`, 'proj pts/wk')) : '',
     me ? h('p', { class: 'muted small', style: { marginBottom: 0 } }, me.advice.text) : ''));
 
@@ -46,7 +46,9 @@ function power(L) {
     { key: 'fpts', label: 'PF', n: true, fmt: v => fmt(v) },
     { key: 'ros', label: 'Lineup/wk', n: true, fmt: (v, r) => `${fmt(v, 1)} (${r.rosRank})` },
     { key: 'po', label: 'Playoff wks', n: true, fmt: (v, r) => `${fmt(v, 1)} (${r.poRank})`, title: 'Projected starters, fantasy playoff weeks' },
+    { key: 'expWins', label: 'Proj W', n: true, fmt: v => fmt(v, 1), title: 'Average final wins across simulated seasons' },
     { key: 'playoff', label: 'Playoff', n: true, fmt: v => pctBar(v) },
+    { key: 'bye', label: 'Bye', n: true, fmt: v => pct(v) },
     { key: 'title', label: 'Title', n: true, fmt: v => pctBar(v) },
     { key: 'fcTotal', label: 'FC value', n: true, fmt: (v, r) => `${fmt(v)} (${r.fcTotalRank})` },
     { key: 'tatTotal', label: 'TAT value', n: true, fmt: (v, r) => `${fmt(v)} (${r.tatTotalRank})` },

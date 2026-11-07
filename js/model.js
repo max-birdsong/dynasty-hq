@@ -373,7 +373,7 @@ export function computePower(L) {
     const po = playoffWeeks.map(w => wk[w]).filter(x => x != null);
     t.po = po.length ? sum(po) / po.length : t.ros;
     const s = L.sim?.[t.rid] || {};
-    t.playoff = s.playoff; t.title = s.title; t.expWins = s.wins; t.expSeed = s.seed;
+    t.playoff = s.playoff; t.title = s.title; t.bye = s.bye; t.final = s.final; t.expWins = s.wins; t.expSeed = s.seed;
     const g = t.wins + t.losses + t.ties;
     t.winPct = g ? (t.wins + 0.5 * t.ties) / g : 0.5;
     t.mode = (t.winPct >= rules.contenderWinPct || (t.playoff ?? 0) >= 0.6) ? 'contend'

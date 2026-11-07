@@ -28,7 +28,7 @@ export default function dashboard() {
   ));
 
   // league overview
-  const rows = mine.map(L => ({ L, nick: L.nick, rec: `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`, fpts: L.me.fptsRank, playoff: L.me.playoff, title: L.me.title, fc: L.me.fcTotalRank, tat: L.me.tatTotalRank, ros: L.me.rosRank, adv: L.me.advice, n: L.teams.length }));
+  const rows = mine.map(L => ({ L, bye: L.me.bye, nick: L.nick, rec: `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`, fpts: L.me.fptsRank, playoff: L.me.playoff, title: L.me.title, fc: L.me.fcTotalRank, tat: L.me.tatTotalRank, ros: L.me.rosRank, adv: L.me.advice, n: L.teams.length }));
   root.append(h('div', { class: 'panel' }, h('h2', {}, 'Your leagues'),
     table([
       { key: 'nick', label: 'League', n: false },
@@ -36,6 +36,7 @@ export default function dashboard() {
       { key: 'fpts', label: 'PF rk', n: true, sort: r => -r.fpts, fmt: (v, r) => `${v}/${r.n}` },
       { key: 'ros', label: 'Lineup rk', n: true, sort: r => -r.ros, fmt: (v, r) => `${v}/${r.n}`, title: 'Rest-of-season projected starters' },
       { key: 'playoff', label: 'Playoff', n: true, fmt: v => pctBar(v) },
+      { key: 'bye', label: 'Bye', n: true, fmt: v => pct(v) },
       { key: 'title', label: 'Title', n: true, fmt: v => pctBar(v) },
       { key: 'fc', label: 'FC rk', n: true, sort: r => -r.fc, fmt: (v, r) => `${v}/${r.n}` },
       { key: 'tat', label: 'TAT rk', n: true, sort: r => -r.tat, fmt: (v, r) => `${v}/${r.n}` },
