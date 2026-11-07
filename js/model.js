@@ -300,6 +300,17 @@ function tierValue(L, y, ord, s) {
   return L.fc.picks.get(`${y} ${ord} (${s <= n / 3 ? 'Early' : s <= 2 * n / 3 ? 'Mid' : 'Late'})`) ?? g ?? 0;
 }
 
+// Where a team's pick the year after next is likely to land: rank teams by roster value a year from now
+// (Sanderson value, discounted for age), weakest first
+const ageKeep = a => (!a || a <= 26) ? 1 : Math.max(0.35, 1 - 0.12 * (a - 26));
+export function futureSlot(L, rid) {
+  if (!L._futOrder) {
+    const s = new Map(L.teams.map(t => [t.rid, t.players.map(id => asset(L, 'p:' + id)).reduce((x, a) => x + a.tat * ageKeep(a.age), 0)]));
+    L._futOrder = [...L.teams].sort((a, b) => s.get(a.rid) - s.get(b.rid)).map(t => t.rid);
+  }
+  return L._futOrder.indexOf(+rid) + 1;
+}
+
 // FantasyCalc value of a next-year pick given the chance of each slot
 function expectedPickValue(L, y, ord, orig) {
   const n = L.numTeams, dist = L.slotDist?.[orig];
@@ -339,6 +350,13 @@ export function asset(L, key) {
     const label = next && slot ? `${y} ${ord} (proj #${Math.round(slot)})` : fcName;
     const looks = next && ot?.winPct != null ? impliedSlot(L, orig) : null;
     const fcLooks = looks ? tierValue(L, y, ord, looks) : generic;
+    // the 1st after next: market prices it generically, but a weak, aging roster makes an early pick likely
+    if (+y === +L.season + 2 && +rd === 1 && L.slotDist && L.tatMap) {
+      const fs = futureSlot(L, orig), base1 = L.fc.picks.get(`${+L.season + 1} 1st`) || 1;
+      const share = tierValue(L, +L.season + 1, '1st', fs) / base1;
+      const proj = generic * share;
+      return { key, pick: true, orig: +orig, name: `${y} 1st (likely #${fs})` + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: `${y} 1st`, pos: 'PICK', fc: generic, tat: proj, fcGeneric: generic, fcLooks: generic, futureSlot: fs, age: null };
+    }
     return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: v, fcGeneric: generic, fcLooks, looksSlot: looks, top3, age: null, slot };
   }
   const id = pid(key);
@@ -420,7 +438,7 @@ function valueTat(L, set) {
 
 // ---------------- power rankings / modes ----------------
 export function computePower(L) {
-  L.plan = null; // recomputed lazily from the fresh numbers
+  L.plan = null; L._futOrder = null; // recomputed lazily from the fresh numbers
   const rules = settings().rules;
   const playoffWeeks = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) playoffWeeks.push(w);
   for (const t of L.teams) {

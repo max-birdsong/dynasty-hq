@@ -74,6 +74,12 @@ export function checkRules(L, partner, r) {
   if (r.them && mode === 'contend' && r.them.rosAfter < r.them.rosBefore - R.contenderMaxDrop) f.push({ bad: true, msg: `Contender loses ${(r.them.rosBefore - r.them.rosAfter).toFixed(1)} pts/wk` });
   if (r.takesStartingQb && mode !== 'rebuild') f.push({ bad: true, msg: 'Takes their starting QB without one going back' });
   if (r.tatGain < 0) f.push({ bad: false, msg: 'Sanderson loss' });
+  // don't hand out your own diamond
+  for (const a of r.give) {
+    if (!a.pick || a.orig !== L.me?.rid) continue;
+    if (a.slot && a.looksSlot && a.slot < a.looksSlot - 1.5) f.push({ bad: false, warn: true, msg: `Careful: your ${a.short.split(' (')[0]} looks like pick #${a.looksSlot} from the standings, but the simulator has it around #${Math.round(a.slot)}. It's worth ${Math.round(a.fc).toLocaleString()}, not the ${Math.round(a.fcLooks).toLocaleString()} it looks like.` });
+    if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) f.push({ bad: false, warn: true, msg: `Careful: once age is factored in your roster ranks ${L.teams.length - a.futureSlot + 1} of ${L.teams.length} for next year, so your ${a.short} is likely an early pick (≈#${a.futureSlot}). The market prices it as an ordinary 1st.` });
+  }
   return f;
 }
 

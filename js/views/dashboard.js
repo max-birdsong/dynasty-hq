@@ -124,6 +124,19 @@ export default function dashboard() {
       { key: 'go', label: '', n: false, sort: () => 0, fmt: (v, r) => h('a', { href: `#/trades/${r.L.id}/${r.holder.rid}/calc` }, 'Build offer →') },
     ], diamonds.slice(0, 12), { sortKey: 'gap' })));
 
+  // your own 1sts that are worth more than they look: don't sell them at the price they appear to be
+  const mineRisk = [];
+  for (const L of mine) for (const k of L.me.picks) {
+    const [, y, rd, orig] = k.split(':');
+    if (+rd !== 1 || +orig !== L.me.rid) continue;
+    const a = asset(L, k);
+    if (a.slot && a.looksSlot && a.slot < a.looksSlot - 1.5) mineRisk.push({ L, a, msg: `looks like #${a.looksSlot} from the standings, simulator says #${Math.round(a.slot)}`, gap: a.fc - a.fcLooks });
+    else if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) mineRisk.push({ L, a, msg: `your roster ranks ${L.teams.length - a.futureSlot + 1}/${L.teams.length} for next year once age is factored in`, gap: a.tat - a.fc });
+  }
+  if (mineRisk.length) root.append(h('div', { class: 'panel', style: { borderLeft: '3px solid var(--warn)' } }, h('h2', {}, '⚠️ Your 1sts worth more than they look'),
+    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, "Don't give these away at the price they appear to be worth. The calculator and suggestions warn you too, and they value these at the real projection."),
+    h('div', { class: 'assets' }, mineRisk.sort((x, y) => y.gap - x.gap).map(x => h('div', { class: 'asset' }, h('span', { class: 'nm' }, h('b', {}, x.L.nick), ` · ${x.a.short.split(' (')[0]}: ${x.msg}`), h('span', { class: 'pos num' }, sgn(x.gap)))))));
+
   // future diamonds: the 1st after next, from teams competing now on an old or thin roster, whose owners give up 1sts easily
   const fut = h('div', { class: 'panel' }, h('h2', {}, '🔮 Future 1sts to target'), h('div', { class: 'muted small' }, 'Looking through trade histories…'));
   root.append(fut);
