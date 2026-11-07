@@ -54,7 +54,10 @@ export async function loadAll(progress = () => {}) {
 
   applyTat();
   progress('Calibrating simulator on your leagues');
-  M.calib = calibrate(M.leagues, M.projPast, M.players, posOf);
+  const sources = M.leagues.map(L => ({ id: L.id, season: L.season, scoring: L.scoring, slots: L.slots, pastMatchups: L.pastMatchups, proj: M.projPast, current: true }));
+  progress('Loading last season for calibration');
+  try { sources.push(...await previousSeasons(M.leagues)); } catch (e) { console.warn('previous seasons', e); }
+  M.calib = calibrate(sources, M.players, posOf);
   progress('Simulating seasons');
   for (const L of M.leagues) runSim(L);
   for (const L of M.leagues) { computePower(L); snapshotHistory(L); }
@@ -88,6 +91,7 @@ async function loadProjections(leagues) {
   const pos = new Set();
   for (const l of leagues) neededPositions(l.roster_positions || []).forEach(p => pos.add(p));
   const positions = [...pos];
+  M.positions = positions;
   M.lastWeek = 17;
   M.proj = {};
   const weeks = [];
@@ -106,6 +110,30 @@ function posOf(id) {
   const p = M.players[id];
   if (!p) return [];
   return p.fantasy_positions?.length ? p.fantasy_positions : [p.position];
+}
+
+// Last season's leagues (linked through previous_league_id): far more data for calibrating the simulator,
+// and full 14-week regular seasons, which matter most for measuring season-long error. Cached for a year.
+async function previousSeasons(leagues) {
+  const YEAR = 365 * 86400e3;
+  const prevSeason = +M.season - 1;
+  const prevs = leagues.map(L => L.lg.previous_league_id).filter(id => id && id !== '0');
+  if (!prevs.length) return [];
+  const lgs = (await pool(prevs, 3, id => api.league(id).catch(() => null))).filter(Boolean);
+  const maxWeek = Math.max(...lgs.map(l => (l.settings?.playoff_week_start || 15) - 1));
+  const weeks = Array.from({ length: maxWeek }, (_, i) => i + 1);
+  const projArr = await pool(weeks, 4, w => api.weekProjections(prevSeason, w, M.positions, YEAR).catch(() => null));
+  const proj = {}; weeks.forEach((w, i) => { if (projArr[i]) proj[w] = projArr[i]; });
+  if (!Object.keys(proj).length) return [];
+  const out = [];
+  for (const l of lgs) {
+    const n = (l.settings?.playoff_week_start || 15) - 1;
+    const ws = Array.from({ length: n }, (_, i) => i + 1);
+    const mus = await pool(ws, 4, w => api.matchups(l.league_id, w, true).catch(() => []));
+    const pastMatchups = {}; ws.forEach((w, i) => { if (mus[i]?.length) pastMatchups[w] = mus[i]; });
+    out.push({ id: l.league_id, season: String(prevSeason), scoring: l.scoring_settings || {}, slots: startSlots(l.roster_positions || []), pastMatchups, proj, current: false });
+  }
+  return out;
 }
 
 // ---------------- leagues ----------------

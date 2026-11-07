@@ -38,9 +38,17 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
   const firstWeek = L.firstWeek ?? allWeeks[0];
 
   for (let r = 0; r < runs; r++) {
+    // parameter uncertainty: each simulated season uses its own plausible version of the model's settings,
+    // so the odds reflect how sure we are about the model, not just luck
+    let sdSeason = P.sdSeason, nz = P.noise;
+    if (P.seasonVar) sdSeason = Math.sqrt(Math.max(0, P.seasonVar.est + P.seasonVar.se * randn()) + (P.horizon || 0) ** 2);
+    if (nz && nz.mx) {
+      const g = Math.max(0, Math.min(1.3, nz.gamma + nz.gammaSE * randn()));
+      nz = { ...nz, gamma: g, c: Math.exp(nz.my - g * nz.mx) * (1 + nz.relSE * randn()) };
+    }
     // season-level draws
     const mult = {}, inj = {}, score = {};
-    for (const rid of rids) { mult[rid] = 1 + P.bias + (L.adj?.[rid] || 0) + P.sdSeason * randn(); inj[rid] = new Map(); score[rid] = {}; }
+    for (const rid of rids) { mult[rid] = 1 + P.bias + (L.adj?.[rid] || 0) + sdSeason * randn(); inj[rid] = new Map(); score[rid] = {}; }
     // week-by-week scores for this season (regular + playoffs), with injuries carrying over between weeks
     for (const wk of allWeeks) {
       for (const rid of rids) {
@@ -59,7 +67,7 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
         const base = (mu - loss) * mult[rid];
         // weekly luck: resample real standardised residuals from your leagues (keeps skew and fat tails),
         // scaled the way the data says spread grows with the projection; normal curve if not calibrated
-        const noise = P.noise ? P.noise.c * Math.pow(Math.max(1, base), P.noise.gamma) * P.noise.z[Math.floor(rand() * P.noise.z.length)]
+        const noise = nz ? nz.c * Math.pow(Math.max(1, base), nz.gamma) * nz.z[Math.floor(rand() * nz.z.length)]
           : base * P.sdWeek * randn();
         score[rid][wk] = Math.max(0, base + noise);
       }

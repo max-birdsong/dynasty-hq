@@ -122,7 +122,8 @@ function simTab(L) {
   wrap.append(h('h3', {}, 'How the simulator works'),
     h('p', { class: 'small' }, `Each team's weekly projection is its best lineup from Sleeper's projections, scored with this league's settings. The rest of the season and the playoffs are played out ${fmt(state().settings.simRuns)} times. In each simulated season every team gets three kinds of luck:`),
     h('ul', { class: 'small' },
-      h('li', {}, h('b', {}, 'Season-long error '), `(±${pc(P.sdSeason)}): the projection is simply wrong about the team for the rest of the year. Drawn once per simulated season, so it doesn't average out. Made of what your leagues show persists (±${pc(P.measuredSeason ?? 0)}) plus ±${pc(P.horizon ?? 0)} because forecasting weeks ahead is harder than the pre-game projections the calibration is measured on.`),
+      h('li', {}, h('b', {}, 'Season-long error '), `(±${pc(P.sdSeason)}): the projection is simply wrong about the team for the rest of the year. Drawn once per simulated season, so it doesn't average out. Made of what your leagues show persists (best estimate ±${pc(P.measuredSeason ?? 0)}) plus ±${pc(P.horizon ?? 0)} because forecasting weeks ahead is harder than the pre-game projections the calibration is measured on.`),
+      h('li', {}, h('b', {}, 'Uncertainty about the model itself: '), 'the settings above are estimates from a limited sample. Each simulated season draws its own plausible values (season-long error anywhere in its measured range, the spread exponent within its error bars), so the odds account for how sure we are, not just for luck.'),
       h('li', {}, h('b', {}, 'Week-to-week luck '), P.noise ? `(about ±${pc(P.sdWeek)}): drawn fresh every week by resampling the real good and bad weeks from your leagues, so it has the same lopsided shape as real fantasy scores. Carries no information about the future.` : `(±${pc(P.sdWeek)}): drawn fresh every week from a bell curve; this part carries no information about the future.`),
       h('li', {}, h('b', {}, 'Injuries: '), `each projected starter has a ${pc(P.injRate)} chance per future week of getting hurt and is out ~${(1 / P.injRecover).toFixed(1)} weeks on average, costing the points between him and his bench replacement. Stars-and-scrubs rosters get hit harder.`)),
     h('p', { class: 'small' }, P.bias ? `Projections have run ${pc(Math.abs(P.bias))} ${P.bias < 0 ? 'high' : 'low'} on average (perfect-hindsight lineups vs real lineups), so every team is scaled by the same amount. That doesn't change who's favoured.` : ''));
@@ -132,20 +133,20 @@ function simTab(L) {
   }
   wrap.append(h('h3', { style: { marginTop: '16px' } }, 'Calibration from your leagues'),
     h('div', { class: 'kpis' },
-      kpi(fmt(C.n), `team-weeks (${C.weeks} weeks, ${C.teams} team-seasons)`),
+      kpi(fmt(C.n), `team-weeks (${fmt(C.sources?.current)} this season, ${fmt(C.sources?.previous)} last season)`),
       kpi(pc(C.params.sdWeek), 'weekly luck (sd)'),
-      kpi(pc(C.params.sdSeason), 'season-long error measured (sd)'),
+      kpi(`${pc(C.seasonLo)}–${pc(C.seasonHi)}`, 'season-long error, 95% range'),
       kpi(fmt(C.meanAbsErr, 1), 'avg miss, pts per team-week'),
       kpi(C.favRight != null ? pc(C.favRight) : '–', 'projected favourite won'),
       kpi(C.brier != null ? C.brier.toFixed(3) : '–', 'Brier score (coin flip = 0.250)')),
-    h('p', { class: 'small muted' }, 'All 11 leagues are pooled, because how wrong projections are is a property of projections, not of any one league. Below: when the model gave the favourite X%, how often did the favourite actually win? Close numbers mean the odds are honest.'),
+    h('p', { class: 'small muted' }, 'All your leagues, this season and last, are pooled, because how wrong projections are is a property of projections, not of any one league. Below: when the model gave the favourite X%, how often did the favourite actually win? Close numbers mean the odds are honest.'),
     h('table', { style: { maxWidth: '520px' } }, h('thead', {}, h('tr', {}, ['Model said', 'Games', 'Model avg', 'Favourite actually won'].map(x => h('th', {}, x)))),
       h('tbody', {}, C.bins.map(b => h('tr', {}, h('td', {}, `${Math.round(b.lo * 100)}–${Math.min(100, Math.round(b.hi * 100))}%`), h('td', { class: 'n' }, b.n), h('td', { class: 'n' }, b.p != null ? pc(b.p) : '–'), h('td', { class: 'n' }, b.rate != null ? pc(b.rate) : '–'))))));
   const S = C.shape;
   if (S) {
     const g = S.gamma;
     wrap.append(h('h3', { style: { marginTop: '16px' } }, 'Shape of weekly luck'),
-      h('p', { class: 'small' }, `How the spread grows with a team's projection: exponent ${g.toFixed(2)} (1 = proportional to the projection, 0 = the same number of points for everyone). ` +
+      h('p', { class: 'small' }, `How the spread grows with a team's projection: exponent ${g.toFixed(2)} ± ${(S.gammaSE ?? 0).toFixed(2)} (1 = proportional to the projection, 0 = the same number of points for everyone). ` +
         (g > 0.8 ? 'Your leagues look close to proportional.' : g < 0.4 ? 'Strong and weak teams swing by a similar number of points, so favourites are a bit safer than a proportional model says.' : 'Somewhere in between: better teams swing more in points, but less than proportionally.')),
       h('table', { style: { maxWidth: '420px' } }, h('thead', {}, h('tr', {}, ['Projected', 'Typical swing (sd)', 'as %'].map(x => h('th', {}, x)))),
         h('tbody', {}, S.bins.map(b => h('tr', {}, h('td', { class: 'n' }, fmt(b.proj, 0)), h('td', { class: 'n' }, '±' + fmt(b.rms, 1)), h('td', { class: 'n' }, pc(b.rms / b.proj)))))),
