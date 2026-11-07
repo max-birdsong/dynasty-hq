@@ -116,7 +116,7 @@ function simTable(d, partner) {
     ? `Your title chances get ${word(dT)}: ${P(me[0].title)}% → ${P(me[1].title)}%.`
     : `Your title chances don't really change (${P(me[0].title)}% → ${P(me[1].title)}%)` + (Math.abs(dP) >= 0.01 ? `, but your playoff chances get ${word(dP)}: ${P(me[0].playoff)}% → ${P(me[1].playoff)}%.` : '.');
   const v = d.value;
-  const headline = headline0 + (v ? ` Overall worth ${sgn(v.total)} to you (Sanderson ${sgn(v.tat)}, this season ${sgn(v.now)}).` : '');
+  const headline = headline0 + (v ? ` Overall worth ${sgn(v.total)} to you (Sanderson ${sgn(v.tat)}, this season ${sgn(v.now)}${v.pickShift && Math.abs(v.pickShift) >= 50 ? `, of which draft-slot shift ${sgn(v.pickShift)}` : ''}).` : '');
   return h('div', { style: { marginTop: '12px' } },
     h('div', { class: 'verdict' }, headline),
     h('div', { class: 'sides', style: { marginTop: '10px' } }, team('You', d.me), team(partner.owner, d.them)),
@@ -172,7 +172,7 @@ function suggestionCard(r) {
     h('div', { class: 'small', style: { marginBottom: '8px' } },
       h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg' }, `Sanderson ${sgn(r.tatGain)}`), ' + ',
       h('span', { class: (r.value?.now ?? 0) >= 0 ? 'pos' : 'neg' }, `this season ${sgn(r.value?.now ?? 0)}`),
-      r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%, playoffs ${Math.round(r.sim.me[0].playoff * 100)}% → ${Math.round(r.sim.me[1].playoff * 100)}%)`) : ''),
+      r.sim ? h('span', { class: 'muted' }, ` (title ${Math.round(r.sim.me[0].title * 100)}% → ${Math.round(r.sim.me[1].title * 100)}%` + (Math.abs(r.value?.pickShift || 0) >= 50 ? `, draft-slot shift ${sgn(r.value.pickShift)}` : '') + ')') : ''),
     h('div', { class: 'small muted' }, 'You send'), h('div', { class: 'assets' }, r.give.map(a => assetLine(a))),
     h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'You get'), h('div', { class: 'assets' }, r.get.map(a => assetLine(a))),
     h('div', { class: 'small', style: { marginTop: '8px' } },

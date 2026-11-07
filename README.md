@@ -2,6 +2,15 @@
 
 A personal dynasty fantasy football dashboard for the Sleeper user `boximax`. It's a static site with no login and no build step, designed to be hosted on GitHub Pages.
 
+## How it thinks
+
+The site follows Jakob Sanderson's approach to dynasty (*Thinking About Thinking*):
+
+- **Humility.** The market (FantasyCalc) is the baseline and Sanderson's values are the lens. Every projection carries its own uncertainty, including uncertainty about the model itself. Edges come from stacking many small, likely bets, not from claiming to out-evaluate everyone.
+- **Payoffs only at the tails.** A dynasty season pays off through the title or a high pick from your own finish; the middle is worth little. Every trade's effect on this season is valued as the change in title odds × what a title is worth, plus the change in your own 1st's expected value from the simulated draft slots. When you're stuck in the middle, that pushes you to commit one way.
+- **Known unknowns as a portfolio.** Injuries and team-level shocks can't be predicted individually, so the simulator draws them at random, and the dashboard shows where your teams are exposed to the same players and NFL teams.
+- **Buying power.** Value comes from production now, production later, and draft currency. Pick values follow projected slots, and the site finds picks the market prices wrong ("diamond" 1sts) while warning you before you sell your own one cheap.
+
 ## What it does
 
 - **Dashboard:** every league in one table: record, playoff and title odds, lineup rank, FantasyCalc rank, Sanderson rank, and a plan (Push / Contend + sell age / Middle / Sell / Tank). It also shows a week-by-week odds grid, sell candidates and holds across all your rosters, and any offers still waiting on a reply.

@@ -5,7 +5,7 @@
 //  - where the lineup is short (position groups producing far less than the league's typical starters)
 //  - players who are out for the season (zero points now, value later)
 // Everything is turned into one currency: Sanderson (TAT) value. A title is worth `titleWorth` TAT.
-import { M, simInput, simParams, playerWeekPts, posOf, teamAssets } from './model.js';
+import { M, simInput, simParams, playerWeekPts, posOf, teamAssets, expectedFromDist } from './model.js';
 import { simulate } from './sim.js';
 import { bestLineup } from './lineup.js';
 import { settings } from './state.js';
@@ -31,24 +31,24 @@ export function teamPlan(L) {
   const po = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) po.push(w);
   const reg = L.regWeeks;
 
-  // how much is +1 pt/wk worth in odds? re-simulate with the team 10 pts/wk stronger
+  // A dynasty season pays off at the tails (Sanderson's "two rules"): the title, or a high pick from your own
+  // finish. The middle is worth little. So this season's value = title odds x title worth + expected value of
+  // your own next 1st (if you still own it), both read from the simulated seasons.
+  const ny = +L.season + 1;
+  const ownFirst = t.picks.includes(`k:${ny}:1:${t.rid}`);
+  const pickEV = res => ownFirst ? expectedFromDist(L, ny, '1st', res.slotDist) : 0;
   const base = simulate(simInput(L), { runs, params, seed })[t.rid];
   const bumped = weeks => { const w = { ...L.weekly[t.rid] }; for (const k of weeks) w[k] = (w[k] || 0) + 10; return simulate(simInput(L, { [t.rid]: w }), { runs, params, seed })[t.rid]; };
   const r = reg.length ? bumped(reg) : base, p = bumped(po);
   const sens = {
     titleReg: Math.max(0, (r.title - base.title) / 10), titlePo: Math.max(0, (p.title - base.title) / 10),
     playoffReg: Math.max(0, (r.playoff - base.playoff) / 10),
+    pickReg: (pickEV(r) - pickEV(base)) / 10, pickPo: (pickEV(p) - pickEV(base)) / 10, // usually negative: winning costs draft slot
   };
-
-  // do I own my next 1st? (if not, there's nothing to gain from losing)
-  const ny = +L.season + 1;
-  const ownFirst = t.picks.includes(`k:${ny}:1:${t.rid}`);
+  const pickNow = pickEV(base);
+  const slotNow = base.slot;
   const outOfIt = (t.playoff ?? 0) < 0.25;
   const tanking = ownFirst && outOfIt;
-
-  // value of winning now, in TAT per unit of probability
-  const lambdaT = tanking ? 0 : TITLE;
-  const lambdaP = tanking ? 0 : TITLE * 0.12;   // making the playoffs has some value even without a title
 
   // long-term standing
   const n = L.teams.length;
@@ -69,8 +69,10 @@ export function teamPlan(L) {
   const lines = [];
   const pc = x => Math.round(x * 100) + '%';
   lines.push(`Playoff odds ${pc(t.playoff)}, title odds ${pc(t.title)}; long-term (Sanderson) rank ${dynRank} of ${n}.`);
-  if (tanking) lines.push(`You own your ${ny} 1st and you're unlikely to make the playoffs, so wins now cost draft position: trades are judged on long-term value only.`);
-  else if (!ownFirst && outOfIt) lines.push(`You don't own your ${ny} 1st, so losing gains you nothing. Points now still count, though a title is a long shot.`);
+  lines.push(ownFirst
+    ? `This season pays off two ways: the title (${pc(t.title)}, worth ${Math.round(TITLE * (t.title || 0)).toLocaleString()} TAT in expectation) and your own ${ny} 1st (projects #${slotNow.toFixed(1)}, worth about ${Math.round(pickNow).toLocaleString()}). Finishing in the middle gets you neither.`
+    : `You don't own your ${ny} 1st, so a bad finish earns you nothing; the only payoff left this season is the title (${pc(t.title)}).`);
+  if (tanking) lines.push(`Points now mostly cost you draft position: adding 10 pts/wk changes your pick's value by about ${Math.round(sens.pickReg * 10).toLocaleString()} and your title equity by ${Math.round(TITLE * sens.titleReg * 10).toLocaleString()}.`);
   else {
     const parts = [];
     if (sens.titleReg * 10 >= 0.002 || sens.playoffReg * 10 >= 0.005) parts.push(`+10 pts/wk for the rest of the regular season ≈ ${(sens.playoffReg * 1000).toFixed(0)}% playoff odds and ${(sens.titleReg * 1000).toFixed(1)}% title odds`);
@@ -82,13 +84,15 @@ export function teamPlan(L) {
   if (weakLongTerm) lines.push('Your roster ranks low long-term, so selling aging players for younger ones is still smart, even if you keep competing.');
 
   let headline;
-  if (tanking) headline = 'Build for next year';
-  else if ((t.title ?? 0) >= 0.15) headline = 'Push for the title';
+  const middle = ownFirst && (t.title ?? 0) < 0.08 && (t.playoff ?? 0) >= 0.2 && (t.playoff ?? 0) <= 0.85;
+  if ((t.title ?? 0) >= 0.15) headline = 'Push for the title';
+  else if (tanking) headline = 'Build for next year';
+  else if (middle) headline = 'Stuck in the middle: pick a side';
   else if (holes.length && (t.playoff ?? 0) >= 0.05) headline = `Fix ${holes[0].g} cheaply` + (weakLongTerm ? ', keep selling age' : '');
   else if (weakLongTerm) headline = 'Sell age, stay competitive';
   else headline = 'Improve without overpaying';
 
-  L.plan = { sens, ownFirst, tanking, lambdaT, lambdaP, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };
+  L.plan = { sens, ownFirst, tanking, middle, pickNow, slotNow, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };
   return L.plan;
 }
 
@@ -96,5 +100,5 @@ export function teamPlan(L) {
 export function winNowValue(plan, dReg, dPo) {
   if (!plan) return 0;
   const s = plan.sens;
-  return plan.lambdaT * (s.titleReg * dReg + s.titlePo * dPo) + plan.lambdaP * s.playoffReg * dReg;
+  return plan.TITLE * (s.titleReg * dReg + s.titlePo * dPo) + s.pickReg * dReg + s.pickPo * dPo;
 }

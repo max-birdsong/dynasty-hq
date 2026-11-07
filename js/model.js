@@ -323,6 +323,12 @@ export function fixFactor(L, rid) {
   return Math.max(0, Math.min(0.6, gap * 1.5)) * Math.min(1, weeksLeft / 3);
 }
 
+export function expectedFromDist(L, y, ord, dist) {
+  if (!dist) return L.fc.picks.get(`${y} ${ord}`) ?? 0;
+  let v = 0; for (let s = 1; s <= L.numTeams; s++) v += (dist[s] || 0) * tierValue(L, y, ord, s);
+  return v;
+}
+
 // FantasyCalc value of a next-year pick given the chance of each slot
 function expectedPickValue(L, y, ord, orig) {
   const n = L.numTeams, dist = L.slotDist?.[orig];

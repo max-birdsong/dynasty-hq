@@ -1,5 +1,5 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
-import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid } from './model.js';
+import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist } from './model.js';
 import { settings, state } from './state.js';
 import { simulate } from './sim.js';
 import { teamPlan, winNowValue } from './plan.js';
@@ -98,6 +98,7 @@ export function simDelta(L, r, runs = 3000) {
   const drops = { [L.me.rid]: teamInj(L, r.me.ids), [r.partner.rid]: teamInj(L, r.them.ids) };
   const after = simulate(simInput(L, { [L.me.rid]: r.me.after, [r.partner.rid]: r.them.after }, drops), { runs, params, seed: 12345 });
   const before = simulate(simInput(L), { runs, params, seed: 12345 });
+  r._simAll = { before, after };
   return { me: [before[L.me.rid], after[L.me.rid]], them: [before[r.partner.rid], after[r.partner.rid]] };
 }
 
@@ -112,10 +113,19 @@ function combos(arr, k) {
 // Total value of a trade to you, in Sanderson (TAT) points: long-term value + what it does to this season
 export function tradeValue(L, r, exact = null) {
   const plan = teamPlan(L);
-  let now;
-  if (exact) now = plan.lambdaT * (exact.me[1].title - exact.me[0].title) + plan.lambdaP * (exact.me[1].playoff - exact.me[0].playoff);
-  else now = r.me ? winNowValue(plan, r.me.rosAfter - r.me.rosBefore, r.me.poAfter - r.me.poBefore) : 0;
-  return { total: r.tatGain + now, tat: r.tatGain, now };
+  let now, pickShift = 0;
+  if (exact && r._simAll) {
+    // title equity + how the trade moves the draft slots of every next-year 1st you'd hold afterwards
+    const ny = +L.season + 1;
+    const held = new Set([...L.me.picks.filter(k => !r.giveKeys.includes(k)), ...r.getKeys.filter(k => k.startsWith('k:'))]);
+    for (const k of held) {
+      const [, y, rd, orig] = k.split(':');
+      if (+y !== ny || +rd !== 1) continue;
+      pickShift += expectedFromDist(L, ny, '1st', r._simAll.after[orig].slotDist) - expectedFromDist(L, ny, '1st', r._simAll.before[orig].slotDist);
+    }
+    now = plan.TITLE * (exact.me[1].title - exact.me[0].title) + pickShift;
+  } else now = r.me ? winNowValue(plan, r.me.rosAfter - r.me.rosBefore, r.me.poAfter - r.me.poBefore) : 0;
+  return { total: r.tatGain + now, tat: r.tatGain, now, pickShift };
 }
 
 export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10 } = {}) {

@@ -40,7 +40,7 @@ export default function dashboard() {
   ));
 
   // league overview
-  const rows = mine.map(L => ({ L, bye: L.me.bye, nick: L.nick, rec: `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`, fpts: L.me.fptsRank, playoff: L.me.playoff, title: L.me.title, fc: L.me.fcTotalRank, tat: L.me.tatTotalRank, ros: L.me.rosRank, adv: L.plan ? { tag: L.plan.headline, cls: L.plan.tanking ? 'tank' : (L.me.title ?? 0) >= 0.15 ? 'push' : (L.me.playoff ?? 0) >= 0.4 ? 'mid' : 'sell', text: L.plan.lines.join(' ') } : L.me.advice, n: L.teams.length }));
+  const rows = mine.map(L => ({ L, bye: L.me.bye, nick: L.nick, rec: `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`, fpts: L.me.fptsRank, playoff: L.me.playoff, title: L.me.title, fc: L.me.fcTotalRank, tat: L.me.tatTotalRank, ros: L.me.rosRank, adv: L.plan ? { tag: L.plan.headline, cls: (L.me.title ?? 0) >= 0.15 ? 'push' : L.plan.tanking ? 'tank' : L.plan.middle ? 'sell' : 'mid', text: L.plan.lines.join(' ') } : L.me.advice, n: L.teams.length }));
   root.append(h('div', { class: 'panel' }, h('h2', {}, 'Your leagues'),
     table([
       { key: 'nick', label: 'League', n: false },
@@ -90,6 +90,27 @@ export default function dashboard() {
     root.append(h('div', { class: 'grid g2' },
       col('Sell candidates', 'Market (FC) values these players above Sanderson', sells),
       col('Hold / buy more', 'Sanderson values these above market', holds)));
+  }
+
+  // portfolio exposure: injuries and team-level shocks are "known unknowns" that hit across all your leagues at once
+  if (S.tatSets.length) {
+    const byP = new Map(), byTeam = new Map(); let tot = 0;
+    for (const L of mine) for (const a of teamAssets(L, L.me)) {
+      if (a.pick || !a.tat) continue;
+      tot += a.tat;
+      const o = byP.get(a.id) || { a, v: 0, lg: [] }; o.v += a.tat; o.lg.push(L.nick); byP.set(a.id, o);
+      if (a.team) byTeam.set(a.team, (byTeam.get(a.team) || 0) + a.tat);
+    }
+    const topP = [...byP.values()].sort((x, y) => y.v - x.v).slice(0, 8);
+    const topT = [...byTeam.entries()].sort((x, y) => y[1] - x[1]).slice(0, 6);
+    const share = v => (100 * v / tot).toFixed(1) + '%';
+    root.append(h('div', { class: 'grid g2' },
+      h('div', { class: 'panel' }, h('h2', {}, 'Your biggest exposures'),
+        h('div', { class: 'muted small', style: { marginBottom: '8px' } }, `Share of your Sanderson value across all ${mine.length} teams. One injury to a player you own everywhere hits every league at once. Spreading out makes you less fragile.`),
+        h('div', { class: 'assets' }, topP.map(x => h('div', { class: 'asset' }, h('span', { class: 'nm' }, posB(x.a.pos), x.a.name, h('span', { class: 'muted small' }, ` · ${x.lg.length} leagues`)), h('span', { class: 'num ' + (x.v / tot > 0.06 ? 'warn' : '') }, share(x.v)))))),
+      h('div', { class: 'panel' }, h('h2', {}, 'By NFL team'),
+        h('div', { class: 'muted small', style: { marginBottom: '8px' } }, 'A QB injury, coaching change or bad offense hits every player you own on that team.'),
+        h('div', { class: 'assets' }, topT.map(([tm, v]) => h('div', { class: 'asset' }, h('span', {}, tm), h('span', { class: 'num ' + (v / tot > 0.12 ? 'warn' : '') }, share(v))))))));
   }
 
   // diamond 1sts: next year's picks the simulator says will land early, priced by the market as an ordinary 1st
