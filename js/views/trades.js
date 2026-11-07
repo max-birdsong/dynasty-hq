@@ -91,16 +91,34 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
 }
 
 function simTable(d, partner) {
-  const cell = (b, a, k) => [h('td', { class: 'n' }, `${pct(b[k])} → ${pct(a[k])}`), h('td', { class: 'n' }, delta((a[k] - b[k]) * 100, 1))];
-  const row = (nm, [b, a]) => h('tr', {}, h('td', {}, nm), cell(b, a, 'playoff'), cell(b, a, 'bye'), cell(b, a, 'title'));
-  const big = d.me[1].title - d.me[0].title;
+  const P = x => Math.round(x * 100);
+  const word = dlt => { const a = Math.abs(dlt); return a < 0.01 ? 'about the same' : a < 0.04 ? (dlt > 0 ? 'slightly better' : 'slightly worse') : a < 0.12 ? (dlt > 0 ? 'better' : 'worse') : (dlt > 0 ? 'much better' : 'much worse'); };
+  const phrase = (who, [b, a]) => {
+    const parts = [['make the playoffs', 'playoff'], ['win the title', 'title']].map(([lbl, k]) => {
+      const dl = a[k] - b[k];
+      return P(a[k]) === P(b[k]) ? `chance to ${lbl} stays at ${P(b[k])}%` : `chance to ${lbl} goes from ${P(b[k])}% to ${P(a[k])}%`;
+    });
+    return `${who}: ${parts.join(', and ')}.`;
+  };
+  // one row: label, before bar -> after bar, change
+  const bar = (b, a, lbl) => {
+    const dl = a - b, c = dl > 0.005 ? 'var(--pos)' : dl < -0.005 ? 'var(--neg)' : 'var(--muted)';
+    return h('div', { class: 'oddrow' },
+      h('span', { class: 'oddlbl' }, lbl),
+      h('div', { class: 'oddbar' }, h('i', { class: 'before', style: { width: P(b) + '%' } }), h('i', { class: 'after', style: { width: P(a) + '%', background: c } })),
+      h('span', { class: 'oddnum' }, `${P(b)}% → `, h('b', { style: { color: c } }, `${P(a)}%`)));
+  };
+  const team = (who, x) => h('div', { class: 'card' }, h('h3', {}, who),
+    bar(x[0].playoff, x[1].playoff, 'Playoffs'), bar(x[0].bye, x[1].bye, 'Bye'), bar(x[0].title, x[1].title, 'Title'));
+  const me = d.me, dT = me[1].title - me[0].title, dP = me[1].playoff - me[0].playoff;
+  const headline = Math.abs(dT) >= 0.01
+    ? `Your title chances get ${word(dT)}: ${P(me[0].title)}% → ${P(me[1].title)}%.`
+    : `Your title chances don't really change (${P(me[0].title)}% → ${P(me[1].title)}%)` + (Math.abs(dP) >= 0.01 ? `, but your playoff chances get ${word(dP)}: ${P(me[0].playoff)}% → ${P(me[1].playoff)}%.` : '.');
   return h('div', { style: { marginTop: '12px' } },
-    h('div', { class: 'kpis', style: { marginBottom: '8px' } },
-      h('div', { class: 'kpi' }, h('b', { class: big > 0.005 ? 'pos' : big < -0.005 ? 'neg' : '' }, sgn(big * 100, 1) + ' pts'), h('span', {}, 'your title odds')),
-      h('div', { class: 'kpi' }, (x => h('b', { class: x > 0.005 ? 'pos' : x < -0.005 ? 'neg' : '' }, sgn(x * 100, 1) + ' pts'))(d.me[1].playoff - d.me[0].playoff), h('span', {}, 'your playoff odds'))),
-    h('table', {}, h('thead', {}, h('tr', {}, ['', 'Playoff', 'Δ', 'Bye', 'Δ', 'Title', 'Δ'].map(x => h('th', {}, x)))),
-      h('tbody', {}, row('You', d.me), row(partner.owner, d.them))),
-    h('div', { class: 'muted small', style: { marginTop: '4px' } }, 'Same simulated luck with and without the trade, so the difference is the trade itself. Changes under ~1 point are noise.'));
+    h('div', { class: 'verdict' }, headline),
+    h('div', { class: 'sides', style: { marginTop: '10px' } }, team('You', d.me), team(partner.owner, d.them)),
+    h('p', { class: 'small muted', style: { marginTop: '8px' } }, phrase('You', d.me), ' ', phrase(partner.owner, d.them),
+      ' Grey = now, coloured = after the trade. Both versions of the season use the same luck, so the difference is the trade itself; changes of 1% or less are noise.'));
 }
 
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
