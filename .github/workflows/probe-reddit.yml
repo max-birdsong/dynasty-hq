@@ -1,0 +1,10 @@
+name: Probe Reddit
+on: { workflow_dispatch: {} }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="dynasty-hq/0.1 (personal waiver scanner)"
+          for u in "https://www.reddit.com/r/DynastyFF/new.json?limit=5" "https://old.reddit.com/r/DynastyFF/new.json?limit=5" "https://www.reddit.com/r/DynastyFF/new/.rss" "https://api.reddit.com/r/DynastyFF/new?limit=5"; do
+            code=$(curl -s -o /tmp/o -w "%{http_code}" -A "$UA" "$u"); echo "$code $u $(head -c 200 /tmp/o | tr '\n' ' ')"; done
