@@ -107,15 +107,18 @@ function picks(L) {
   const ORD = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
   const yrs = L.pickYears;
   const rows = L.teams.map(t => {
-    const r = { owner: t.owner, isMe: t.isMe, total: t.picks.length, slot: L.draftSlot?.[t.rid] };
+    const own = L.slotDist?.[t.rid];
+    const r = { owner: t.owner, isMe: t.isMe, total: t.picks.length, slot: L.draftSlot?.[t.rid], top3: own ? (own[1] || 0) + (own[2] || 0) + (own[3] || 0) : null,
+      holder: L.teams.find(x => x.picks.includes(`k:${+L.season + 1}:1:${t.rid}`))?.owner };
     for (const y of yrs) for (let rd = 1; rd <= Math.min(L.draftRounds, 3); rd++) r[`${y}-${rd}`] = t.picks.filter(k => k.startsWith(`k:${y}:${rd}:`)).length;
     r.value = t.pickFc;
     return r;
   });
-  const cols = [{ key: 'owner', label: 'Team', n: false }, { key: 'slot', label: `Proj ${+L.season + 1} slot`, n: true, sort: r => -r.slot }];
+  const cols = [{ key: 'owner', label: 'Team', n: false }, { key: 'slot', label: `Their ${+L.season + 1} 1st: proj slot`, n: true, sort: r => -r.slot, fmt: v => v ? '#' + v.toFixed(1) : '–' },
+    { key: 'top3', label: 'Top 3', n: true, fmt: v => pct(v) }, { key: 'holder', label: 'Owned by', n: false, fmt: (v, r) => v === r.owner ? 'own' : (v || '–') }];
   for (const y of yrs) for (let rd = 1; rd <= Math.min(L.draftRounds, 3); rd++) cols.push({ key: `${y}-${rd}`, label: `${y} ${ORD[rd]}`, n: true, fmt: v => h('span', { class: v > 1 ? 'pos' : v === 0 ? 'neg' : '' }, v) });
   cols.push({ key: 'total', label: 'All', n: true }, { key: 'value', label: 'FC value', n: true, fmt: v => fmt(v) });
-  return h('div', {}, h('div', { class: 'muted small', style: { marginBottom: '8px' } }, 'Projected draft slot comes from the simulator (worst expected record picks first).'),
+  return h('div', {}, h('div', { class: 'muted small', style: { marginBottom: '8px' } }, `Projected slot comes from the simulated seasons: non-playoff teams pick first by ${L.draftOrder === 'record' ? 'record' : 'reverse max PF'}, then playoff teams by how far they get. Change the draft-order rule per league in Settings.`),
     table(cols, rows, { sortKey: 'value', rowClass: r => r.isMe ? 'me' : '' }));
 }
 

@@ -1,4 +1,4 @@
-import { M, teamAssets } from '../model.js';
+import { M, teamAssets, asset } from '../model.js';
 import { state, syncReady } from '../state.js';
 import { h, fmt, pct, sgn } from '../util.js';
 import { table, adviceTag, pctBar, posB, heat, empty } from '../components.js';
@@ -90,6 +90,38 @@ export default function dashboard() {
       col('Sell candidates', 'Market (FC) values these players above Sanderson', sells),
       col('Hold / buy more', 'Sanderson values these above market', holds)));
   }
+
+  // diamond 1sts: next year's picks the simulator says will land early, priced by the market as an ordinary 1st
+  const diamonds = [];
+  for (const L of mine) {
+    const ny = +L.season + 1;
+    for (const holder of L.teams) {
+      if (holder.isMe) continue;
+      for (const k of holder.picks) {
+        const [, y, rd, orig] = k.split(':');
+        if (+y !== ny || +rd !== 1) continue;
+        const a = asset(L, k), o = L.byRid[orig];
+        const gap = a.fc - a.fcLooks;
+        if (gap < 300) continue;
+        diamonds.push({ L, holder, o, a, gap });
+      }
+    }
+  }
+  diamonds.sort((x, y) => y.gap - x.gap);
+  if (diamonds.length) root.append(h('div', { class: 'panel' }, h('h2', {}, '💎 Diamond 1sts'),
+    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, `Next year's 1sts that look like mid or late picks from today's standings, but that the simulator expects to land earlier: weak rosters with lucky records, low max PF (draft order is reverse max PF unless set otherwise), or tough schedules ahead. Their owners price them by the standings, usually for vets who help now.`),
+    table([
+      { key: 'lg', label: 'League', n: false, sort: r => r.L.nick, fmt: (v, r) => r.L.nick },
+      { key: 'pick', label: 'Pick', n: false, sort: r => r.o.owner, fmt: (v, r) => `${r.o.owner}'s 1st` + (r.holder.rid !== r.o.rid ? ` (held by ${r.holder.owner})` : '') },
+      { key: 'rec', label: 'Their record', n: false, sort: r => r.o.winPct, fmt: (v, r) => `${r.o.wins}-${r.o.losses}` },
+      { key: 'looks', label: 'Looks like', n: true, sort: r => -r.a.looksSlot, fmt: (v, r) => '#' + r.a.looksSlot },
+      { key: 'slot', label: 'Simulator says', n: true, sort: r => -r.a.slot, fmt: (v, r) => '#' + r.a.slot.toFixed(1) },
+      { key: 'top3', label: 'Top 3', n: true, sort: r => r.a.top3, fmt: (v, r) => pct(r.a.top3) },
+      { key: 'mkt', label: 'Priced as', n: true, sort: r => r.a.fcLooks, fmt: (v, r) => fmt(r.a.fcLooks) },
+      { key: 'val', label: 'Projected value', n: true, sort: r => r.a.fc, fmt: (v, r) => fmt(r.a.fc) },
+      { key: 'gap', label: 'Edge', n: true, sort: r => r.gap, fmt: (v, r) => h('span', { class: r.gap > 0 ? 'pos' : 'neg' }, sgn(r.gap)) },
+      { key: 'go', label: '', n: false, sort: () => 0, fmt: (v, r) => h('a', { href: `#/trades/${r.L.id}/${r.holder.rid}/calc` }, 'Build offer →') },
+    ], diamonds.slice(0, 12), { sortKey: 'gap' })));
 
   if (pending.length) {
     root.append(h('div', { class: 'panel' }, h('h2', {}, 'Waiting on a reply'),

@@ -146,6 +146,7 @@ async function buildLeague(lg) {
     numTeams: ros.length, slots: startSlots(lg.roster_positions || []), scoring: lg.scoring_settings || {},
     playoffStart: lg.settings?.playoff_week_start || 15, playoffTeams: lg.settings?.playoff_teams || 6,
     median: lg.settings?.league_average_match === 1, draftRounds: lg.settings?.draft_rounds || 4,
+    draftOrder: settings().draftOrder?.[id] || 'maxpf',
     tradeDeadline: lg.settings?.trade_deadline, tp,
   };
   const uById = Object.fromEntries(us.map(u => [u.user_id, u]));
@@ -262,7 +263,8 @@ export function simInput(L, weeklyOverride = {}, injOverride = {}) {
   const adj = {};
   if (settings().sim.teamAdj && M.calib?.ok) for (const t of L.teams) adj[t.rid] = M.calib.teamAdj[L.id + ':' + t.rid]?.adj || 0;
   return {
-    teams: L.teams.map(t => ({ rid: t.rid, wins: t.wins, losses: t.losses, ties: t.ties, fpts: t.fpts })),
+    teams: L.teams.map(t => ({ rid: t.rid, wins: t.wins, losses: t.losses, ties: t.ties, fpts: t.fpts, ppts: t.ppts })),
+    draftOrder: L.draftOrder,
     weekly: { ...L.weekly, ...weeklyOverride }, inj: { ...L.inj, ...injOverride }, adj,
     lineupFn: (ids, pts) => bestLineup(ids, pts, posOf, L.slots).total,
     schedule: L.schedule, regWeeks: L.regWeeks, firstWeek: M.week,
@@ -283,10 +285,29 @@ export function runSim(L) {
 }
 
 function assignPickSlots(L) {
-  // projected draft order: worst expected record picks first
-  const order = [...L.teams].sort((a, b) => (L.sim[a.rid].wins - L.sim[b.rid].wins) || (a.fpts - b.fpts));
-  L.draftSlot = {};
-  order.forEach((t, i) => { L.draftSlot[t.rid] = i + 1; });
+  // projected next-year draft slot of each team's own pick, from the simulated seasons
+  L.draftSlot = {}; L.slotDist = {};
+  for (const t of L.teams) { L.draftSlot[t.rid] = L.sim[t.rid].slot; L.slotDist[t.rid] = L.sim[t.rid].slotDist; }
+}
+
+// Where a team's pick looks like it will land just from today's standings: what its owner and the market see
+export function impliedSlot(L, rid) {
+  const order = [...L.teams].sort((a, b) => (a.winPct - b.winPct) || (a.fpts - b.fpts));
+  return order.findIndex(t => t.rid === +rid) + 1;
+}
+function tierValue(L, y, ord, s) {
+  const n = L.numTeams, g = L.fc.picks.get(`${y} ${ord}`);
+  return L.fc.picks.get(`${y} ${ord} (${s <= n / 3 ? 'Early' : s <= 2 * n / 3 ? 'Mid' : 'Late'})`) ?? g ?? 0;
+}
+
+// FantasyCalc value of a next-year pick given the chance of each slot
+function expectedPickValue(L, y, ord, orig) {
+  const n = L.numTeams, dist = L.slotDist?.[orig];
+  const g = L.fc.picks.get(`${y} ${ord}`);
+  const tier = s => L.fc.picks.get(`${y} ${ord} (${s <= n / 3 ? 'Early' : s <= 2 * n / 3 ? 'Mid' : 'Late'})`) ?? g ?? 0;
+  if (!dist) return g ?? 0;
+  let v = 0; for (let s = 1; s <= n; s++) v += (dist[s] || 0) * tier(s);
+  return v;
 }
 
 // ---------------- values ----------------
@@ -296,7 +317,7 @@ export function pickName(L, key) {
   const n = L.numTeams;
   let label = `${y} ${ord}`;
   if (+y === +L.season + 1 && L.draftSlot) {
-    const slot = L.draftSlot[orig];
+    const slot = Math.round(L.draftSlot[orig]);
     const third = slot <= n / 3 ? 'Early' : slot <= 2 * n / 3 ? 'Mid' : 'Late';
     if (L.fc.picks.has(`${label} (${third})`)) label = `${label} (${third})`;
   }
@@ -306,10 +327,19 @@ export function pickName(L, key) {
 export function asset(L, key) {
   if (isPick(key)) {
     const [, y, rd, orig] = key.split(':');
+    const ord = ORD[rd] || rd + 'th';
     const fcName = pickName(L, key);
-    const v = L.fc.picks.get(fcName) ?? L.fc.picks.get(`${y} ${ORD[rd] || rd + 'th'}`) ?? 0;
+    const generic = L.fc.picks.get(`${y} ${ord}`) ?? 0;
+    const next = +y === +L.season + 1 && L.slotDist;
+    const v = next ? expectedPickValue(L, y, ord, orig) : (L.fc.picks.get(fcName) ?? generic);
     const ot = L.byRid[orig];
-    return { key, pick: true, name: fcName + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: fcName, pos: 'PICK', fc: v, tat: v, age: null, slot: L.draftSlot?.[orig] };
+    const dist = next ? L.slotDist[orig] : null;
+    const top3 = dist ? (dist[1] || 0) + (dist[2] || 0) + (dist[3] || 0) : null;
+    const slot = L.draftSlot?.[orig];
+    const label = next && slot ? `${y} ${ord} (proj #${Math.round(slot)})` : fcName;
+    const looks = next && ot?.winPct != null ? impliedSlot(L, orig) : null;
+    const fcLooks = looks ? tierValue(L, y, ord, looks) : generic;
+    return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: v, fcGeneric: generic, fcLooks, looksSlot: looks, top3, age: null, slot };
   }
   const id = pid(key);
   const p = M.players[id] || {};

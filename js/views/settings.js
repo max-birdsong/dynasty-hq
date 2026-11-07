@@ -19,6 +19,8 @@ export default function settingsView() {
       h('div', { class: 'grid g2' }, M.leagues.map(L => h('div', { class: 'row' },
         h('input', { type: 'checkbox', checked: !st.hidden.includes(L.id), onchange: e => { if (e.target.checked) st.hidden = st.hidden.filter(x => x !== L.id); else st.hidden.push(L.id); save({ settingsChanged: true }); } }),
         h('input', { value: L.nick, style: { width: '110px' }, onchange: e => { st.nicknames[L.id] = e.target.value; L.nick = e.target.value; save({ settingsChanged: true }); } }),
+        h('select', { title: 'How next year\'s draft order is set', onchange: e => { (st.draftOrder ||= {})[L.id] = e.target.value; L.draftOrder = e.target.value; save({ settingsChanged: true }); runSim(L); computePower(L); } },
+          h('option', { value: 'maxpf', selected: L.draftOrder !== 'record' }, 'Draft: reverse max PF'), h('option', { value: 'record', selected: L.draftOrder === 'record' }, 'Draft: reverse record')),
         h('span', { class: 'muted small' }, L.name))))));
   }
 

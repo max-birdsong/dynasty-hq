@@ -33,9 +33,16 @@ export function lineupImpact(L, t, outKeys, inKeys) {
   return { rosBefore: mean(before, reg), rosAfter: mean(after, reg), poBefore: mean(before, po), poAfter: mean(after, po), after, ids: rosterAfter(t, outKeys, inKeys) };
 }
 
+// How the partner sees a next-year pick: by where today's standings say it lands, not where the simulator
+// expects it to finish. A 5-3 team with a weak roster prices its 1st as a mid pick; that gap is a "diamond".
+export function perceived(a, partner) {
+  if (a.pick && a.slot && a.fcLooks) return a.fcLooks;
+  return a.fc;
+}
+
 export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}) {
   const give = giveKeys.map(k => asset(L, k)), get = getKeys.map(k => asset(L, k));
-  const fc = fcSides(give.map(a => a.fc), get.map(a => a.fc));
+  const fc = fcSides(give.map(a => a.fc), get.map(a => perceived(a, partner)));
   const tatGain = sum(get.map(a => a.tat)) - sum(give.map(a => a.tat));
   const r = { L, partner, giveKeys, getKeys, give, get, fc, tatGain, flags: [] };
   if (lineups && L.me) {
@@ -133,13 +140,14 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     if (p.isMe || (partners && !partners.includes(p.rid))) continue;
     const all = teamAssets(L, p);
     const top = all.filter(a => a.fc > 250).sort((a, b) => b.fc - a.fc).slice(0, poolSize);
+    for (const a of all) if (a.pick && a.top3 > 0.15 && !top.includes(a)) top.push(a); // possible diamond picks
     // plus players who would fill my holes right now, even if they're cheap in dynasty terms
     const fillers = all.filter(a => !a.pick && holeGroups.has(a.pos) && !top.includes(a)).map(a => ({ a, m: margOf(a, true) })).filter(x => x.m.reg > 3).sort((x, y) => y.m.reg - x.m.reg).slice(0, 5).map(x => x.a);
     const theirs = [...top, ...fillers];
     const cands = [];
     for (const gs of [1, 2]) for (const ts of [1, 2]) {
       for (const g of combos(mine, gs)) for (const t of combos(theirs, ts)) {
-        const fc = fcSides(g.map(a => a.fc), t.map(a => a.fc));
+        const fc = fcSides(g.map(a => a.fc), t.map(a => perceived(a, p)));
         const need = p.mode === 'rebuild' ? R.rebuilderFcMargin * Math.max(fc.A, fc.B) : 0;
         if (fc.partnerMargin < need || fc.partnerMargin > need + 0.3 * fc.B + 400) continue;
         if (p.mode === 'rebuild' && g.some(a => !a.pick && (a.age || 0) >= R.rebuildMaxAge)) continue;

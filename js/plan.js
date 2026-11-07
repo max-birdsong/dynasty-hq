@@ -71,7 +71,12 @@ export function teamPlan(L) {
   lines.push(`Playoff odds ${pc(t.playoff)}, title odds ${pc(t.title)}; long-term (Sanderson) rank ${dynRank} of ${n}.`);
   if (tanking) lines.push(`You own your ${ny} 1st and you're unlikely to make the playoffs, so wins now cost draft position: trades are judged on long-term value only.`);
   else if (!ownFirst && outOfIt) lines.push(`You don't own your ${ny} 1st, so losing gains you nothing. Points now still count, though a title is a long shot.`);
-  else lines.push(`You're in the race, so points now matter: each extra point per week adds about ${(sens.titleReg * 100).toFixed(2)}% title odds in the regular season and ${(sens.titlePo * 100).toFixed(2)}% in the playoff weeks.`);
+  else {
+    const parts = [];
+    if (sens.titleReg * 10 >= 0.002 || sens.playoffReg * 10 >= 0.005) parts.push(`+10 pts/wk for the rest of the regular season ≈ ${(sens.playoffReg * 1000).toFixed(0)}% playoff odds and ${(sens.titleReg * 1000).toFixed(1)}% title odds`);
+    if (sens.titlePo * 10 >= 0.002) parts.push(`+10 pts/wk in the playoff weeks ≈ ${(sens.titlePo * 1000).toFixed(1)}% title odds`);
+    lines.push(`You're in the race, so points now matter${parts.length ? ': ' + parts.join('; ') : ''}.`);
+  }
   if (holes.length) lines.push(`Biggest hole: ${holes.map(x => `${x.g} (${x.mine.toFixed(1)} pts/wk vs league typical ${x.med.toFixed(1)})`).join(', ')}.`);
   if (dead.length) lines.push(`Out for the season: ${dead.map(a => a.name).join(', ')}. They score nothing this year but hold ${Math.round(dead.reduce((s, a) => s + a.tat, 0)).toLocaleString()} TAT of value.`);
   if (weakLongTerm) lines.push('Your roster ranks low long-term, so selling aging players for younger ones is still smart, even if you keep competing.');

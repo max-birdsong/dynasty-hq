@@ -25,7 +25,9 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
   const randn = () => { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
   const P = { ...DEFAULT_PARAMS, ...params, injRates: { ...DEFAULT_PARAMS.injRates, ...(params.injRates || {}) } };
   const rids = L.teams.map(t => t.rid);
-  const res = Object.fromEntries(rids.map(r => [r, { playoff: 0, title: 0, wins: 0, seed: 0, final: 0, bye: 0, pts: 0 }]));
+  const res = Object.fromEntries(rids.map(r => [r, { playoff: 0, title: 0, wins: 0, seed: 0, final: 0, bye: 0, pts: 0, slot: 0, slotDist: new Array(rids.length + 1).fill(0) }]));
+  // max PF (potential points): current value plus simulated scores scaled by each team's own ratio of potential to actual so far
+  const mpRatio = Object.fromEntries(L.teams.map(t => [t.rid, t.fpts > 0 && t.ppts > 0 ? Math.max(1, t.ppts / t.fpts) : 1.08]));
   const base = Object.fromEntries(L.teams.map(t => [t.rid, t]));
   const avgMean = {};
   for (const rid of rids) { const w = Object.values(L.weekly[rid] || {}); avgMean[rid] = w.length ? w.reduce((a, b) => a + b, 0) / w.length : 0; }
@@ -78,10 +80,10 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
         score[rid][wk] = Math.max(0, base + noise);
       }
     }
-    const W = {}, PF = {};
-    for (const rid of rids) { W[rid] = base[rid].wins + 0.5 * (base[rid].ties || 0); PF[rid] = base[rid].fpts || 0; }
+    const W = {}, PF = {}, MP = {};
+    for (const rid of rids) { W[rid] = base[rid].wins + 0.5 * (base[rid].ties || 0); PF[rid] = base[rid].fpts || 0; MP[rid] = base[rid].ppts || 0; }
     for (const wk of L.regWeeks) {
-      const sc = {}; for (const rid of rids) { sc[rid] = score[rid][wk]; PF[rid] += sc[rid]; }
+      const sc = {}; for (const rid of rids) { sc[rid] = score[rid][wk]; PF[rid] += sc[rid]; MP[rid] += sc[rid] * mpRatio[rid]; }
       const pairs = L.schedule[wk];
       if (pairs && pairs.length) { for (const [a, b] of pairs) { if (b == null) continue; sc[a] > sc[b] ? W[a]++ : W[b]++; } }
       else { const sh = [...rids].sort(() => rand() - 0.5); for (let i = 0; i + 1 < sh.length; i += 2) sc[sh[i]] > sc[sh[i + 1]] ? W[sh[i]]++ : W[sh[i + 1]]++; }
@@ -96,19 +98,27 @@ export function simulate(L, { runs = 2000, params = DEFAULT_PARAMS, seed = null 
     seeds.forEach(rid => res[rid].playoff++);
     let slots = order.map(s => (s <= n ? seeds[s - 1] : null));
     if (n < size) seeds.slice(0, size - n).forEach(rid => res[rid].bye++);
-    let wk = L.playoffStart || 15;
+    let wk = L.playoffStart || 15, round = 0;
+    const exit = {};
     while (slots.length > 1) {
       const next = [];
       for (let i = 0; i < slots.length; i += 2) {
         const a = slots[i], b = slots[i + 1];
         if (a == null || b == null) { next.push(a ?? b); continue; }
-        next.push(score[a][wk] >= score[b][wk] ? a : b);
+        const win = score[a][wk] >= score[b][wk] ? a : b;
+        exit[win === a ? b : a] = round;
+        next.push(win);
       }
       if (next.length === 2) next.forEach(rid => rid != null && res[rid].final++);
-      slots = next; wk++;
+      slots = next; wk++; round++;
     }
-    if (slots[0] != null) res[slots[0]].title++;
+    if (slots[0] != null) { res[slots[0]].title++; exit[slots[0]] = round + 1; }
+    // next year's draft order: non-playoff teams first (by reverse max PF, or by record), then playoff teams by how far they got
+    const seedOf = Object.fromEntries(seeds.map((r, i) => [r, i]));
+    const non = standings.slice(n).sort(L.draftOrder === 'record' ? ((a, b) => W[a] - W[b] || PF[a] - PF[b]) : ((a, b) => MP[a] - MP[b]));
+    const po = seeds.slice().sort((a, b) => (exit[a] ?? 0) - (exit[b] ?? 0) || seedOf[b] - seedOf[a]);
+    [...non, ...po].forEach((rid, i) => { res[rid].slot += i + 1; res[rid].slotDist[i + 1]++; });
   }
-  for (const rid of rids) for (const k of Object.keys(res[rid])) res[rid][k] /= runs;
+  for (const rid of rids) { for (const k of Object.keys(res[rid])) if (k !== 'slotDist') res[rid][k] /= runs; res[rid].slotDist = res[rid].slotDist.map(c => c / runs); }
   return res;
 }
