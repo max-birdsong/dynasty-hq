@@ -38,6 +38,7 @@ export default function settingsView() {
       num(st, 'simRuns', 'Simulated seasons', 100),
       num(st.sim, 'injRate', 'Injury chance per starter per week', 0.005, '0.035 ≈ a starter misses ~10% of future weeks'),
       num(st.sim, 'injRecover', 'Chance an injured starter returns each week', 0.05, '0.35 ≈ 3 weeks out on average'),
+      num(st.sim, 'horizonSd', 'Forecast-horizon error (season-long)', 0.01, 'Extra uncertainty for projecting weeks ahead; 0.05 = ±5%'),
       num(st.sim, 'sdWeek', 'Weekly spread if not calibrated', 0.01),
       num(st.sim, 'sdSeason', 'Season spread if not calibrated', 0.01),
       h('label', { class: 'f' }, 'Calibration', h('select', { onchange: e => { st.sim.useCalibration = e.target.value === '1'; save({ settingsChanged: true }); } },

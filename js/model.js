@@ -237,7 +237,10 @@ export function simInput(L, weeklyOverride = {}, dropsOverride = {}) {
 export function simParams() {
   const s = settings().sim;
   const base = M.calib?.ok && s.useCalibration ? M.calib.params : { ...DEFAULT_PARAMS, sdWeek: s.sdWeek, sdSeason: s.sdSeason };
-  return { ...base, injRate: s.injRate, injRecover: s.injRecover };
+  // Calibration uses each week's final pre-game projections. Projecting week 15 from today is less accurate than that,
+  // so add a forecast-horizon error on top of whatever season-long error the data shows.
+  const horizon = s.horizonSd ?? 0.05;
+  return { ...base, measuredSeason: base.sdSeason, horizon, sdSeason: Math.sqrt(base.sdSeason ** 2 + horizon ** 2), injRate: s.injRate, injRecover: s.injRecover };
 }
 export function runSim(L) {
   L.sim = simulate(simInput(L), { runs: settings().simRuns, params: simParams(), seed: 777 });

@@ -122,7 +122,7 @@ function simTab(L) {
   wrap.append(h('h3', {}, 'How the simulator works'),
     h('p', { class: 'small' }, `Each team's weekly projection is its best lineup from Sleeper's projections, scored with this league's settings. The rest of the season and the playoffs are played out ${fmt(state().settings.simRuns)} times. In each simulated season every team gets three kinds of luck:`),
     h('ul', { class: 'small' },
-      h('li', {}, h('b', {}, 'Season-long error '), `(±${pc(P.sdSeason)}): the projection is simply wrong about the team for the rest of the year. Drawn once per simulated season, so it doesn't average out.`),
+      h('li', {}, h('b', {}, 'Season-long error '), `(±${pc(P.sdSeason)}): the projection is simply wrong about the team for the rest of the year. Drawn once per simulated season, so it doesn't average out. Made of what your leagues show persists (±${pc(P.measuredSeason ?? 0)}) plus ±${pc(P.horizon ?? 0)} because forecasting weeks ahead is harder than the pre-game projections the calibration is measured on.`),
       h('li', {}, h('b', {}, 'Week-to-week luck '), `(±${pc(P.sdWeek)}): drawn fresh every week; this part carries no information about the future.`),
       h('li', {}, h('b', {}, 'Injuries: '), `each projected starter has a ${pc(P.injRate)} chance per future week of getting hurt and is out ~${(1 / P.injRecover).toFixed(1)} weeks on average, costing the points between him and his bench replacement. Stars-and-scrubs rosters get hit harder.`)),
     h('p', { class: 'small' }, P.bias ? `Projections have run ${pc(Math.abs(P.bias))} ${P.bias < 0 ? 'high' : 'low'} on average (perfect-hindsight lineups vs real lineups), so every team is scaled by the same amount. That doesn't change who's favoured.` : ''));
@@ -134,7 +134,7 @@ function simTab(L) {
     h('div', { class: 'kpis' },
       kpi(fmt(C.n), `team-weeks (${C.weeks} weeks, ${C.teams} team-seasons)`),
       kpi(pc(C.params.sdWeek), 'weekly luck (sd)'),
-      kpi(pc(C.params.sdSeason), 'season-long error (sd)'),
+      kpi(pc(C.params.sdSeason), 'season-long error measured (sd)'),
       kpi(fmt(C.meanAbsErr, 1), 'avg miss, pts per team-week'),
       kpi(C.favRight != null ? pc(C.favRight) : '–', 'projected favourite won'),
       kpi(C.brier != null ? C.brier.toFixed(3) : '–', 'Brier score (coin flip = 0.250)')),

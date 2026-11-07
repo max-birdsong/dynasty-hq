@@ -22,7 +22,7 @@ export function defaultState() {
       nicknames: { ...KNOWN },
       hidden: [],
       simRuns: 3000,
-      sim: { useCalibration: true, teamAdj: true, sdWeek: 0.17, sdSeason: 0.06, injRate: 0.035, injRecover: 0.35 },
+      sim: { useCalibration: true, teamAdj: true, sdWeek: 0.17, sdSeason: 0.06, horizonSd: 0.05, injRate: 0.035, injRecover: 0.35 },
       adj: { pct: 0.6982, base: 753, scalar: 0.23 },
       rules: {
         minTatGain: 300, rebuilderFcMargin: 0.05, contenderMaxDrop: 0.3, myMaxDrop: 1.0,
