@@ -223,7 +223,10 @@ export function goalsMet(L, r, goals) {
   return { met, theirs };
 }
 
-export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10 } = {}) {
+export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10, mode = 'value' } = {}) {
+  // mode 'title': rank by how much the trade moves your title odds, not by total value
+  const T = mode === 'title';
+  if (T) exactTop = 24;
   if (!L.me) return [];
   const S = settings(), R = S.rules;
   const plan = teamPlan(L);
@@ -272,6 +275,12 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
         const dReg = sum(t.map(a => margOf(a, true).reg)) + sum(g.map(a => margOf(a, false).reg));
         const dPo = sum(t.map(a => margOf(a, true).po)) + sum(g.map(a => margOf(a, false).po));
         const score = tat + winNowValue(plan, dReg, dPo) + (t.some(a => a.id && tg.has(a.id)) ? 1500 : 0) - 0.3 * Math.max(0, fc.partnerMargin - need);
+        if (T) {
+          // points gained now; sell-side long-term cost capped at a title's worth so it stays a sane price
+          if (dReg + dPo < 3 || tat < -(S.titleWorth ?? 4500)) continue;
+          cands.push({ g, t, score: dReg + dPo + tat / 2000 });
+          continue;
+        }
         if (score < R.minTatGain * 0.5) continue;
         cands.push({ g, t, score });
       }
@@ -284,7 +293,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       if (r.memory.same && ['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status)) continue;
       r.value = tradeValue(L, r);
       r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0);
-      if (r.value.total < R.minTatGain) continue;
+      if (!T && r.value.total < R.minTatGain) continue;
+      if (T) r.score = r.me ? (r.me.rosAfter - r.me.rosBefore) + (r.me.poAfter - r.me.poBefore) : c.score;
       out.push(r);
       if (++kept >= 4) break;
     }
@@ -299,10 +309,10 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     if (r.get.some(a => a.id && blk.has(String(a.id)))) r.theirGoal = 'On their block';
     r.type = tradeType(L, r);
     if (r.type.id === 'preference') r.pureValue = true;
-    r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
+    if (!T) r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
     r.pureValue = r.pureValue || !r.goals.length;
   }
-  for (let i = out.length - 1; i >= 0; i--) if (out[i].pureValue && out[i].value.total < 2 * R2.minTatGain) out.splice(i, 1);
+  if (!T) for (let i = out.length - 1; i >= 0; i--) if (out[i].pureValue && out[i].value.total < 2 * R2.minTatGain) out.splice(i, 1);
   out.sort((a, b) => b.score - a.score);
   // the best few get a full season simulation, so their this-season value is exact rather than estimated
   for (const r of out.slice(0, exactTop)) {
@@ -313,11 +323,14 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     const byeGoal = goals.find(g => g.id === 'bye');
     if (byeGoal && r.dBye >= 0.03 && !r.goals.includes(byeGoal)) { r.goals.push(byeGoal); r.pureValue = false; }
     r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0) + (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
+    r.dTitle = r.sim.me[1].title - r.sim.me[0].title;
+    if (T) r.score = r.dTitle;
   }
   // keep the list varied: each asset appears in at most two suggestions
   const used = new Map(), final = [];
-  for (const r of out.sort((a, b) => b.score - a.score)) {
-    if (r.value.total < R.minTatGain) continue;
+  const pool2 = T ? out.slice(0, exactTop).filter(r => r.dTitle >= 0.01 && r.value.total > -(S.titleWorth ?? 4500) / 2) : out;
+  for (const r of pool2.sort((a, b) => b.score - a.score)) {
+    if (!T && r.value.total < R.minTatGain) continue;
     const keys = [...r.giveKeys, ...r.getKeys];
     if (keys.some(k => (used.get(k) || 0) >= 2)) continue;
     keys.forEach(k => used.set(k, (used.get(k) || 0) + 1));

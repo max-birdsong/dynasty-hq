@@ -69,3 +69,5 @@ Because the repo is public, anyone with the link can read `data/state.json`, whi
 - **Refresh:** ↻ reloads everything. Otherwise, API data is cached for 20 minutes to 6 hours depending on how often it changes.
 
 **Buying at the deadline (Sanderson):** whether to buy depends on two things. Production: points matter most when you're in the hunt; favourites hit diminishing returns. Buying power: high-value teams can afford to spend futures, low-value teams should buy with short-dated assets and keep their furthest-out 1st, and middle teams should be most careful. Rookie class strength sets the 1.01 (weak 2.5 / normal 3 / strong 4 base 1sts); 2027 defaults to strong.
+
+**Biggest title swings:** a second search on the Suggestions page that ranks trades by how much they raise your title odds (each one season-simulated), with the long-term cost per +1%. The plan also shows a what-if: your odds if every hole were filled to league-typical starters, and whether pushing or reloading wins once your own pick's slot is counted.

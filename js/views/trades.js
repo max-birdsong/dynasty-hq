@@ -151,8 +151,8 @@ function suggestions(L) {
   const S = settings();
   const box = h('div');
   const out = h('div');
-  const run = async (leagues) => {
-    out.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), 'Searching trades…'));
+  const run = async (leagues, mode = 'value') => {
+    out.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), mode === 'title' ? 'Simulating the season for each candidate trade (about 20 seconds)…' : 'Searching trades…'));
     await sleep(30);
     let all = [];
     for (const lg of leagues) {
@@ -160,9 +160,10 @@ function suggestions(L) {
       const pi = await pickIndex(lg).catch(() => null);
       lg.pickIndex = pi;
       for (const t of lg.teams) t._pickIndex = pi?.index || null;
-      all = all.concat(suggest(lg)); await sleep(0);
+      all = all.concat(suggest(lg, { mode })); await sleep(0);
     }
     all.sort((a, b) => b.score - a.score);
+    if (!all.length && mode === 'title') { out.replaceChildren(empty('No trade found that adds at least 1% title odds at an acceptable long-term price.')); return; }
     if (!all.length) { out.replaceChildren(empty('No trades pass all the rules. Loosen them in Settings, add targets on the Values page, or upload newer TAT values.')); return; }
     // filter by goal
     const labels = [...new Set(all.flatMap(r => r.goals.map(g => g.label)))];
@@ -176,7 +177,7 @@ function suggestions(L) {
   box.append(h('div', { class: 'panel' },
     h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, 'Suggested trades'),
       h('div', { class: 'muted small' }, `Every trade should serve a goal (Sanderson: "rankings are not a calculator"). Each suggestion is tagged with the goal it serves for you, from your plan, and for the partner when there's a reason for them too. Trades that serve no goal only appear if they win decisively. Within that, they're ranked by total value to you: Sanderson value gained plus the effect on this season (a title = ${fmt(S.titleWorth ?? 4500)} TAT). Treat the Sanderson-fair price as the worst acceptable deal, not the target. Offers already rejected are skipped.`)),
-      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues')))),
+      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues'), h('button', { class: 'btn ghost', title: 'Trades ranked by how much they raise your title odds, with what each costs long-term', onclick: () => run([L], 'title') }, '🏆 Biggest title swings')))),
     out);
   box.insertBefore(blockPanel(L), box.firstChild);
   box.insertBefore(planPanel(L), box.firstChild);
@@ -207,7 +208,9 @@ function blockPanel(L) {
 function suggestionCard(r) {
   return h('div', { class: 'card' },
     h('div', { class: 'row spread', style: { marginBottom: '8px' } }, h('div', {}, h('b', {}, r.L.nick), ' · ', r.partner.owner, ' ', modeTag(r.partner.mode)),
-      h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Total value to you, in Sanderson points' }, sgn(r.value?.total ?? r.tatGain))),
+      r.dTitle != null && r.dTitle >= 0.01 && r.value?.tat < 0
+        ? h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Change in title odds, and the long-term value it costs per +1%' }, `Title +${Math.round(r.dTitle * 100)}%`, h('span', { class: 'muted small', style: { fontWeight: 400 } }, ` · ${fmt(-r.value.tat / (r.dTitle * 100))} per 1%`))
+        : h('span', { class: 'pos', style: { fontWeight: 700 }, title: 'Total value to you, in Sanderson points' }, sgn(r.value?.total ?? r.tatGain))),
     h('div', { class: 'row', style: { gap: '4px', marginBottom: '6px' } },
       (r.goals || []).map(g => h('span', { class: 'tag push' }, g.label)),
       r.pureValue ? h('span', { class: 'tag', title: 'Serves none of your goals in this league, so it only shows up because it wins decisively' }, 'Pure value') : '',

@@ -83,6 +83,17 @@ export function teamPlan(L) {
     if (sens.titlePo * 10 >= 0.002) parts.push(`+10 pts/wk in the playoff weeks ≈ ${(sens.titlePo * 1000).toFixed(1)}% title odds`);
     lines.push(`You're in the race, so points now matter${parts.length ? ': ' + parts.join('; ') : ''}.`);
   }
+  // what-if: fill every hole up to the league's typical starters. That's the ceiling for buying, to weigh against
+  // what a reload earns your pick (Sanderson: a lost season is hard to make back).
+  let ifFixed = null;
+  if (holes.length) {
+    const gap = holes.reduce((s, x) => s + (x.med - x.mine), 0);
+    const w = { ...L.weekly[t.rid] }; for (const k of [...reg, ...po]) w[k] = (w[k] || 0) + gap;
+    const f = simulate(simInput(L, { [t.rid]: w }), { runs, params, seed })[t.rid];
+    ifFixed = { gap, playoff: f.playoff, title: f.title, bye: f.bye, pick: pickEV(f) };
+    lines.push(`If you filled ${holes.map(x => x.g).join(' and ')} with league-typical starters (+${gap.toFixed(0)} pts/wk): playoffs ${pc(base.playoff)} → ${pc(f.playoff)}, title ${pc(base.title)} → ${pc(f.title)}` +
+      (ownFirst ? `, and your own ${ny} 1st drops from about ${Math.round(pickNow).toLocaleString()} to ${Math.round(ifFixed.pick).toLocaleString()}. Net: ${(TITLE * (f.title - base.title) + ifFixed.pick - pickNow) >= 0 ? 'pushing beats reloading' : 'reloading beats pushing'} by about ${Math.abs(Math.round(TITLE * (f.title - base.title) + ifFixed.pick - pickNow)).toLocaleString()}, before the cost of the trades.` : '. You don\'t own your 1st, so there is no draft-slot cost to pushing.'));
+  }
   if (holes.length) lines.push(`Biggest hole: ${holes.map(x => `${x.g} (${x.mine.toFixed(1)} pts/wk vs league typical ${x.med.toFixed(1)})`).join(', ')}.`);
   if (dead.length) lines.push(`Out for the season: ${dead.map(a => a.name).join(', ')}. They score nothing this year but hold ${Math.round(dead.reduce((s, a) => s + a.tat, 0)).toLocaleString()} TAT of value.`);
   if (t.mix?.total) {
@@ -143,7 +154,7 @@ export function teamPlan(L) {
   if (tanking && bpOk) lines.push(`Your buying power ranks ${dynRank} of ${n}, which is enough to compete. Conceding the season costs real win equity, and your pick only offsets part of it.`);
 
   const planObj = { holes, tanking, weakLongTerm };
-  L.plan = { sens, ownFirst, tanking, middle, bp, prod, verdict, keepFirst, pickNow, slotNow, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };
+  L.plan = { sens, ownFirst, tanking, middle, ifFixed, bp, prod, verdict, keepFirst, pickNow, slotNow, dynRank, n, holes, dead, weakLongTerm, lines, headline, base, TITLE };
   const goals = myGoals(L, L.plan);
   if (goals.length) L.plan.lines.push('Trade goals here: ' + goals.map(g => g.label).join(', ') + '.');
   return L.plan;
