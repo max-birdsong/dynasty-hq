@@ -311,6 +311,18 @@ export function futureSlot(L, rid) {
   return L._futOrder.indexOf(+rid) + 1;
 }
 
+// Can this team still fix its lineup by trading? A team whose roster value ranks well above its lineup has the
+// assets to buy starters, as long as the trade deadline hasn't passed. Returns 0 (can't) to 0.6 (very likely).
+export function fixFactor(L, rid) {
+  const t = L.byRid[rid];
+  if (!t || t.rosRank == null || t.fcTotalRank == null) return 0;
+  const dl = L.tradeDeadline;
+  if (dl && M.week > dl) return 0;
+  const weeksLeft = dl ? Math.max(0, dl - M.week) : 3;
+  const gap = (t.rosRank - t.fcTotalRank) / L.teams.length; // value much better than lineup
+  return Math.max(0, Math.min(0.6, gap * 1.5)) * Math.min(1, weeksLeft / 3);
+}
+
 // FantasyCalc value of a next-year pick given the chance of each slot
 function expectedPickValue(L, y, ord, orig) {
   const n = L.numTeams, dist = L.slotDist?.[orig];
@@ -342,7 +354,7 @@ export function asset(L, key) {
     const fcName = pickName(L, key);
     const generic = L.fc.picks.get(`${y} ${ord}`) ?? 0;
     const next = +y === +L.season + 1 && L.slotDist;
-    const v = next ? expectedPickValue(L, y, ord, orig) : (L.fc.picks.get(fcName) ?? generic);
+    let v = next ? expectedPickValue(L, y, ord, orig) : (L.fc.picks.get(fcName) ?? generic);
     const ot = L.byRid[orig];
     const dist = next ? L.slotDist[orig] : null;
     const top3 = dist ? (dist[1] || 0) + (dist[2] || 0) + (dist[3] || 0) : null;
@@ -350,6 +362,9 @@ export function asset(L, key) {
     const label = next && slot ? `${y} ${ord} (proj #${Math.round(slot)})` : fcName;
     const looks = next && ot?.winPct != null ? impliedSlot(L, orig) : null;
     const fcLooks = looks ? tierValue(L, y, ord, looks) : generic;
+    // a strong-value team with a weak lineup may trade its way out of a bad finish: shade the projection back
+    const fix = next ? fixFactor(L, orig) : 0;
+    if (fix && v > fcLooks) v = v - fix * (v - fcLooks);
     // the 1st after next: market prices it generically, but a weak, aging roster makes an early pick likely
     if (+y === +L.season + 2 && +rd === 1 && L.slotDist && L.tatMap) {
       const fs = futureSlot(L, orig), base1 = L.fc.picks.get(`${+L.season + 1} 1st`) || 1;
@@ -357,7 +372,7 @@ export function asset(L, key) {
       const proj = generic * share;
       return { key, pick: true, orig: +orig, name: `${y} 1st (likely #${fs})` + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: `${y} 1st`, pos: 'PICK', fc: generic, tat: proj, fcGeneric: generic, fcLooks: generic, futureSlot: fs, age: null };
     }
-    return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: v, fcGeneric: generic, fcLooks, looksSlot: looks, top3, age: null, slot };
+    return { key, pick: true, orig: +orig, name: label + (ot && !ot.isMe ? ` (${ot.owner})` : ot?.isMe ? ' (own)' : ''), short: label, pos: 'PICK', fc: v, tat: v, fcGeneric: generic, fcLooks, looksSlot: looks, top3, fix, age: null, slot };
   }
   const id = pid(key);
   const p = M.players[id] || {};

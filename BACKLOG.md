@@ -14,3 +14,6 @@ Ideas parked until the site is running. Add these after it works with the real l
 
 ## Tips
 - Scan r/DynastyFF before waivers for hot tips and pickups
+
+## Picks
+- Devy / incoming-class rankings to price future picks by the strength of the class (DynastyProcess only has the current rookie class; need a free devy source)

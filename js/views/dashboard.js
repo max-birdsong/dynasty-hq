@@ -114,7 +114,7 @@ export default function dashboard() {
     table([
       { key: 'lg', label: 'League', n: false, sort: r => r.L.nick, fmt: (v, r) => r.L.nick },
       { key: 'pick', label: 'Pick', n: false, sort: r => r.o.owner, fmt: (v, r) => `${r.o.owner}'s 1st` + (r.holder.rid !== r.o.rid ? ` (held by ${r.holder.owner})` : '') },
-      { key: 'rec', label: 'Their record', n: false, sort: r => r.o.winPct, fmt: (v, r) => `${r.o.wins}-${r.o.losses}` },
+      { key: 'rec', label: 'Their record', n: false, sort: r => r.o.winPct, fmt: (v, r) => h('span', {}, `${r.o.wins}-${r.o.losses}`, r.a.fix > 0.15 ? h('span', { class: 'tag', style: { marginLeft: '6px' }, title: 'Their roster value ranks well above their lineup, so they could trade to fix it before the deadline. Edge already reduced for this.' }, 'could trade to fix') : '') },
       { key: 'looks', label: 'Looks like', n: true, sort: r => -r.a.looksSlot, fmt: (v, r) => '#' + r.a.looksSlot },
       { key: 'slot', label: 'Simulator says', n: true, sort: r => -r.a.slot, fmt: (v, r) => '#' + r.a.slot.toFixed(1) },
       { key: 'top3', label: 'Top 3', n: true, sort: r => r.a.top3, fmt: (v, r) => pct(r.a.top3) },
