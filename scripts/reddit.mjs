@@ -1,7 +1,8 @@
 // r/DynastyFF buzz from the public RSS feeds (the JSON API blocks GitHub's servers; RSS doesn't).
 // Finds which players are being talked about in new posts and comments, before Sleeper adds pile up.
 const UA = 'dynasty-hq/0.1 (personal waiver scanner)';
-const FEEDS = ['https://www.reddit.com/r/DynastyFF/new/.rss?limit=100', 'https://www.reddit.com/r/DynastyFF/comments/.rss?limit=100'];
+// new posts only: the comments feed is rate-limited (429) for GitHub's servers
+const FEEDS = ['https://www.reddit.com/r/DynastyFF/new/.rss?limit=100'];
 const NEWS = /\b(ruled out|out for|season[- ]ending|torn|acl|achilles|ir\b|injur|will start|to start|starting|promoted|elevated|signed|released|waived|traded|lead back|bellcow|workhorse|breakout|handcuff|pick ?up|add\b|waiver)/i;
 
 export const norm = s => ' ' + String(s).toLowerCase().replace(/<[^>]+>/g, ' ').replace(/&#39;|&apos;|’/g, "'").replace(/&[a-z]+;|&#\d+;/g, ' ')
