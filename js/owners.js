@@ -22,7 +22,8 @@ function ownerOfRid(L, tr, rid) {
 function pickAsset(L, p) {
   const key = `k:${p.season}:${p.round}:${p.roster_id}`;
   if (+p.season > +L.season) return asset(L, key);
-  const v = L.fc.picks.get(`${p.season} ${ORD[p.round]}`) || 0; // already-used pick: show generic
+  // already-used pick: value it like a generic pick of the same round in the next draft (best available proxy)
+  const v = L.fc.picks.get(`${p.season} ${ORD[p.round]}`) || L.fc.picks.get(`${+L.season + 1} ${ORD[p.round]}`) || 0;
   return { key, pick: true, name: `${p.season} ${ORD[p.round]} (used)`, fc: v, tat: v, pos: 'PICK' };
 }
 
@@ -97,12 +98,33 @@ export async function profiles(L) {
     if (aIn && aOut && aIn < aOut - 1.5) tags.push('Buys youth'); else if (aIn && aOut && aIn > aOut + 1.5) tags.push('Buys vets');
     if (mine.length >= 6) tags.push('Active trader'); else if (mine.length === 0) tags.push('Never trades');
     const fcNet = sum(mine.map(x => x.me.fcNet)), tatNet = sum(mine.map(x => x.me.tatNet));
+    // trade record: a trade counts as a win/loss if the net is more than 5% of the deal (min 150), else even
+    const rec = k => {
+      const r = { w: 0, l: 0, e: 0 };
+      for (const x of mine) {
+        const size = Math.max(sum(x.me.got.map(a => a[k === 'fcNet' ? 'fc' : 'tat'])), sum(x.me.gave.map(a => a[k === 'fcNet' ? 'fc' : 'tat'])));
+        const th = Math.max(150, 0.05 * size), v = x.me[k];
+        v > th ? r.w++ : v < -th ? r.l++ : r.e++;
+      }
+      r.n = mine.length; r.pct = r.n ? (r.w + 0.5 * r.e) / r.n : null; r.avg = r.n ? sum(mine.map(x => x.me[k])) / r.n : null;
+      return r;
+    };
+    const fcRec = rec('fcNet'), tatRec = rec('tatNet');
+    let style = null;
+    if (mine.length >= 3) {
+      if (fcRec.pct >= 0.6 && tatRec.pct >= 0.6) style = 'Shark';
+      else if (fcRec.pct <= 0.4 && tatRec.pct <= 0.4) style = 'Easy mark';
+      else if (fcRec.pct >= 0.6 && tatRec.pct < 0.5) style = 'Wins on market, not Sanderson';
+      else if (tatRec.pct >= 0.6 && fcRec.pct < 0.5) style = 'Sanderson-aligned';
+      else style = 'Fair trader';
+      tags.push(style);
+    }
     if (mine.length >= 2 && tatNet - fcNet > 1500) tags.push('Thinks like Sanderson');
     if (mine.length >= 2 && fcNet < -3000) tags.push('Loses trades on FC');
     const r = ranks[t.rid];
     const needs = Object.entries(r).filter(([, v]) => v > N * 0.66).map(([k]) => k);
     const surplus = Object.entries(r).filter(([, v]) => v <= Math.max(2, Math.round(N * 0.2))).map(([k]) => k);
-    out.push({ team: t, trades: mine, got, gave, aIn, aOut, picksIn, picksOut, own, def, byRound, posIn, posOut, partners, tags, fcNet, tatNet, ranks: r, needs, surplus });
+    out.push({ team: t, trades: mine, got, gave, aIn, aOut, picksIn, picksOut, own, def, byRound, posIn, posOut, partners, tags, fcNet, tatNet, fcRec, tatRec, style, ranks: r, needs, surplus });
   }
   return out;
 }
