@@ -66,8 +66,8 @@ const keys = f => { const k = `${f.lid}:${f.id}`; return [k, ...(f.hurt ? [k + '
 const fresh = worth.filter(f => keys(f).some(k => !seen[k]));
 for (const f of worth) for (const k of keys(f)) seen[k] ||= now;
 const buzzOut = Object.fromEntries([...env.buzz].map(([id, b]) => [id, b]));
-if (fresh.length || new Date().getUTCHours() === 6 || process.env.FORCE_WRITE) fs.writeFileSync('data/waivers.json', JSON.stringify({ updated: new Date().toISOString(), finds, seen, buzz: buzzOut }, null, 0));
-console.log(`${finds.length} finds, ${fresh.length} new`);
+if (fresh.length || new Date().getUTCHours() === 6 || process.env.FORCE_WRITE || process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') fs.writeFileSync('data/waivers.json', JSON.stringify({ updated: new Date().toISOString(), finds, seen, buzz: buzzOut }, null, 0));
+console.log(`${finds.length} finds, ${fresh.length} new; buzz on free agents: ${finds.filter(f => f.buzz).map(f => `${f.name} (${f.nick}, ${f.buzz.n}${f.buzz.news ? ', news' : ''})`).join('; ') || 'none'}`);
 
 // comment on the "Waiver watch" issue
 const token = process.env.GITHUB_TOKEN, repo = process.env.GITHUB_REPOSITORY;

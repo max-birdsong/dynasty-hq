@@ -23,9 +23,18 @@ function entries(xml) {
 // names: Map(normalized " first last " -> player id). Returns Map(id -> { n, news, posts: [{title, link}] })
 export async function buzz(names, hours = 36) {
   const items = [];
+  const wait = ms => new Promise(r => setTimeout(r, ms));
   for (const u of FEEDS) {
-    try { const r = await fetch(u, { headers: { 'user-agent': UA } }); if (r.ok) items.push(...entries(await r.text())); else console.log('reddit', r.status, u); }
-    catch (e) { console.log('reddit error', e.message); }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await fetch(u, { headers: { 'user-agent': UA } });
+        if (r.ok) { items.push(...entries(await r.text())); break; }
+        console.log('reddit', r.status, u);
+        if (r.status !== 429) break;
+      } catch (e) { console.log('reddit error', e.message); }
+      await wait(15000 * (attempt + 1));
+    }
+    await wait(5000); // be polite between feeds
   }
   const cut = Date.now() - hours * 3600e3, out = new Map();
   for (const it of items) {
