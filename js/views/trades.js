@@ -78,17 +78,29 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       r.memory.same ? h('div', { class: 'flag ' + (['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status) ? 'bad' : '') }, `You sent this exact offer on ${new Date(r.memory.same.created).toLocaleDateString()}: ${r.memory.same.status}`) : '',
       r.memory.overlap.filter(o => o !== r.memory.same).slice(0, 3).map(o => h('div', { class: 'flag' }, `Earlier ask for ${o.getNames.join(' + ')} (${new Date(o.created).toLocaleDateString()}): ${o.status}`))),
     h('div', { class: 'row', style: { marginTop: '10px' } },
-      showSim && r.me ? h('button', { class: 'btn ghost small', onclick: async e => { e.target.disabled = true; simBox.replaceChildren(h('span', { class: 'muted small' }, 'Simulating…')); await sleep(20); const d = simDelta(L, r); simBox.replaceChildren(simTable(d, partner)); e.target.disabled = false; } }, 'Simulate playoff / title impact') : '',
+      !showSim && r.me ? h('button', { class: 'btn ghost small', onclick: async e => { e.target.disabled = true; simBox.replaceChildren(h('span', { class: 'muted small' }, 'Simulating…')); await sleep(20); const d = simDelta(L, r); simBox.replaceChildren(simTable(d, partner)); e.target.disabled = false; } }, 'Simulate playoff / title impact') : '',
       h('button', { class: 'btn small', onclick: () => { logTrade(toLog(r)); toast('Logged as sent'); } }, 'Log as sent')),
     simBox);
+  // in the calculator, re-simulate the season automatically whenever the trade changes
+  if (showSim && r.me) {
+    simBox.replaceChildren(h('div', { class: 'muted small', style: { marginTop: '10px' } }, 'Simulating the season with and without this trade…'));
+    clearTimeout(evalPanel._t);
+    evalPanel._t = setTimeout(() => { if (!simBox.isConnected) return; const d = simDelta(L, r); simBox.replaceChildren(simTable(d, partner)); }, 250);
+  }
   return el;
 }
 
 function simTable(d, partner) {
-  const row = (nm, [b, a]) => h('tr', {}, h('td', {}, nm), h('td', { class: 'n' }, `${pct(b.playoff)} → ${pct(a.playoff)}`), h('td', { class: 'n' }, delta((a.playoff - b.playoff) * 100, 0)),
-    h('td', { class: 'n' }, `${pct(b.title)} → ${pct(a.title)}`), h('td', { class: 'n' }, delta((a.title - b.title) * 100, 0)));
-  return h('table', { style: { marginTop: '10px' } }, h('thead', {}, h('tr', {}, ['', 'Playoff', 'Δ pts', 'Title', 'Δ pts'].map(x => h('th', {}, x)))),
-    h('tbody', {}, row('You', d.me), row(partner.owner, d.them)));
+  const cell = (b, a, k) => [h('td', { class: 'n' }, `${pct(b[k])} → ${pct(a[k])}`), h('td', { class: 'n' }, delta((a[k] - b[k]) * 100, 1))];
+  const row = (nm, [b, a]) => h('tr', {}, h('td', {}, nm), cell(b, a, 'playoff'), cell(b, a, 'bye'), cell(b, a, 'title'));
+  const big = d.me[1].title - d.me[0].title;
+  return h('div', { style: { marginTop: '12px' } },
+    h('div', { class: 'kpis', style: { marginBottom: '8px' } },
+      h('div', { class: 'kpi' }, h('b', { class: big > 0.005 ? 'pos' : big < -0.005 ? 'neg' : '' }, sgn(big * 100, 1) + ' pts'), h('span', {}, 'your title odds')),
+      h('div', { class: 'kpi' }, (x => h('b', { class: x > 0.005 ? 'pos' : x < -0.005 ? 'neg' : '' }, sgn(x * 100, 1) + ' pts'))(d.me[1].playoff - d.me[0].playoff), h('span', {}, 'your playoff odds'))),
+    h('table', {}, h('thead', {}, h('tr', {}, ['', 'Playoff', 'Δ', 'Bye', 'Δ', 'Title', 'Δ'].map(x => h('th', {}, x)))),
+      h('tbody', {}, row('You', d.me), row(partner.owner, d.them))),
+    h('div', { class: 'muted small', style: { marginTop: '4px' } }, 'Same simulated luck with and without the trade, so the difference is the trade itself. Changes under ~1 point are noise.'));
 }
 
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
