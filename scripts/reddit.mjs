@@ -37,16 +37,21 @@ export async function buzz(names, hours = 36) {
     }
     await wait(5000); // be polite between feeds
   }
-  const cut = Date.now() - hours * 3600e3, out = new Map();
+  const cut = Date.now() - hours * 3600e3, out = new Map(), seenLinks = new Set();
   for (const it of items) {
-    if (it.t < cut) continue;
+    if (it.t < cut || seenLinks.has(it.link)) continue;
+    seenLinks.add(it.link);
     const title = norm(it.title);
-    for (const [nm, id] of names) {
-      if (!it.text.includes(nm)) continue;
+    const hits = [...names].filter(([nm]) => it.text.includes(nm));
+    // rankings and recap posts name dozens of players: not a waiver signal unless the player is in the title
+    const focused = hits.length <= 4;
+    for (const [nm, id] of hits) {
+      const inTitle = title.includes(nm);
+      if (!focused && !inTitle) continue;
       const o = out.get(id) || out.set(id, { n: 0, news: false, posts: [] }).get(id);
       o.n++;
-      if (!it.isComment && title.includes(nm) && NEWS.test(it.title)) o.news = true;
-      if (o.posts.length < 3 && !o.posts.some(p => p.title === it.title)) o.posts.push({ title: it.title.replace(/^\/u\/\S+ on /, ''), link: it.link });
+      if (inTitle && NEWS.test(it.title)) o.news = true;
+      if (o.posts.length < 3) o.posts.push({ title: it.title, link: it.link });
     }
   }
   console.log(`reddit: ${items.length} items, ${out.size} players mentioned`);
