@@ -1,4 +1,4 @@
-import { M, refreshValues, runSim, computePower, CLASS_TOP, classOf } from '../model.js';
+import { M, refreshValues, runSim, computePower, CLASS_TOP, classOf, applyTat, sandersonScale } from '../model.js';
 import { state, settings, save, ghToken, setGhToken, push, pull, setupLink, syncInfo, exportJson, importJson } from '../state.js';
 import { h, toast } from '../util.js';
 import { cclear } from '../db.js';
@@ -27,6 +27,9 @@ export default function settingsView() {
   root.append(h('div', { class: 'panel' }, h('h2', {}, 'How trades are valued'),
     h('p', { class: 'small', style: { marginTop: 0 } }, 'Every trade is scored in one currency: Sanderson value gained, plus what it does to your title and playoff odds this season. How much this season counts is worked out per league from your situation (whether you can win, whether you own your next 1st, how strong you are long-term). The one thing to set is what a title is worth to you.'),
     h('div', { class: 'grid g3' }, num(st, 'titleWorth', 'A title is worth (TAT points)', 250, '4,500 ≈ 1.5 base 1sts. Raise it to chase titles harder.'),
+      h('label', { class: 'f' }, 'Sanderson: a base 2nd is worth (base 1sts)',
+        h('input', { type: 'number', step: 0.01, min: 0.1, max: 0.6, value: st.sandersonB2 ?? 0.33, onchange: e => { st.sandersonB2 = +e.target.value; save({ settingsChanged: true }); M.leagues.forEach(L => { L.tatSetCache = null; }); applyTat(); M.leagues.forEach(L => computePower(L)); toast('Sanderson values updated'); } }),
+        h('span', { class: 'small' }, (() => { const sc = sandersonScale(); return `Late 1st 0.75 · early 2nd ${sc.E2.toFixed(2)} · base 2nd ${sc.B2.toFixed(2)} · late 2nd ${sc.L2.toFixed(2)} · base 3rd ${sc.B3.toFixed(2)} · 4th ${sc.R4.toFixed(2)}. Prices his tiers and your view of picks; FantasyCalc stays the market price.`; })())),
       ...[1, 2].map(d => { const y = (+M.season || new Date().getFullYear()) + d; return h('label', {}, h('div', { class: 'small' }, `${y} rookie class`),
         h('select', { onchange: e => { (st.classes ||= {})[y] = e.target.value; save({ settingsChanged: true }); M.leagues.forEach(L => computePower(L)); toast('Pick values updated'); } },
           ...Object.keys(CLASS_TOP).map(c => h('option', { value: c, selected: classOf(y) === c }, `${c[0].toUpperCase() + c.slice(1)} (1.01 = ${CLASS_TOP[c]} base 1sts)`)))); })),

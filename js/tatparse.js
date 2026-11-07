@@ -94,11 +94,13 @@ export function parseCsv(text) {
 }
 
 // Values for each tier key given a pick-value lookup (FantasyCalc pick names) and draft year.
-export function tierValues(pickVal, year) {
+// scale: optional { L1, E2, B2, ... } in base 1sts (Sanderson's own pick scale); without it, FantasyCalc's pick prices
+export function tierValues(pickVal, year, scale = null) {
   const g = n => pickVal(`${year} ${n}`);
   const B = g('1st');
   return k => {
     if (k[0] === 'X') return parseFloat(k.slice(1)) * B;
+    if (scale && scale[k] != null) return scale[k] * B;
     return { L1: g('1st (Late)'), E2: g('2nd (Early)'), B2: g('2nd'), L2: g('2nd (Late)'), E3: g('3rd (Early)'), B3: g('3rd'), L3: g('3rd (Late)'), R4: g('4th') }[k] || 0;
   };
 }

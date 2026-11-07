@@ -369,12 +369,26 @@ function tierValue(L, y, ord, s) {
 // on the class: 4 base 1sts in an elite class (his number for the Caleb Williams class), 3 in a normal one, 2.5 in a
 // weak one. This is YOUR valuation of a pick, while FantasyCalc's early/mid/late prices remain the market's view.
 export const CLASS_TOP = { weak: 2.5, normal: 3, strong: 4 };
+// Sanderson's scale below one base 1st, in base 1sts: late 1st = 0.75 (his slot curve), base 2nd from Settings
+// (default 0.33, a third of a 1st), and every half-round below steps down by the same ratio.
+const SCALE_KEYS = ['L1', 'E2', 'B2', 'L2', 'E3', 'B3', 'L3', 'R4'];
+export function sandersonScale() {
+  const b2 = settings().sandersonB2 ?? 0.33, l1 = 0.75, r = Math.sqrt(b2 / l1);
+  return Object.fromEntries(SCALE_KEYS.map((k, i) => [k, l1 * r ** i]));
+}
 export const DEFAULT_CLASSES = { 2027: 'strong' }; // Jeremiah Smith / Arch Manning class: consensus elite
 export const classOf = y => settings().classes?.[y] ?? DEFAULT_CLASSES[y] ?? 'normal';
 const SANDERSON_1ST = [3, 2, 2, 1.5, 1.5, 1, 1, 1, 0.75, 0.75, 0.75, 0.75];
 export function sandersonSlotValue(L, y, ord, s) {
-  if (ord !== '1st') return tierValue(L, y, ord, s);
   const B = L.fc.picks.get(`${y} 1st`) ?? M.fc['12-2-1']?.picks.get(`${y} 1st`) ?? 0;
+  if (ord !== '1st') {
+    // 2nd and 3rd rounds: early / base / late from Sanderson's scale, interpolated by slot; 4th and later flat
+    const sc = sandersonScale(), n = L.numTeams, p = n > 1 ? (s - 1) / (n - 1) : 0.5;
+    const pre = ord === '2nd' ? ['E2', 'B2', 'L2'] : ord === '3rd' ? ['E3', 'B3', 'L3'] : null;
+    if (!pre) return B * sc.R4 * (ord === '4th' ? 1 : 0.6);
+    const [e, b, l] = pre.map(k => sc[k]);
+    return B * (p <= 0.5 ? e + (b - e) * Math.max(0, (p - 1 / 6) / (1 / 3)) : b + (l - b) * Math.min(1, (p - 0.5) / (1 / 3)));
+  }
   const curve = SANDERSON_1ST.slice(); curve[0] = CLASS_TOP[classOf(y)] ?? 3;
   const n = L.numTeams, p = n > 1 ? (s - 1) * 11 / (n - 1) : 0, a = Math.floor(p), b = Math.min(11, a + 1);
   return B * (curve[a] + (curve[b] - curve[a]) * (p - a));
@@ -450,7 +464,9 @@ export function asset(L, key) {
     const next = +y === +L.season + 1 && L.slotDist;
     // market (FantasyCalc) and your (Sanderson) value of the pick, both spread over its likely slots
     let v = next ? expectedFromDist(L, y, ord, L.slotDist[orig], true) : (L.fc.picks.get(fcName) ?? generic);
-    let mine = next ? expectedFromDist(L, y, ord, L.slotDist[orig]) : v;
+    // your (Sanderson) view: by projected slot for next year's picks; averaged over all slots further out
+    let mine = next ? expectedFromDist(L, y, ord, L.slotDist[orig])
+      : ord === '1st' ? v : Array.from({ length: L.numTeams }, (_, i) => sandersonSlotValue(L, y, ord, i + 1)).reduce((a, b) => a + b, 0) / L.numTeams;
     const ot = L.byRid[orig];
     const dist = next ? L.slotDist[orig] : null;
     const top3 = dist ? (dist[1] || 0) + (dist[2] || 0) + (dist[3] || 0) : null;
@@ -541,7 +557,7 @@ export function tatMapFor(L, set) {
   if (L.tatSetCache.has(set.id)) return L.tatSetCache.get(set.id);
   const { ids } = matchTatRows(set);
   const pv = n => L.fc.picks.get(n) ?? M.fc['12-2-1']?.picks.get(n) ?? 0;
-  const vals = valueRows(set.rows, tierValues(pv, +L.season + 1));
+  const vals = valueRows(set.rows, tierValues(pv, +L.season + 1, sandersonScale()));
   const m = new Map();
   for (const r of set.rows) { const id = ids.get(r.rank); if (id) m.set(id, vals.get(r.rank)); }
   L.tatSetCache.set(set.id, m);
@@ -561,7 +577,7 @@ export function applyTat() {
 
 function valueTat(L, set) {
   const pv = n => L.fc.picks.get(n) ?? M.fc['12-2-1']?.picks.get(n) ?? 0;
-  const tv = tierValues(pv, +L.season + 1);
+  const tv = tierValues(pv, +L.season + 1, sandersonScale());
   const vals = valueRows(set.rows, tv);
   L.tatMap = new Map(); L.tatRank = new Map(); L.tatMove = new Map();
   for (const r of set.rows) {
