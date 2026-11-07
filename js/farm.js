@@ -7,6 +7,7 @@ import { loadTrades, pickIndex } from './owners.js';
 import { loadDp, makeValuer } from './history.js';
 import { OUT, depthInfo } from './waiverscan.js';
 import { teamPlan } from './plan.js';
+import { fcSides } from './trade.js';
 
 const ORD = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
 const fcv = (L, id) => L.fc.byId.get(String(id))?.value || 0;
@@ -115,15 +116,20 @@ export async function consolidations(L) {
       if (!big.fc) continue;
       for (const g of combos) {
         if (g.some(a => +a.key.split(':')[2] <= +r)) continue; // must actually move up a round
-        const give = g.reduce((s, a) => s + a.fc, 0) * (pi?.index || 1);
-        if (give < big.fc * (1 + margin) || give > big.fc * 1.25) continue; // they win, but not by a mile
+        // FantasyCalc's own 2-for-1 rule: the side getting the single better asset gets credit for the roster spot,
+        // so a pile of small picks is worth less than its sum
+        const sides = fcSides(g.map(a => a.fc * (pi?.index || 1)), [big.fc]);
+        const give = sides.A;
+        if (sides.partnerMargin < margin * sides.B || sides.partnerMargin > 0.25 * sides.B) continue; // they win, but not by a mile
         const tatLoss = g.reduce((s, a) => s + a.tat, 0) - big.tat;
-        out.push({ t, give: g, get: big, fcGive: give, tatLoss, score: -tatLoss + (t.mode === 'rebuild' ? 300 : 0) - (g.length - 2) * 100 });
+        out.push({ t, give: g, get: big, fcGive: give, fcGet: sides.B, tatLoss, score: -tatLoss + (t.mode === 'rebuild' ? 300 : 0) - (g.length - 2) * 100 });
       }
     }
   }
   const seen = new Set();
-  return out.sort((a, b) => b.score - a.score).filter(x => { const k = x.get.key; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5);
+  // one line per package (best partner for it), and each target pick once
+  const seenGive = new Set();
+  return out.sort((a, b) => b.score - a.score).filter(x => { const k = x.get.key, g = x.give.map(a => a.key).sort().join(); if (seen.has(k) || seenGive.has(g)) return false; seen.add(k); seenGive.add(g); return true; }).slice(0, 4);
 }
 
 // ---------- stash list: backups to grab before the injury ----------

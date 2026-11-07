@@ -163,10 +163,10 @@ async function consolidate(c) {
     if (!deals.length) continue;
     out.push(h('div', { class: 'panel' }, h('h2', {}, L.nick), deals.map(d => h('div', { class: 'row spread', style: { borderTop: '1px solid var(--line)', padding: '8px 0', gap: '8px' } },
       h('div', { class: 'small' }, h('b', {}, d.give.map(a => a.short || a.name).join(' + ')), ' → ', h('b', {}, `${d.t.owner}'s ${d.get.short || d.get.name}`), ' ', modeTag(d.t.mode)),
-      h('div', { class: 'small' }, h('span', { class: 'muted' }, `they gain ${f1(L, d.fcGive - d.get.fc)} on FC · you ${d.tatLoss > 0 ? 'give up' : 'gain'} ${f1(L, Math.abs(d.tatLoss), false)} on paper `),
+      h('div', { class: 'small' }, h('span', { class: 'muted' }, `they gain ${f1(L, d.fcGive - d.fcGet)} on FC · you ${d.tatLoss > 0 ? 'give up' : 'gain'} ${f1(L, Math.abs(d.tatLoss), false)} on paper `),
         h('button', { class: 'btn ghost small', onclick: () => openCalc(L, d.t.rid, d.give.map(a => a.key), [d.get.key]) }, 'Open'))))));
   }
-  return out.length ? h('div', {}, out, h('p', { class: 'muted small' }, 'You pay a small premium for moving up: one good pick is worth more than its share of value, because roster spots and draft slots are limited and the hit rate climbs steeply near the top. Rebuilders are listed first; they like volume.'))
+  return out.length ? h('div', {}, out, h('p', { class: 'muted small' }, 'Uses FantasyCalc’s 2-for-1 rule: the side getting the single better pick is credited for the roster spot it saves, so a pile of small picks is worth less than its sum. Moving up costs a premium because the hit rate climbs steeply near the top. Rebuilders are listed first; they like volume.'))
     : empty('No packaging deals: you need at least two 2nd–4th round picks in a league.');
 }
 
