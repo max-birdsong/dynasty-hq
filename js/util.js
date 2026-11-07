@@ -20,6 +20,8 @@ export function h(tag, attrs = {}, ...kids) {
 
 export const fmt = (n, d = 0) => (n == null || isNaN(n)) ? '–' : Number(n).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
 export const sgn = (n, d = 0) => (n == null || isNaN(n)) ? '–' : (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n), d);
+// odds from a simulation are never truly 0 or 100: the model can't see trades, injuries to come, or a rival tanking
+export const odds = n => n == null || isNaN(n) ? '–' : n > 0.995 ? '>99%' : n > 0 && n < 0.005 ? '<1%' : Math.round(n * 100) + '%';
 export const pct = n => (n == null || isNaN(n)) ? '–' : Math.round(n * 100) + '%';
 export const cls = (n, eps = 0) => n > eps ? 'pos' : n < -eps ? 'neg' : '';
 export const sum = a => a.reduce((s, x) => s + (x || 0), 0);

@@ -1,7 +1,7 @@
 import { M, teamAssets, asset } from '../model.js';
 import { firstsSent } from '../owners.js';
 import { state, syncReady } from '../state.js';
-import { h, fmt, pct, sgn } from '../util.js';
+import { h, fmt, pct, odds, sgn } from '../util.js';
 import { table, adviceTag, pctBar, posB, heat, empty } from '../components.js';
 
 let planning = false;
@@ -152,7 +152,7 @@ export default function dashboard() {
     if (+rd !== 1 || +orig !== L.me.rid) continue;
     const a = asset(L, k);
     if (a.slot && a.looksSlot && a.slot < a.looksSlot - 1.5) mineRisk.push({ L, a, msg: `looks like #${a.looksSlot} from the standings, simulator says #${Math.round(a.slot)}`, gap: a.tat - a.fcLooks });
-    else if (a.slot && a.tat > a.fcLooks * 1.25) mineRisk.push({ L, a, msg: `projects #${a.slot.toFixed(1)}${a.p101 > 0.2 ? ` (${Math.round(a.p101 * 100)}% chance of the 1.01)` : ''}: worth ${Math.round(a.tat).toLocaleString()} on Sanderson's slot curve vs the ${Math.round(a.fcLooks).toLocaleString()} the market prices it at`, gap: a.tat - a.fcLooks });
+    else if (a.slot && a.tat > a.fcLooks * 1.25) mineRisk.push({ L, a, msg: `projects #${a.slot.toFixed(1)}${a.p101 > 0.2 ? ` (${odds(a.p101)} chance of the 1.01)` : ''}: worth ${Math.round(a.tat).toLocaleString()} on Sanderson's slot curve vs the ${Math.round(a.fcLooks).toLocaleString()} the market prices it at`, gap: a.tat - a.fcLooks });
     else if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) mineRisk.push({ L, a, msg: `your roster ranks ${L.teams.length - a.futureSlot + 1}/${L.teams.length} for next year once age is factored in`, gap: a.tat - a.fc });
   }
   if (mineRisk.length) root.append(h('div', { class: 'panel', style: { borderLeft: '3px solid var(--warn)' } }, h('h2', {}, '⚠️ Your 1sts worth more than they look'),
