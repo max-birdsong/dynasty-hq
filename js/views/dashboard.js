@@ -12,7 +12,16 @@ export default function dashboard() {
     planning = true;
     (async () => {
       const { teamPlan } = await import('../plan.js');
-      for (const L of M.leagues) { if (L.me && !L.plan) teamPlan(L); await new Promise(r => setTimeout(r, 0)); }
+      const { cget, cset } = await import('../db.js');
+      const { planFp } = await import('../model.js');
+      for (const L of M.leagues) {
+        if (!L.me || L.plan) continue;
+        // plans are reused until the league's inputs change; only new or changed leagues get recomputed
+        const key = `plan:${L.id}:${planFp(L)}`, hit = await cget(key).catch(() => null);
+        if (hit?.plan) { L.plan = hit.plan; L.posNeeds = hit.posNeeds; }
+        else { teamPlan(L); cset(key, { plan: L.plan, posNeeds: L.posNeeds }).catch(() => {}); }
+        await new Promise(r => setTimeout(r, 0));
+      }
       planning = false;
       if (!location.hash || location.hash === '#/') window.DHQ.route();
     })();

@@ -6,6 +6,7 @@ import { startSlots, neededPositions, scoreStats, bestLineup } from './lineup.js
 import { simulate, DEFAULT_PARAMS } from './sim.js';
 import { calibrate } from './calib.js';
 import { pool, sum } from './util.js';
+import { cget, cset } from './db.js';
 
 export const M = { ready: false, leagues: [], players: {}, season: null, week: 1, errors: [], projSource: 'sleeper' };
 const ORD = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
@@ -61,7 +62,13 @@ export async function loadAll(progress = () => {}) {
   try { sources.push(...await previousSeasons(M.leagues)); } catch (e) { console.warn('previous seasons', e); }
   M.calib = calibrate(sources, M.players, posOf);
   progress('Simulating seasons');
-  for (const L of M.leagues) runSim(L);
+  // season simulations are reused until something they depend on changes (rosters, records, projections, settings)
+  for (const L of M.leagues) {
+    const key = `sim:${L.id}:${simFp(L)}`, hit = await cget(key).catch(() => null);
+    if (hit) { L.sim = hit; assignPickSlots(L); }
+    else { runSim(L); cset(key, L.sim).catch(() => {}); }
+    await new Promise(r => setTimeout(r, 0)); // keep the page responsive between leagues
+  }
   // fitted playoff luck is cached per NFL week (it barely moves); refit in the background when a new week starts
   const cached = settings().sim.playoffFit;
   if (cached && cached.key === `${M.season}-${M.week}` && cached.check?.model) M.seedCheck = cached.check;
@@ -290,6 +297,20 @@ export function simParams() {
   const horizon = s.horizonSd ?? 0.05;
   return { ...base, baseRateWeight: s.baseRateWeight ?? 0, measuredSeason: base.sdSeason, horizon, sdSeason: Math.sqrt(base.sdSeason ** 2 + horizon ** 2), injRates: { ...DEFAULT_PARAMS.injRates, ...(s.injRates || {}) }, injRecover: s.injRecover };
 }
+// fingerprints: everything a league's simulation (and, with values, its plan) depends on
+function hash(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+export function simFp(L) {
+  const S = settings();
+  const noFit = (k, v) => k === 'playoffFit' ? undefined : v; // the background seed check writes here; it isn't an input
+  return hash(JSON.stringify([M.week, L.season, S.simRuns, S.sim, S.draftOrder?.[L.id], simParams(),
+    L.teams.map(t => [t.rid, t.wins, t.losses, t.ties, Math.round(t.fpts || 0), Math.round(t.ppts || 0), [...t.players].sort().join(',')]),
+    Object.entries(L.weekly || {}).map(([r, w]) => [r, Object.values(w).map(x => Math.round(x || 0))])], noFit));
+}
+export function planFp(L) {
+  const S = settings();
+  return hash(simFp(L) + JSON.stringify([S.rules, S.titleAuto, S.titleWorth, S.classes, S.sandersonB2, M.tatSet?.id, L.teams.map(t => [t.rid, Math.round((t.tatTotal || 0) / 100), Math.round((t.fcTotal || 0) / 100), t.picks.join(',')])]));
+}
+
 export function runSim(L) {
   L.sim = simulate(simInput(L), { runs: settings().simRuns, params: simParams(), seed: 777 });
   assignPickSlots(L);
