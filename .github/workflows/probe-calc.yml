@@ -5,7 +5,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          UA="Mozilla/5.0 (X11; Linux x86_64) dynasty-hq personal"
-          for u in "https://dynasty-daddy.com/api/v1/player/all/today?market=0" "https://dynasty-daddy.com/api/v1/player/all/today" "https://keeptradecut.com/dynasty-rankings" "https://keeptradecut.com/robots.txt" "https://dynasty-daddy.com/robots.txt" "https://raw.githubusercontent.com/dynastyprocess/data/master/files/values.csv"; do
-            code=$(curl -s -L -o /tmp/o -w "%{http_code}" -A "$UA" "$u"); echo "== $code $u ($(wc -c </tmp/o) bytes)"; head -c 400 /tmp/o | tr '\n' ' '; echo; done
-          curl -s -A "$UA" https://keeptradecut.com/dynasty-rankings | grep -o "playersArray" | head -2
+          for m in 0 1 2 3 4 5 6 7 8 9 10 11; do
+            curl -s -A "dynasty-hq personal" "https://dynasty-daddy.com/api/v1/player/all/today?market=$m" -o /tmp/m.json
+            node -e '
+              const a=JSON.parse(require("fs").readFileSync("/tmp/m.json"));const by=n=>a.find(x=>x.full_name===n)||{};
+              const k=Object.keys(a[0]).filter(x=>/value|rank/i.test(x));
+              const picks=a.filter(x=>x.position==="PI"||/20\d\d.*(1st|Round)/i.test(x.full_name)).slice(0,3).map(x=>x.full_name+":"+x.sf_trade_value);
+              console.log("market '$m'", a.length, "JSN", by("Jaxon Smith-Njigba").sf_trade_value, "Gibbs", by("Jahmyr Gibbs").sf_trade_value, "Allen", by("Josh Allen").sf_trade_value, "Swift", by("D'"'"'Andre Swift").sf_trade_value, "|", picks.join(", "), "| keys", k.join(","))' || echo "market $m failed"
+          done
