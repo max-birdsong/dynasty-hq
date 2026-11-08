@@ -1,5 +1,5 @@
 import { M, leagueById } from '../model.js';
-import { state, noteOf, setNote } from '../state.js';
+import { state, noteOf, setNote, rulesOf, setRules } from '../state.js';
 import { profiles, pickIndex } from '../owners.js';
 import { h, fmt, sgn, f1, toast } from '../util.js';
 import { loadAffinity, portfolio, tendencies, behaviour } from '../affinity.js';
@@ -44,6 +44,31 @@ export default async function ownersView(id, ownerId) {
   return root;
 }
 
+// what he told you, as filters suggestions respect
+function rulesBox(L, t) {
+  const box = h('div', { class: 'small', style: { marginTop: '6px' } });
+  const DUR = [['14', '2 weeks'], ['30', '1 month'], ['0', 'until I remove it']];
+  const draw = () => {
+    const r = rulesOf(t.ownerId) || {};
+    const upd = patch => { const n = { durKey: '30', until: Date.now() + 30 * 864e5, ...r, ...patch }; setRules(t.ownerId, n); draw(); };
+    const mine = L.me.players.map(String).filter(id => M.players[id]).map(id => ({ id, label: M.players[id].full_name }));
+    const dl = h('datalist', { id: 'np-' + t.ownerId }, mine.map(x => h('option', { value: x.label })));
+    box.replaceChildren(
+      h('div', { class: 'muted', style: { marginBottom: '4px' } }, 'What he told you (suggestions follow these):'),
+      h('div', { class: 'row', style: { gap: '4px', flexWrap: 'wrap', alignItems: 'center' } }, 'Not interested in: ',
+        ...(r.noPlayers || []).map(id => h('span', { class: 'tag' }, M.players[id]?.full_name || id, ' ', h('a', { href: 'javascript:void 0', onclick: () => upd({ noPlayers: r.noPlayers.filter(x => x !== id) }) }, '×'))),
+        h('input', { list: 'np-' + t.ownerId, placeholder: 'one of your players…', style: { width: '170px' }, onchange: e => { const x = mine.find(m => m.label === e.target.value); if (x) upd({ noPlayers: [...new Set([...(r.noPlayers || []), x.id])] }); } }), dl),
+      h('div', { class: 'row', style: { gap: '12px', marginTop: '4px', flexWrap: 'wrap' } },
+        ...[['noFirsts', 'Won’t trade his 1sts'], ['noPicks', 'Won’t trade any of his picks'], ['paused', 'Not trading right now']].map(([k, l]) =>
+          h('label', {}, h('input', { type: 'checkbox', checked: !!r[k], onchange: e => upd({ [k]: e.target.checked }) }), ' ' + l)),
+        h('label', {}, 'for ', h('select', { onchange: e => { const d = +e.target.value; upd({ durKey: e.target.value, until: d ? Date.now() + d * 864e5 : null }); } },
+          DUR.map(([v, l]) => h('option', { value: v, selected: (r.durKey || '30') === v }, l)))),
+        r.until ? h('span', { class: 'muted' }, `until ${new Date(r.until).toLocaleDateString()}`) : ''));
+  };
+  draw();
+  return box;
+}
+
 // across every league you share with this owner: who he owns a lot of, buys and sells
 function portfolioLine(t) {
   if (t.isMe) return '';
@@ -67,7 +92,7 @@ function card(L, p, S) {
   notes.value = noteOf(t.ownerId);
   const rk = p.ranks;
   const hasNote = !!noteOf(t.ownerId);
-  const noteBox = h('div', { style: { marginTop: '6px', display: hasNote ? '' : 'none' } }, notes);
+  const noteBox = h('div', { style: { marginTop: '6px', display: hasNote || rulesOf(t.ownerId) ? '' : 'none' } }, notes, t.isMe ? '' : rulesBox(L, t));
   const more = [
     h('div', { class: 'small', style: { marginBottom: '6px' } },
       h('b', {}, 'Pick capital: '), `${p.own} picks (default ${p.def}) · `, Object.entries(p.byRound).map(([r, n]) => `R${r}×${n}`).join(' '),
@@ -96,6 +121,6 @@ function card(L, p, S) {
     h('details', { style: { marginTop: '6px' } }, h('summary', { class: 'small muted' }, 'Details'), more),
     t.isMe ? '' : h('div', { class: 'row', style: { marginTop: '8px', gap: '6px' } },
       h('a', { class: 'btn small', href: `#/trades/${L.id}/${t.rid}` }, 'Build a trade'),
-      hasNote ? '' : h('button', { class: 'btn ghost small', onclick: e => { noteBox.style.display = ''; e.target.remove(); notes.focus(); } }, 'Add note')),
+      hasNote || rulesOf(t.ownerId) ? '' : h('button', { class: 'btn ghost small', onclick: e => { noteBox.style.display = ''; e.target.remove(); notes.focus(); } }, 'Add note / filters')),
     t.isMe ? '' : noteBox);
 }

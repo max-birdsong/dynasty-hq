@@ -104,7 +104,14 @@ export function deleteTrade(id) { S.trades = S.trades.filter(t => t.id !== id); 
 
 // ---------- notes ----------
 export const noteOf = id => S.ownerNotes[id]?.text || '';
-export function setNote(id, text) { S.ownerNotes[id] = { text, t: Date.now() }; save(); }
+export function setNote(id, text) { S.ownerNotes[id] = { ...(S.ownerNotes[id] || {}), text, t: Date.now() }; save(); }
+// trade filters from what an owner told you: { noPlayers: [pid], noFirsts, noPicks, paused, until: ms }
+export function rulesOf(id) {
+  const r = S.ownerNotes[id]?.rules;
+  if (!r || (r.until && Date.now() > r.until)) return null;
+  return r;
+}
+export function setRules(id, rules) { S.ownerNotes[id] = { text: S.ownerNotes[id]?.text || '', ...(S.ownerNotes[id] || {}), rules, t: Date.now() }; save(); }
 
 // ---------- history ----------
 export function recordHistory(leagueId, week, entry) {
