@@ -147,12 +147,12 @@ export function checkRules(L, partner, r) {
     if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) f.push({ bad: false, warn: true, msg: `Careful: once age is factored in your roster ranks ${L.teams.length - a.futureSlot + 1} of ${L.teams.length} for next year, so your ${a.short} is likely an early pick (≈#${a.futureSlot}). The market prices it as an ordinary 1st.` });
   }
   // what he told you
-  const rule = rulesOf(partner.ownerId);
+  const rule = rulesOf(partner.ownerId, L.id);
   if (rule) {
-    const till = rule.until ? ` (noted until ${new Date(rule.until).toLocaleDateString()})` : '';
-    if (rule.paused) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} isn't trading right now${till}.` });
-    for (const a of r.give) if (a.id && (rule.noPlayers || []).map(String).includes(String(a.id))) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} isn't interested in ${a.name}${till}.` });
-    if (r.get.some(a => a.pick && (rule.noPicks || (rule.noFirsts && a.key.split(':')[2] === '1')))) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} won't trade his ${rule.noPicks ? 'picks' : '1sts'} right now${till}.` });
+    const till = u => u ? ` (noted until ${new Date(u).toLocaleDateString()})` : '';
+    if (rule.paused) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} isn't trading in ${L.nick} right now${till(rule.untilLeague)}.` });
+    for (const a of r.give) if (a.id && rule.noPlayers.map(String).includes(String(a.id))) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} isn't interested in ${a.name}${till(rule.untilPlayers)}.` });
+    if (r.get.some(a => a.pick && (rule.noPicks || (rule.noFirsts && a.key.split(':')[2] === '1')))) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} won't trade his ${rule.noPicks ? 'picks' : '1sts'} in ${L.nick} right now${till(rule.untilLeague)}.` });
   }
   // what the partner thinks of the players moving (portfolio across shared leagues)
   f.push(...affinityFlags(L, partner, r));
@@ -337,7 +337,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     cands.sort((a, b) => b.score - a.score);
     let kept = 0;
     // what he told you (owner notes): players he doesn't want, picks he won't move, or not trading at all
-    const rule = rulesOf(p.ownerId);
+    const rule = rulesOf(p.ownerId, L.id);
     if (rule?.paused) continue;
     const blockedGive = new Set((rule?.noPlayers || []).map(String));
     const okTheirs = a => !(a.pick && (rule?.noPicks || (rule?.noFirsts && a.key.split(':')[2] === '1')));
