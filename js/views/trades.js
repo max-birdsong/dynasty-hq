@@ -137,7 +137,7 @@ export function toLog(r) {
     // what the acceptance model saw when you sent it, so it can learn from the outcome
     ...(() => { try { const a = pAccept(r.L, r.partner, r); return { features: a.f, pAccept: +a.p.toFixed(3) }; } catch { return {}; } })(),
     // how the offer looked to him on each calculator, so his answer can confirm or overrule which one he uses
-    ...(() => { try { const ce = {}; for (const k of ['ktc', 'fc', 'dp']) { const e = calcEdge(r.L, r.give, r.get, k); if (Number.isFinite(e) && (k === 'fc' || M.calcs?.[k])) ce[k] = +e.toFixed(3); } return { calcEdges: ce }; } catch { return {}; } })(),
+    ...(() => { try { const ce = {}; for (const k of ['ktc', 'fc', 'dp', 'fp']) { const e = calcEdge(r.L, r.give, r.get, k); if (Number.isFinite(e) && (k === 'fc' || M.calcs?.[k])) ce[k] = +e.toFixed(3); } return { calcEdges: ce }; } catch { return {}; } })(),
   };
 }
 
@@ -186,7 +186,7 @@ function marketVerdicts(L, r, partner) {
     const sf = L.fmt.numQbs === 2 ? 'sf' : 'one', n = L.numTeams;
     const pickName = a => { const [, y, rd] = a.key.split(':'); const tier = a.slot && +y === +L.season + 1 ? (a.slot <= n / 3 ? 'Early' : a.slot <= 2 * n / 3 ? 'Mid' : 'Late') : 'Mid'; return `${y} ${tier} ${ORD_N[rd] || rd + 'th'}`; };
     const pc = preferredCalc(partner.ownerId);
-    const rows = [['ktc', 'KeepTradeCut'], ['fc', 'FantasyCalc'], ['dp', 'DynastyProcess']].filter(([k]) => k === 'fc' || c[k]).map(([k, label]) => {
+    const rows = [['ktc', 'KeepTradeCut'], ['fc', 'FantasyCalc'], ['dp', 'DynastyProcess'], ['fp', 'FantasyPros']].filter(([k]) => k === 'fc' || c[k]).map(([k, label]) => {
       // same math as the calculators themselves, value adjustment included (a pile of pieces < one star)
       M.calcs ||= c;
       return { k, label, d: -calcEdge(L, r.give, r.get, k) };
@@ -324,7 +324,7 @@ function suggestionCard(r) {
     r.flags.filter(f => f.warn).map(f => h('div', { class: 'small warn' }, '⚠️ ' + f.msg)),
     r.pAccept != null ? h('div', { class: 'small', style: { cursor: 'pointer' }, title: reasons(r.acceptF).join('\n'), onclick: () => toast(reasons(r.acceptF).join(' · ')) },
       h('b', {}, `~${Math.round(r.pAccept * 100)}% he accepts`), h('span', { class: 'muted' }, ' · ' + (reasons(r.acceptF)[0] || ''))) : '',
-    r.calcPref ? h('div', { class: 'small pos' }, `Fair for ${r.partner.owner} on ${({ ktc: 'KeepTradeCut', dp: 'DynastyProcess' })[r.calcPref]}, the calculator he trades by` + (r.sweetened?.length ? `: sweetened with ${r.sweetened.join(' + ')}` : '') + '.') : '',
+    r.calcPref ? h('div', { class: 'small pos' }, `Fair for ${r.partner.owner} on ${({ ktc: 'KeepTradeCut', dp: 'DynastyProcess', fp: 'FantasyPros' })[r.calcPref]}, the calculator he trades by` + (r.sweetened?.length ? `: sweetened with ${r.sweetened.join(' + ')}` : '') + '.') : '',
     r.flags.filter(f => f.info).map(f => h('div', { class: 'small muted' }, f.msg)),
     r.memory.overlap.length ? h('div', { class: 'small warn' }, `Asked for ${r.memory.overlap[0].getNames.join(' + ')} before: ${r.memory.overlap[0].status}`) : '',
     h('div', { class: 'row', style: { marginTop: '8px' } },
@@ -340,12 +340,15 @@ function whyRow(t, redraw) {
   const month = () => ({ durKey: '30', until: Date.now() + 30 * 864e5 });
   const nick = t.leagueNick || leagueById(t.leagueId)?.nick || 'this league';
   const setP = ids => { setRules(t.partnerOwnerId, { ...raw, players: { ...month(), ...P, noPlayers: ids } }); };
+  const setK = ids => { setRules(t.partnerOwnerId, { ...raw, players: { ...month(), ...P, keepPlayers: ids } }); };
   const setG = patch => { setRules(t.partnerOwnerId, { ...raw, leagues: { ...(raw.leagues || {}), [t.leagueId]: { ...month(), ...G, ...patch } } }); };
   const chip = (on, label, fn) => h('button', { class: 'tag' + (on ? ' push' : ''), style: { cursor: 'pointer', marginRight: '6px', marginBottom: '4px' }, onclick: () => { fn(!on); const why = new Set(t.why || []); on ? why.delete(label) : why.add(label); updateTrade(t.id, { why: [...why] }); redraw(); } }, (on ? '✓ ' : '') + label);
   const np = P.noPlayers || [];
   const players = (t.give || []).filter(k => k.startsWith('p:')).map(k => k.slice(2));
+  const kp = P.keepPlayers || [], his = (t.get || []).filter(k => k.startsWith('p:')).map(k => k.slice(2));
   return h('tr', {}, h('td', { colspan: 10, style: { paddingTop: 0, whiteSpace: 'normal' } }, h('span', { class: 'small muted', style: { marginRight: '6px' } }, 'Why?'),
     ...players.map((id, i) => chip(np.includes(id), `Not interested in ${t.giveNames[(t.give || []).indexOf('p:' + id)] || M.players[id]?.full_name || id}`, on => setP(on ? [...new Set([...np, id])] : np.filter(x => x !== id)))),
+    ...his.map(id => chip(kp.includes(id), `Won’t trade ${t.getNames[(t.get || []).indexOf('p:' + id)] || M.players[id]?.full_name || id} away`, on => setK(on ? [...new Set([...kp, id])] : kp.filter(x => x !== id)))),
     chip(!!G.noFirsts, `Won’t trade his 1sts in ${nick}`, on => setG({ noFirsts: on })),
     chip(!!G.noPicks, `Won’t trade any picks in ${nick}`, on => setG({ noPicks: on })),
     chip(!!G.paused, `Not trading in ${nick} right now`, on => setG({ paused: on })),
@@ -382,7 +385,7 @@ function logView() {
       const L = leagueById(t.leagueId); if (!L) continue;
       try {
         const give = t.give.map(k => asset(L, k)), get = t.get.map(k => asset(L, k)), ce = {};
-        for (const k of ['ktc', 'fc', 'dp']) { const e = calcEdge(L, give, get, k); if (Number.isFinite(e) && (k === 'fc' || M.calcs?.[k])) ce[k] = +e.toFixed(3); }
+        for (const k of ['ktc', 'fc', 'dp', 'fp']) { const e = calcEdge(L, give, get, k); if (Number.isFinite(e) && (k === 'fc' || M.calcs?.[k])) ce[k] = +e.toFixed(3); }
         updateTrade(t.id, { calcEdges: ce });
       } catch {}
     }

@@ -62,12 +62,19 @@ function rulesBox(L, t) {
     const mine = L.me.players.map(String).filter(id => M.players[id]).map(id => ({ id, label: M.players[id].full_name }));
     const dl = h('datalist', { id: 'np-' + t.ownerId }, mine.map(x => h('option', { value: x.label })));
     const np = expired(P) ? [] : (P.noPlayers || []);
+    const kp = expired(P) ? [] : (P.keepPlayers || []);
+    const his = (t.players || []).map(String).filter(id => M.players[id]).map(id => ({ id, label: M.players[id].full_name }));
+    const dlk = h('datalist', { id: 'kp-' + t.ownerId + L.id }, his.map(x => h('option', { value: x.label })));
     box.replaceChildren(
       h('div', { class: 'muted', style: { marginBottom: '4px' } }, 'What he told you (suggestions follow these):'),
       h('div', { class: 'row', style: { gap: '4px', flexWrap: 'wrap', alignItems: 'center' } }, h('b', {}, 'Not interested in'), ' (any league): ',
         ...np.map(id => h('span', { class: 'tag' }, M.players[id]?.full_name || id, ' ', h('a', { href: 'javascript:void 0', onclick: () => save('players', { noPlayers: np.filter(x => x !== id) }) }, '×'))),
         h('input', { list: 'np-' + t.ownerId, placeholder: 'one of your players…', style: { width: '170px' }, onchange: e => { const x = mine.find(m => m.label === e.target.value); if (x) save('players', { noPlayers: [...new Set([...np, x.id])] }); } }), dl,
         np.length ? h('span', {}, ' for ', dur('players')) : ''),
+      h('div', { class: 'row', style: { gap: '4px', flexWrap: 'wrap', alignItems: 'center', marginTop: '4px' } }, h('b', {}, 'Won’t trade away'), ': ',
+        ...kp.map(id => h('span', { class: 'tag' }, M.players[id]?.full_name || id, ' ', h('a', { href: 'javascript:void 0', onclick: () => save('players', { keepPlayers: kp.filter(x => x !== id) }) }, '×'))),
+        h('input', { list: 'kp-' + t.ownerId + L.id, placeholder: 'one of his players…', style: { width: '170px' }, onchange: e => { const x = his.find(m => m.label === e.target.value); if (x) save('players', { keepPlayers: [...new Set([...kp, x.id])] }); } }), dlk,
+        kp.length && !np.length ? h('span', {}, ' for ', dur('players')) : ''),
       h('div', { class: 'row', style: { gap: '12px', marginTop: '4px', flexWrap: 'wrap', alignItems: 'center' } }, h('b', {}, `In ${L.nick}:`),
         ...[['noFirsts', 'won’t trade his 1sts'], ['noPicks', 'won’t trade any of his picks'], ['paused', 'not trading right now']].map(([k, l]) =>
           h('label', {}, h('input', { type: 'checkbox', checked: !expired(G) && !!G[k], onchange: e => save('league', { [k]: e.target.checked }) }), ' ' + l)),

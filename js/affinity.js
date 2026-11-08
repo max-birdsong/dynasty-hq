@@ -156,7 +156,7 @@ export function biasFactor(ownerId, a) {
 
 // ---------- behaviour profile (from the weekly scan across all his leagues) ----------
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const CALC_NAME = { ktc: 'KeepTradeCut', fc: 'FantasyCalc', dp: 'DynastyProcess' };
+const CALC_NAME = { ktc: 'KeepTradeCut', fc: 'FantasyCalc', dp: 'DynastyProcess', fp: 'FantasyPros' };
 export function behaviour(ownerId) {
   const g = M.ownersGlobal?.[ownerId];
   if (!g?.act) return [];
@@ -186,7 +186,7 @@ export function behaviour(ownerId) {
   const forIt = k => mine.filter(t => { const e = t.calcEdges[k]; return e != null && (t.status === 'accepted' ? e >= -0.02 : e < 0); }).length;
   let pick = cs.length >= 2 && cs[0][1].e < cs[1][1].e * 0.8 ? cs[0][0] : null;
   if (mine.length) {
-    const ks = ['ktc', 'fc', 'dp'].filter(k => mine.some(t => t.calcEdges[k] != null));
+    const ks = ['ktc', 'fc', 'dp', 'fp'].filter(k => mine.some(t => t.calcEdges[k] != null));
     const score = k => forIt(k) - 2 * against(k) + (k === pick ? 1 : 0);
     const best = ks.sort((a, b) => score(b) - score(a))[0];
     if (pick && against(pick) > 0) pick = best && against(best) === 0 ? best : null;

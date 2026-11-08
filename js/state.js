@@ -107,7 +107,7 @@ export const noteOf = id => S.ownerNotes[id]?.text || '';
 export function setNote(id, text) { S.ownerNotes[id] = { ...(S.ownerNotes[id] || {}), text, t: Date.now() }; save(); }
 // trade filters from what an owner told you. Players he doesn't want apply to him everywhere; picks he won't move and
 // "not trading now" are about his situation in one league. Each part has its own expiry.
-// stored: { players: { noPlayers: [pid], until, durKey }, leagues: { [leagueId]: { noFirsts, noPicks, paused, until, durKey } } }
+// stored: { players: { noPlayers: [pid], keepPlayers: [pid], until, durKey }, leagues: { [leagueId]: { noFirsts, noPicks, paused, until, durKey } } }
 const live = x => x && !(x.until && Date.now() > x.until) ? x : null;
 export function rulesOf(id, leagueId) {
   const r = S.ownerNotes[id]?.rules;
@@ -115,7 +115,7 @@ export function rulesOf(id, leagueId) {
   const p = live(r.players), l = leagueId ? live(r.leagues?.[leagueId]) : null;
   const w = live(r.wants?.[leagueId]);
   if (!p && !l && !w) return null;
-  return { noPlayers: p?.noPlayers || [], noFirsts: !!l?.noFirsts, noPicks: !!l?.noPicks, paused: !!l?.paused, untilPlayers: p?.until ?? null, untilLeague: l?.until ?? null,
+  return { noPlayers: p?.noPlayers || [], keepPlayers: p?.keepPlayers || [], noFirsts: !!l?.noFirsts, noPicks: !!l?.noPicks, paused: !!l?.paused, untilPlayers: p?.until ?? null, untilLeague: l?.until ?? null,
     want: w?.want || null, untilWant: w?.until ?? null };
 }
 export const rawRules = id => S.ownerNotes[id]?.rules || {};

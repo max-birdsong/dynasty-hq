@@ -65,6 +65,7 @@ export function calcValue(L, a, k) {
 // calculator itself scores a trade:
 //  - FantasyCalc: its waiver rule (fcSides), from FantasyCalc's own site code.
 //  - DynastyProcess: plain sums (its calculator adds up values; the stud premium lives in its value curve).
+//  - FantasyPros: plain sums of its monthly trade value chart (0-100), the way the chart is meant to be read.
 //  - KeepTradeCut: its "value adjustment". Every piece is weighted up the closer it is to the best piece in the trade
 //    and to the best player overall; the weighted sides are compared and the gap converted back to value. Checked
 //    against 400 random trades run through KTC's own calculator: off by at most 0.06% of the bigger side.
@@ -181,6 +182,7 @@ export function checkRules(L, partner, r) {
     const till = u => u ? ` (noted until ${new Date(u).toLocaleDateString()})` : '';
     if (rule.paused) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} isn't trading in ${L.nick} right now${till(rule.untilLeague)}.` });
     for (const a of r.give) if (a.id && rule.noPlayers.map(String).includes(String(a.id))) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} isn't interested in ${a.name}${till(rule.untilPlayers)}.` });
+    for (const a of r.get) if (a.id && rule.keepPlayers.map(String).includes(String(a.id))) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} won't trade ${a.name} away${till(rule.untilPlayers)}.` });
     if (r.get.some(a => a.pick && (rule.noPicks || (rule.noFirsts && a.key.split(':')[2] === '1')))) f.push({ bad: false, warn: true, msg: `You noted ${partner.owner} won't trade his ${rule.noPicks ? 'picks' : '1sts'} in ${L.nick} right now${till(rule.untilLeague)}.` });
   }
   // what the partner thinks of the players moving (portfolio across shared leagues)
@@ -391,7 +393,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     const rule = rulesOf(p.ownerId, L.id);
     if (rule?.paused) continue;
     const blockedGive = new Set((rule?.noPlayers || []).map(String));
-    const okTheirs = a => !(a.pick && (rule?.noPicks || (rule?.noFirsts && a.key.split(':')[2] === '1')));
+    const keep = new Set((rule?.keepPlayers || []).map(String));
+    const okTheirs = a => !(a.id && keep.has(String(a.id))) && !(a.pick && (rule?.noPicks || (rule?.noFirsts && a.key.split(':')[2] === '1')));
     cands.splice(0, cands.length, ...cands.filter(c => !c.g.some(a => a.id && blockedGive.has(String(a.id))) && c.t.every(okTheirs)));
     // the calculator this owner actually trades by (KeepTradeCut for most), and the extra he'll want for favourites
     const pc = preferredCalc(p.ownerId), usePc = pc && pc !== 'fc' && M.calcs?.[pc];
