@@ -273,7 +273,9 @@ export function tradeValue(L, r, exact = null) {
 // Sanderson: rankings aren't a price list; every trade should serve a goal. Your goals come from the league plan.
 export function myGoals(L, plan) {
   const t = L.me, g = [];
-  for (const h of plan.holes) g.push({ id: 'fix:' + h.g, label: `Fix ${h.g}` });
+  // shedding points: holes are the point, not a problem; every point you send away improves your own pick
+  if (plan.tanking && plan.ownFirst) g.push({ id: 'shed', label: L.draftOrder === 'maxpf' ? 'Shed points (max PF decides your pick)' : 'Shed points (better pick)' });
+  else for (const h of plan.holes) g.push({ id: 'fix:' + h.g, label: `Fix ${h.g}` });
   if (!plan.tanking && (t.title ?? 0) >= 0.06) g.push({ id: 'points', label: 'Buy points' });
   if (plan.tanking || plan.weakLongTerm) g.push({ id: 'younger', label: 'Get younger' });
   if (plan.tanking || ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15)) g.push({ id: 'picks', label: 'Turn players into picks' });
@@ -291,6 +293,7 @@ export function goalsMet(L, r, goals) {
   for (const g of goals) {
     if (g.id.startsWith('fix:')) { const pos = g.id.slice(4); if (r.get.some(a => a.pos === pos) && dReg > 1) met.push(g); }
     else if (g.id === 'points' && (dReg > 1.5 || dPo > 1.5)) met.push(g);
+    else if (g.id === 'shed' && dReg < -2) met.push(g);
     else if (g.id === 'younger' && r.mix.future > 300 && (ag == null || av == null || ag < av - 1.5)) met.push(g);
     else if (g.id === 'picks' && r.mix.picks > 300) met.push(g);
     else if (g.id === 'window' && (r.value?.tat ?? r.tatGain) > 300 && (r.sim ? r.sim.me[1].title - r.sim.me[0].title >= -0.02 : (r.value?.now ?? 0) >= -0.02 * (L.plan?.TITLE || 0))) met.push(g);

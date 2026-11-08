@@ -50,7 +50,9 @@ export function teamPlan(L) {
   const pickNow = pickEV(base);
   const slotNow = base.slot;
   const outOfIt = (t.playoff ?? 0) < 0.25;
-  const tanking = ownFirst && outOfIt;
+  // your call overrides the automatic read: 'tank' = shed points for the pick, 'push' = play for this season
+  const mode = S.leagueMode?.[L.id];
+  const tanking = mode === 'tank' ? true : mode === 'push' ? false : ownFirst && outOfIt;
 
   // long-term standing
   const n = L.teams.length;

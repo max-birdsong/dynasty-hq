@@ -225,6 +225,10 @@ export function planPanel(L, { compact = false } = {}) {
   return h('div', { class: 'panel plan' },
     h('div', { class: 'row', style: { gap: '8px' } }, p.verdict ? h('span', { class: 'tag ' + (VERDICT[p.verdict] || ''), title: 'Deadline stance from buying power and production (Sanderson)' }, p.verdict) : '', h('h2', { style: { margin: 0 } }, compact ? p.headline : `${L.nick}: ${p.headline}`)),
     h('ul', { class: 'small keylines' }, key.map(l => h('li', {}, l))),
+    compact ? '' : h('div', { class: 'row small', style: { gap: '6px', alignItems: 'center', margin: '4px 0' } }, 'Approach here:',
+      h('select', { onchange: e => { const S = settings(); S.leagueMode = { ...(S.leagueMode || {}) }; if (e.target.value) S.leagueMode[L.id] = e.target.value; else delete S.leagueMode[L.id]; save({ settingsChanged: true }); L.plan = null; window.DHQ.route(); } },
+        [['', `automatic (now: ${p.tanking ? 'shedding points' : 'playing for this season'})`], ['tank', 'shed points for a better pick'], ['push', 'play for this season']].map(([v, l]) => h('option', { value: v, selected: (settings().leagueMode?.[L.id] || '') === v }, l))),
+      h('span', { class: 'muted' }, 'Suggestions and goals follow this.')),
     rest.length ? h('details', {}, h('summary', { class: 'small muted' }, 'Full reasoning'), h('ul', { class: 'small', style: { margin: '6px 0 0', paddingLeft: '18px' } }, rest.map(l => h('li', {}, l)))) : '');
 }
 
