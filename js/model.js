@@ -455,10 +455,26 @@ export function spreadValue(L, y, ord, center, sd) {
 
 // Where a team's pick the year after next is likely to land: rank teams by roster value a year from now
 // (Sanderson value, discounted for age), weakest first
-const ageKeep = a => (!a || a <= 26) ? 1 : Math.max(0.35, 1 - 0.12 * (a - 26));
+// share of value a player keeps over the next year, by position and age (at the start of that year). Measured, not
+// guessed: DynastyProcess values every November 2019-2025 against the next November, value-weighted, each year
+// rescaled to the same total, players who fell out of the rankings counted as zero, ages smoothed over +-1 year.
+// The average rosterable player keeps 84%: busts and decline are refilled by each new rookie class (picks).
+export const KEEP = {
+  QB: { 21: 0.85, 22: 0.93, 23: 0.96, 24: 0.94, 25: 0.92, 26: 0.92, 27: 0.86, 28: 0.84, 29: 0.89, 30: 0.84, 31: 0.72, 32: 0.69, 33: 0.61, 34: 0.44 },
+  RB: { 21: 0.96, 22: 0.89, 23: 0.84, 24: 0.85, 25: 0.86, 26: 0.75, 27: 0.59, 28: 0.53, 29: 0.5 },
+  WR: { 21: 1.04, 22: 1.03, 23: 0.98, 24: 0.93, 25: 0.87, 26: 0.78, 27: 0.7, 28: 0.69, 29: 0.63, 30: 0.48, 31: 0.36, 32: 0.36 },
+  TE: { 22: 0.93, 23: 0.95, 24: 1.0, 25: 1.0, 26: 0.8, 27: 0.6, 28: 0.57, 29: 0.56 },
+};
+export function keepRate(pos, age) {
+  const t = KEEP[pos] || KEEP.WR, ks = Object.keys(t).map(Number);
+  const a = Math.floor(age), lo = Math.min(...ks), hi = Math.max(...ks);
+  return t[Math.min(hi, Math.max(lo, a))];
+}
+// value a player is expected to hold next season (for next year's standings)
+const ageKeep = a => keepRate(a.pos, a.age || 26);
 export function futureSlot(L, rid) {
   if (!L._futOrder) {
-    const s = new Map(L.teams.map(t => [t.rid, t.players.map(id => asset(L, 'p:' + id)).reduce((x, a) => x + a.tat * ageKeep(a.age), 0)]));
+    const s = new Map(L.teams.map(t => [t.rid, t.players.map(id => asset(L, 'p:' + id)).reduce((x, a) => x + a.tat * ageKeep(a), 0)]));
     L._futOrder = [...L.teams].sort((a, b) => s.get(a.rid) - s.get(b.rid)).map(t => t.rid);
   }
   return L._futOrder.indexOf(+rid) + 1;
