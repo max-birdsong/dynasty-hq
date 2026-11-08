@@ -1,11 +1,13 @@
 // Persistent user state: settings, TAT uploads, trade log, owner notes, weekly history.
 // Kept in localStorage and synced to data/state.json on a dedicated "data" branch of the GitHub repo,
-// so the laptop and phone always see the same thing.
+// so the laptop and phone always see the same thing. The repo is public, so the file is encrypted (AES-GCM) with a
+// key that lives only on your devices (it travels between them inside the setup link).
 import { uid } from './util.js';
 
 const KEY = 'dhq-state-v1';
 const TOKEN_KEY = 'dhq-gh-token';
 const FILE = 'data/state.json';
+const ENC_KEY = 'dhq-enc-key';
 
 // Leagues Max already uses short names for
 const KNOWN = {
@@ -182,6 +184,29 @@ async function gh(path, opts = {}) {
 }
 const b64 = s => { const bytes = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(bin); };
 const unb64 = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, '')), c => c.charCodeAt(0)));
+const bytesB64 = u => { let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(bin); };
+const b64Bytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+// ---------- encryption ----------
+export const encKey = () => localStorage.getItem(ENC_KEY) || '';
+export function setEncKey(k) {
+  k = (k || '').trim();
+  if (k && b64Bytes(k).length !== 32) throw new Error('That is not a valid key');
+  k ? localStorage.setItem(ENC_KEY, k) : localStorage.removeItem(ENC_KEY);
+}
+const cryptoKey = () => crypto.subtle.importKey('raw', b64Bytes(encKey()), 'AES-GCM', false, ['encrypt', 'decrypt']);
+async function seal(obj) {
+  if (!encKey()) setEncKey(bytesB64(crypto.getRandomValues(new Uint8Array(32))));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await cryptoKey(), new TextEncoder().encode(JSON.stringify(obj))));
+  return { enc: 1, iv: bytesB64(iv), data: bytesB64(ct) };
+}
+async function unseal(f) {
+  if (!f?.enc) return f; // an older, unencrypted copy
+  if (!encKey()) { const e = new Error('Your data is encrypted and this device has no key yet. Open the setup link from your other device, or paste the key in Settings.'); e.status = 'nokey'; throw e; }
+  try { return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64Bytes(f.iv) }, await cryptoKey(), b64Bytes(f.data)))); }
+  catch { const e = new Error('This device has the wrong encryption key. Paste the key from your other device in Settings.'); e.status = 'nokey'; throw e; }
+}
 
 // make sure the data branch exists (created from the default branch the first time)
 async function ensureBranch() {
@@ -198,10 +223,19 @@ async function readRemote() {
   const f = await gh(`contents/${FILE}?ref=${branch}`);
   if (!f) { sync.sha = null; return null; }
   sync.sha = f.sha;
-  if (f.content) return JSON.parse(unb64(f.content));
   // files over 1 MB come back without content: fetch the raw blob
-  const blob = await gh(`git/blobs/${f.sha}`);
-  return JSON.parse(unb64(blob.content));
+  const raw = JSON.parse(unb64(f.content || (await gh(`git/blobs/${f.sha}`)).content));
+  sync.plain = !raw.enc;
+  return unseal(raw);
+}
+
+// after the first encrypted save: replace the branch's history with that one commit, so the old readable copies
+// are no longer in the repo
+async function dropPlainHistory(blobSha) {
+  const { branch } = S.settings.github;
+  const tree = await gh('git/trees', { method: 'POST', body: JSON.stringify({ tree: [{ path: FILE, mode: '100644', type: 'blob', sha: blobSha }] }) });
+  const commit = await gh('git/commits', { method: 'POST', body: JSON.stringify({ message: 'Dynasty HQ data (encrypted)', tree: tree.sha, parents: [] }) });
+  await gh(`git/refs/heads/${branch}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha, force: true }) });
 }
 
 export async function pull() {
@@ -214,10 +248,10 @@ export async function pull() {
     if (remote) adopt(merge(S, remote));
     sync.last = Date.now();
     syncStatus(sync.dirty ? 'pending' : 'synced');
-    if (sync.dirty || !remote) schedulePush(0);
+    if (sync.dirty || !remote || sync.plain) schedulePush(0); // an old readable copy gets encrypted right away
     return true;
   } catch (e) {
-    syncStatus(e.status === 401 || e.status === 403 ? 'error' : 'offline', e.message);
+    syncStatus(e.status === 401 || e.status === 403 || e.status === 'nokey' ? 'error' : 'offline', e.message);
     return false;
   }
 }
@@ -242,15 +276,17 @@ export async function push() {
         const remote = await readRemote();
         if (remote) adopt(merge(S, remote));
         const { branch } = S.settings.github;
-        const body = { message: `Dynasty HQ update (${navigator.userAgent.includes('Mobile') ? 'phone' : 'laptop'})`, branch, content: b64(JSON.stringify(S)), ...(sync.sha ? { sha: sync.sha } : {}) };
+        const wasPlain = sync.plain || !remote;
+        const body = { message: `Dynasty HQ update (${navigator.userAgent.includes('Mobile') ? 'phone' : 'laptop'})`, branch, content: b64(JSON.stringify(await seal(S))), ...(sync.sha ? { sha: sync.sha } : {}) };
         const res = await gh(`contents/${FILE}`, { method: 'PUT', body: JSON.stringify(body) });
         sync.sha = res?.content?.sha || null;
+        if (wasPlain && sync.sha) { try { await dropPlainHistory(sync.sha); } catch (e) { console.warn('history cleanup', e); } sync.plain = false; }
         sync.dirty = false; sync.last = Date.now();
         syncStatus('synced');
         return true;
       } catch (e) {
         if (e.status === 409 || e.status === 422) { await new Promise(r => setTimeout(r, 400 * (attempt + 1))); continue; } // someone else wrote first: re-merge and retry
-        syncStatus(e.status === 401 || e.status === 403 || e.status === 404 ? 'error' : 'offline', e.message);
+        syncStatus(e.status === 401 || e.status === 403 || e.status === 404 || e.status === 'nokey' ? 'error' : 'offline', e.message);
         return false;
       }
     }
@@ -274,13 +310,14 @@ export function startAutoSync() {
 
 // one-tap setup link for another device (the token travels in the URL fragment, which is never sent to a server)
 export function setupLink() {
-  const payload = btoa(JSON.stringify({ r: S.settings.github.repo, b: S.settings.github.branch, t: ghToken(), u: S.settings.username }));
+  const payload = btoa(JSON.stringify({ r: S.settings.github.repo, b: S.settings.github.branch, t: ghToken(), u: S.settings.username, k: encKey() }));
   return `${location.origin}${location.pathname}#/settings/setup/${payload}`;
 }
 export function applySetup(payload) {
   const o = JSON.parse(atob(payload));
   S.settings.github.repo = o.r; S.settings.github.branch = o.b || 'data';
   if (o.u) S.settings.username = o.u;
+  if (o.k) setEncKey(o.k);
   persist();
   setGhToken(o.t);
 }
