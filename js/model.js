@@ -18,6 +18,8 @@ export const pid = k => k.slice(2);
 // ---------------- loading ----------------
 export async function loadAll(progress = () => {}) {
   M.errors = [];
+  // calculator values (KTC / FC / DP / FantasyPros): trade verdicts, and DP value feeds future win equity
+  const calcsP = fetch('data/calcs.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null);
   progress('Sleeper state');
   const st = await api.nflState();
   M.season = st.league_season || st.season;
@@ -75,6 +77,7 @@ export async function loadAll(progress = () => {}) {
   else M.needsPlayoffFit = true;
   for (const L of M.leagues) { computePower(L); snapshotHistory(L); }
   await mergeSnapshots().catch(() => {});
+  if (!M.calcs?.dp) M.calcs = (await calcsP) || M.calcs;
   M.ready = true;
   M.loadedAt = new Date();
   return M;

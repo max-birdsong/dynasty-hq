@@ -8,10 +8,15 @@
 //     with age among players who keep playing (selected on the two-year average, so no regression-to-the-mean bias),
 //     times how much of the next season fantasy-relevant players of that age actually play (injury, benching,
 //     retirement), relative to a player in his prime.
-//  3. Picks become rookies, scoring what rookies drafted at that rank in their class scored in years 1-3.
-//  4. Each team's best lineup each season goes into the same season simulator as this season (0-0 start, a generic
-//     schedule), with extra season-level uncertainty per year ahead: in the same data a year-ahead projection of a
-//     player's points misses by ~53%, about 15-18% for a whole lineup.
+//  3. Market value is added for players up to 28: value carries what the market expects of a player beyond his points
+//     so far (a rookie worth three 1sts vs one worth a late 1st), and it moves when his stock moves. Fitted on
+//     DynastyProcess values 2019-2024 against the next three seasons' points; out of sample it cut the error for
+//     young players three years out by ~10%. For older players it didn't help, so it isn't used.
+//     (Fitted on ~630 player-seasons of rosterable players, so these are broad strokes.)
+//  4. Outcomes, not averages: each simulated future draws every player's result from how players like him actually
+//     turned out (busts, stars, everything between), a boom stays a boom across the years, and picks draw from what
+//     rookies drafted at that rank actually did. Each team's best lineup is rebuilt from the draws, so depth covers busts.
+//  5. Each draw's lineups run through the same season simulator as this season (0-0 start, a generic schedule).
 import { M, teamAssets, simParams } from './model.js';
 import { bestLineup, scoreStats } from './lineup.js';
 import { simulate } from './sim.js';
@@ -28,11 +33,15 @@ const AVAIL = {
   WR: { 21: 0.814, 22: 0.784, 23: 0.755, 24: 0.753, 25: 0.774, 26: 0.776, 27: 0.746, 28: 0.722, 29: 0.706, 30: 0.681, 31: 0.683, 32: 0.678, 33: 0.642 },
   TE: { 21: 0.661, 22: 0.659, 23: 0.713, 24: 0.759, 25: 0.768, 26: 0.765, 27: 0.763, 28: 0.735, 29: 0.695, 30: 0.684, 31: 0.688, 32: 0.69, 33: 0.69 },
 };
-// expected full-PPR points per team-week of a rookie by his rank among QB/RB/WR/TE picks in his NFL draft class,
-// seasons 1-3 (0 for the weeks he doesn't play or play much)
-const ROOKIE = [[3, { 1: 13.67, 2: 13.36, 3: 11.81 }], [6, { 1: 9.32, 2: 10.61, 3: 9.56 }], [12, { 1: 8.64, 2: 9.51, 3: 7.28 }],
-  [24, { 1: 5.47, 2: 6.39, 3: 5.6 }], [36, { 1: 4.05, 2: 4.9, 3: 4.04 }], [99, { 1: 2.26, 2: 2.62, 3: 2.27 }]];
-export const YEAR_SD = 0.15; // extra season-level uncertainty for each year ahead (team level)
+export const YEAR_SD = 0.05; // roster churn (trades, waivers) per year ahead; player outcomes are drawn below
+// expected PPR points per team-week h years ahead (missed games count as 0): a + b * (points per game aged with the
+// curves) [+ c * ln(DP value) for RB/WR/TE up to 28]. QBs are pooled over ages (too few to split) and use no value
+// term (1QB values say little about superflex QBs; their points are the steadier signal).
+const COEF = {"young1": [-10.723, 0.366, 1.992], "QByoung1": [3.977, 0.591], "prime1": [-10.036, 0.353, 1.95], "QBprime1": [3.977, 0.591], "old1": [3.67, 0.556], "QBold1": [3.977, 0.591], "young2": [-16.519, 0.203, 2.941], "QByoung2": [3.05, 0.578], "prime2": [-17.844, 0.272, 2.924], "QBprime2": [3.05, 0.578], "old2": [3.819, 0.525], "QBold2": [3.05, 0.578], "young3": [-27.427, 0.154, 4.268], "QByoung3": [0.345, 0.68], "prime3": [-20.291, 0.367, 2.933], "QBprime3": [0.345, 0.68], "old3": [-0.569, 0.972], "QBold3": [0.345, 0.68]};
+// what players actually delivered relative to that expectation: 19 quantiles (5%..95%), by age band and years ahead
+const RATIO = {"young1": [0.127, 0.363, 0.462, 0.58, 0.692, 0.796, 0.85, 0.902, 0.944, 0.975, 1.013, 1.106, 1.195, 1.282, 1.342, 1.443, 1.524, 1.615, 1.709], "QByoung1": [0.321, 0.438, 0.512, 0.669, 0.819, 0.843, 0.894, 0.945, 0.976, 1.05, 1.107, 1.164, 1.192, 1.201, 1.262, 1.308, 1.359, 1.474, 1.563], "prime1": [0.058, 0.317, 0.471, 0.619, 0.725, 0.805, 0.857, 0.932, 0.974, 1.013, 1.078, 1.115, 1.169, 1.233, 1.294, 1.379, 1.485, 1.563, 1.743], "QBprime1": [0.321, 0.438, 0.512, 0.669, 0.819, 0.843, 0.894, 0.945, 0.976, 1.05, 1.107, 1.164, 1.192, 1.201, 1.262, 1.308, 1.359, 1.474, 1.563], "old1": [0.315, 0.419, 0.478, 0.626, 0.682, 0.723, 0.771, 0.838, 0.867, 1.025, 1.044, 1.156, 1.189, 1.23, 1.266, 1.354, 1.477, 1.615, 1.665], "QBold1": [0.321, 0.438, 0.512, 0.669, 0.819, 0.843, 0.894, 0.945, 0.976, 1.05, 1.107, 1.164, 1.192, 1.201, 1.262, 1.308, 1.359, 1.474, 1.563], "young2": [0.039, 0.206, 0.397, 0.459, 0.586, 0.675, 0.794, 0.855, 0.935, 1.007, 1.058, 1.132, 1.229, 1.305, 1.382, 1.485, 1.559, 1.715, 1.984], "QByoung2": [0.068, 0.375, 0.553, 0.647, 0.684, 0.72, 0.853, 0.874, 0.994, 1.002, 1.087, 1.196, 1.256, 1.309, 1.354, 1.412, 1.431, 1.467, 1.582], "prime2": [0.0, 0.108, 0.33, 0.467, 0.596, 0.676, 0.787, 0.851, 0.942, 1.004, 1.063, 1.133, 1.226, 1.297, 1.35, 1.456, 1.601, 1.776, 2.091], "QBprime2": [0.068, 0.375, 0.553, 0.647, 0.684, 0.72, 0.853, 0.874, 0.994, 1.002, 1.087, 1.196, 1.256, 1.309, 1.354, 1.412, 1.431, 1.467, 1.582], "old2": [0.0, 0.114, 0.413, 0.537, 0.633, 0.776, 0.817, 0.914, 0.975, 1.093, 1.129, 1.154, 1.233, 1.297, 1.383, 1.455, 1.548, 1.612, 1.871], "QBold2": [0.068, 0.375, 0.553, 0.647, 0.684, 0.72, 0.853, 0.874, 0.994, 1.002, 1.087, 1.196, 1.256, 1.309, 1.354, 1.412, 1.431, 1.467, 1.582], "young3": [0.0, 0.015, 0.235, 0.325, 0.525, 0.69, 0.789, 0.859, 0.917, 0.975, 1.09, 1.138, 1.186, 1.273, 1.357, 1.578, 1.726, 1.869, 2.122], "QByoung3": [0.05, 0.343, 0.38, 0.551, 0.659, 0.772, 0.829, 0.895, 0.972, 1.015, 1.054, 1.111, 1.171, 1.328, 1.446, 1.586, 1.647, 1.72, 1.854], "prime3": [0.0, 0.0, 0.0, 0.078, 0.178, 0.388, 0.616, 0.778, 0.859, 1.003, 1.099, 1.201, 1.261, 1.345, 1.437, 1.559, 1.785, 1.988, 2.568], "QBprime3": [0.05, 0.343, 0.38, 0.551, 0.659, 0.772, 0.829, 0.895, 0.972, 1.015, 1.054, 1.111, 1.171, 1.328, 1.446, 1.586, 1.647, 1.72, 1.854], "old3": [0.0, 0.0, 0.253, 0.328, 0.53, 0.593, 0.621, 0.678, 0.89, 0.928, 0.967, 1.052, 1.19, 1.27, 1.356, 1.432, 1.609, 1.9, 2.217], "QBold3": [0.05, 0.343, 0.38, 0.551, 0.659, 0.772, 0.829, 0.895, 0.972, 1.015, 1.054, 1.111, 1.171, 1.328, 1.446, 1.586, 1.647, 1.72, 1.854]};
+// rookies: 19 quantiles of total PPR points per week over years 1-3, and how that splits over the three years
+const ROOKIE_Q = {"3": {"tot": [16.9, 21.8, 24.7, 28.9, 29.6, 30.0, 31.0, 33.2, 35.3, 35.9, 36.4, 37.8, 40.1, 41.6, 43.8, 44.6, 48.7, 51.2, 56.9], "share": [0.325, 0.347, 0.328]}, "6": {"tot": [7.9, 9.6, 10.4, 13.3, 14.7, 16.3, 17.7, 19.7, 21.4, 22.9, 24.7, 26.2, 27.8, 36.7, 38.4, 41.3, 42.3, 46.7, 52.6], "share": [0.288, 0.348, 0.363]}, "12": {"tot": [2.5, 5.7, 6.9, 10.0, 10.8, 15.1, 16.7, 18.0, 18.2, 21.6, 22.6, 24.8, 27.3, 31.1, 34.7, 38.0, 39.0, 41.4, 44.5], "share": [0.303, 0.381, 0.316]}, "24": {"tot": [0.5, 2.6, 4.3, 5.2, 6.1, 7.5, 9.4, 11.1, 13.7, 14.6, 16.3, 19.4, 21.0, 21.8, 23.3, 25.8, 29.9, 33.8, 36.8], "share": [0.291, 0.367, 0.342]}, "36": {"tot": [0.1, 0.3, 0.9, 1.4, 2.9, 3.4, 4.6, 5.7, 7.2, 8.9, 9.7, 11.1, 12.5, 15.9, 17.4, 20.5, 25.9, 28.7, 36.9], "share": [0.293, 0.368, 0.339]}, "60": {"tot": [0.0, 0.0, 0.1, 0.2, 0.6, 1.1, 1.3, 1.8, 2.5, 3.1, 3.9, 4.9, 5.8, 7.2, 9.6, 11.1, 16.2, 19.1, 24.2], "share": [0.285, 0.368, 0.347]}};
 
 const at = (t, age) => { const ks = Object.keys(t).map(Number), a = Math.min(Math.max(...ks), Math.max(Math.min(...ks), Math.floor(age))); return t[a]; };
 const REF = Object.fromEntries(Object.entries(AVAIL).map(([p, t]) => [p, [24, 25, 26, 27, 28].reduce((s, a) => s + (t[a] ?? 0), 0) / 5]));
@@ -70,16 +79,11 @@ function levels(L) {
     for (const id of ids) if (M.players[id]?.position === pos && lvl[id] == null) lvl[id] = pts.length >= 6 ? Math.exp(A + B * Math.log(Math.max(50, fcOf(L, id)))) : 0;
   }
   const allLg = Object.values(lg).reduce((a, b) => a + b, 0), allPp = Object.values(pp).reduce((a, b) => a + b, 0);
-  L._lvl = { lvl, rookieFactor: allPp > 0 ? allLg / allPp : 1 };
+  const factor = Object.fromEntries(Object.keys(lg).map(p => [p, pp[p] > 0 ? lg[p] / pp[p] : null]));
+  L._lvl = { lvl, factor, rookieFactor: allPp > 0 ? allLg / allPp : 1 };
   return L._lvl;
 }
 const fcOf = (L, id) => L.fc?.byId?.get(String(id))?.value ?? 0;
-
-function rookiePts(classRank, yr) {
-  if (yr < 1) return 0;
-  const row = ROOKIE.find(([hi]) => classRank <= hi)[1];
-  return row[Math.min(3, yr)];
-}
 
 // a generic double round robin for a future season
 function schedule(rids, weeks) {
@@ -94,39 +98,68 @@ function schedule(rids, weeks) {
 
 const posOfF = id => id.startsWith?.('rk:') ? ['RB', 'WR'] : (M.players[id]?.fantasy_positions?.length ? M.players[id].fantasy_positions : [M.players[id]?.position]);
 
-// projected best-lineup points per week for a set of assets, k seasons from now
-export function lineupIn(L, assets, k) {
-  const { lvl, rookieFactor } = levels(L), n = L.teams.length, season = +L.season + k;
+const band = age => age < 24.5 ? 'young' : age < 28.5 ? 'prime' : 'old';
+const ppr = (L, pos) => levels(L).factor[pos] || levels(L).rookieFactor || 1;
+const dpVal = id => M.calcs?.dp?.one?.[id] ?? null;
+// a player's expected PPR points per week k seasons ahead (before drawing an outcome)
+function expected(L, id, pos, age, k) {
+  const { lvl } = levels(L), base = (lvl[id] || 0) / ppr(L, pos), aged = base * prodKeep(pos, age, k);
+  const bd = (pos === 'QB' ? 'QB' : '') + band(age), c = COEF[bd + Math.min(3, k)];
+  const v = dpVal(id);
+  let e = c[0] + c[1] * aged + (c.length > 2 ? c[2] * Math.log(Math.max(300, v ?? 300)) : 0);
+  if (c.length > 2 && v == null) e = aged; // no market value: fall back to the aged points
+  return Math.max(0, e);
+}
+// deterministic per (player, draw): the same draws on both sides of a trade preview
+function u01(key, d) { let x = 2166136261 ^ d; for (let i = 0; i < key.length; i++) x = Math.imul(x ^ key.charCodeAt(i), 16777619); x ^= x >>> 13; x = Math.imul(x, 0x5bd1e995); x ^= x >>> 15; return (x >>> 0) / 4294967296; }
+const qIdx = u => Math.min(18, Math.floor(u * 19));
+
+// projected best-lineup points per week for a set of assets, k seasons ahead, in draw d (d < 0: averages)
+export function lineupIn(L, assets, k, d = -1) {
+  const { rookieFactor } = levels(L), n = L.teams.length, season = +L.season + k;
   const ids = [], pts = {};
   for (const a of assets) {
     if (a.pick) {
       const [, y, rd] = a.key.split(':');
       const yr = season - +y + 1; if (yr < 1) continue;
       const slot = a.slot || (n + 1) / 2, rank = (+rd - 1) * n + slot;
-      const id = 'rk:' + a.key; ids.push(id); pts[id] = rookiePts(rank, yr) * rookieFactor;
+      const g = ROOKIE_Q[Object.keys(ROOKIE_Q).map(Number).find(hi => rank <= hi) ?? 60];
+      const tot = d < 0 ? g.tot.reduce((x, y) => x + y, 0) / g.tot.length : g.tot[qIdx(u01(a.key, d))];
+      const id = 'rk:' + a.key; ids.push(id); pts[id] = tot * g.share[Math.min(3, yr) - 1] * rookieFactor;
     } else {
       const id = String(a.id); const p = M.players[id]; if (!p) continue;
-      ids.push(id); pts[id] = (lvl[id] || 0) * prodKeep(p.position, (a.age || p.age || 26), k);
+      const pos = p.position, age = a.age || p.age || 26, e = expected(L, id, pos, age, k);
+      const r = d < 0 ? 1 : RATIO[(pos === 'QB' ? 'QB' : '') + band(age) + Math.min(3, k)][qIdx(u01(id, d))];
+      ids.push(id); pts[id] = e * r * ppr(L, pos);
     }
   }
   return bestLineup(ids, pts, posOfF, L.slots).total;
 }
 
+export const DRAWS = 200;
 // title odds for seasons 1..years ahead, every team; `swap` replaces a team's assets (trade previews)
 export function futureTitles(L, years, swap = {}) {
+  const plain = !Object.keys(swap).length;
+  if (plain && L._futT?.years === years) return L._futT.out;
   const rids = L.teams.map(t => t.rid);
   const weeks = []; for (let w = 1; w < L.playoffStart; w++) weeks.push(w);
-  const sched = schedule(rids, weeks);
+  const sched = schedule(rids, weeks), allW = [...weeks, L.playoffStart, L.playoffStart + 1, L.playoffStart + 2, L.playoffStart + 3];
   const out = Object.fromEntries(rids.map(r => [r, []]));
+  const assets = Object.fromEntries(L.teams.map(t => [t.rid, swap[t.rid] || teamAssets(L, t)]));
   for (let k = 1; k <= years; k++) {
-    const weekly = {};
-    for (const t of L.teams) { const v = lineupIn(L, swap[t.rid] || teamAssets(L, t), k); weekly[t.rid] = Object.fromEntries([...weeks, L.playoffStart, L.playoffStart + 1, L.playoffStart + 2, L.playoffStart + 3].map(w => [w, v])); }
     const p = { ...simParams() }, h = YEAR_SD * Math.sqrt(k);
     if (p.seasonVar) p.horizon = Math.sqrt((p.horizon || 0) ** 2 + h * h); else p.sdSeason = Math.sqrt((p.sdSeason || 0.06) ** 2 + h * h);
     p.injRates = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 };
-    const res = simulate({ teams: L.teams.map(t => ({ rid: t.rid, wins: 0, losses: 0, ties: 0, fpts: 0, ppts: 0 })), weekly, inj: {}, adj: {}, lineupFn: () => 0,
-      schedule: sched, regWeeks: weeks, firstWeek: 1, playoffStart: L.playoffStart, playoffTeams: L.playoffTeams, median: L.median }, { runs: 1200, params: p, seed: 4242 + k });
-    for (const r of rids) out[r].push(res[r].title);
+    const won = Object.fromEntries(rids.map(r => [r, 0]));
+    for (let d = 0; d < DRAWS; d++) {
+      const weekly = {};
+      for (const r of rids) { const v = lineupIn(L, assets[r], k, d); weekly[r] = Object.fromEntries(allW.map(w => [w, v])); }
+      const res = simulate({ teams: rids.map(rid => ({ rid, wins: 0, losses: 0, ties: 0, fpts: 0, ppts: 0 })), weekly, inj: {}, adj: {}, lineupFn: () => 0,
+        schedule: sched, regWeeks: weeks, firstWeek: 1, playoffStart: L.playoffStart, playoffTeams: L.playoffTeams, median: L.median }, { runs: 6, params: p, seed: 4242 + 1000 * k + d });
+      for (const r of rids) won[r] += res[r].title;
+    }
+    for (const r of rids) out[r].push(won[r] / DRAWS);
   }
+  if (plain) L._futT = { years, out };
   return out;
 }
