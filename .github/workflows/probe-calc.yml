@@ -1,0 +1,11 @@
+name: Probe calculators
+on: { workflow_dispatch: {} }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (X11; Linux x86_64) dynasty-hq personal"
+          for u in "https://dynasty-daddy.com/api/v1/player/all/today?market=0" "https://dynasty-daddy.com/api/v1/player/all/today" "https://keeptradecut.com/dynasty-rankings" "https://keeptradecut.com/robots.txt" "https://dynasty-daddy.com/robots.txt" "https://raw.githubusercontent.com/dynastyprocess/data/master/files/values.csv"; do
+            code=$(curl -s -L -o /tmp/o -w "%{http_code}" -A "$UA" "$u"); echo "== $code $u ($(wc -c </tmp/o) bytes)"; head -c 400 /tmp/o | tr '\n' ' '; echo; done
+          curl -s -A "$UA" https://keeptradecut.com/dynasty-rankings | grep -o "playersArray" | head -2
