@@ -57,7 +57,7 @@ const PPR = { pass_yd: 0.04, pass_td: 4, pass_int: -2, pass_2pt: 2, rush_yd: 0.1
 const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
 
 // each rostered player's healthy points per game in this league's scoring
-function levels(L) {
+export function levels(L) {
   if (L._lvl) return L._lvl;
   const lvl = {}, weeks = Object.keys(M.proj || {}).map(Number).filter(w => w >= M.week);
   const ids = L.teams.flatMap(t => t.players);
@@ -102,7 +102,7 @@ const band = age => age < 24.5 ? 'young' : age < 28.5 ? 'prime' : 'old';
 const ppr = (L, pos) => levels(L).factor[pos] || levels(L).rookieFactor || 1;
 const dpVal = id => M.calcs?.dp?.one?.[id] ?? null;
 // a player's expected PPR points per week k seasons ahead (before drawing an outcome)
-function expected(L, id, pos, age, k) {
+export function expected(L, id, pos, age, k) {
   const { lvl } = levels(L), base = (lvl[id] || 0) / ppr(L, pos), aged = base * prodKeep(pos, age, k);
   const bd = (pos === 'QB' ? 'QB' : '') + band(age), c = COEF[bd + Math.min(3, k)];
   const v = dpVal(id);
