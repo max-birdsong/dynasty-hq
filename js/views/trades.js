@@ -159,7 +159,7 @@ function equityPreview(L, d, partner) {
       { name: 'You after', color: '#2563eb', width: 3, points: pts(after[me.rid]) },
       { name: `${partner.owner} after`, color: '#f59e0b', width: 2, points: pts(after[partner.rid]) },
     ], { h: 170, yFmt: v => Math.round(v * 100) + '%', yMin: 0 }),
-    h('p', { class: 'small muted' }, 'This season from the simulator; later seasons projected from how each roster’s value ages, turned into title chances by share of league value. The total is the sum: expected titles over the four seasons.'));
+    h('p', { class: 'small muted' }, 'This season from the simulator; later seasons from each roster’s projected points (players aged with real production curves, picks as rookies) run through the same simulator. The total is the sum: expected titles over the four seasons.'));
 }
 
 // ---------- chance he accepts ----------

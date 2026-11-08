@@ -214,5 +214,5 @@ function equityTab(L) {
       ...yrs.map((y, i) => ({ key: 'y' + i, label: String(y), n: true, sort: r => r.c[i], fmt: (v, r) => Math.round(r.c[i] * 100) + '%' })),
       { key: 'tot', label: 'Expected titles', n: true, fmt: v => v.toFixed(2) },
     ], rows, { sortKey: 'tot', rowClass: r => r.isMe ? 'me' : '' }),
-    h('p', { class: 'small muted' }, `${yrs[0]} is the simulator's title odds. Later seasons are projected: each player's value is aged forward (QBs hold until about 32, RBs fade after 25, WRs after 28, TEs after 28.5), picks become rookies, and title chances follow each team's share of league value, pulled a little toward average for each season further out (nobody knows 2029). Use the Trades calculator to see how a deal moves your curve.`));
+    h('p', { class: 'small muted' }, `${yrs[0]} is the simulator's title odds. Later seasons use projected points, not market value: each player's scoring is aged with curves measured from every NFL season since 2010 (points per game by position and age, and how much of the season players that age actually play), picks become rookies who score what rookies drafted at that rank did, and each team's best lineup is run through the same simulator from 0-0, with more uncertainty for each year ahead (nobody knows 2029). Use the Trades calculator to see how a deal moves your curve.`));
 }
