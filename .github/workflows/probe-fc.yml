@@ -7,4 +7,6 @@ jobs:
       - run: |
           UA="Mozilla/5.0 dynasty-hq personal"
           curl -sL -A "$UA" https://fantasycalc.com/dynasty-trade-calculator -o /tmp/p.html; [ -s /tmp/p.html ] || curl -sL -A "$UA" https://fantasycalc.com/ -o /tmp/p.html; echo "page $(wc -c </tmp/p.html)"
+          grep -oE '<script[^>]+src="[^"]+"' /tmp/p.html | head -20
+          for js in $(grep -oE 'src="[^"]+\.js"' /tmp/p.html | sed 's/src="//; s/"$//' | sort -u); do case "$js" in http*) u="$js";; /*) u="https://fantasycalc.com$js";; *) u="https://fantasycalc.com/$js";; esac; curl -sL -A "$UA" "$u" -o /tmp/j.js; echo "js $u $(wc -c </tmp/j.js)"; if grep -qE '0\.6982|753|valueAdjust|adjustment' /tmp/j.js; then echo "== $u"; grep -oE '.{200}(0\.6982|valueAdjust|Adjustment|adjustment).{260}' /tmp/j.js | head -8; fi; done
           for js in $(grep -oE '(/_next/static|/static/js|/assets)/[^"]+\.js' /tmp/p.html | sort -u); do curl -s -A "$UA" "https://fantasycalc.com$js" -o /tmp/j.js; if grep -qE '0\.6982|753|valueAdjust|adjustment' /tmp/j.js; then echo "== $js"; grep -oE '.{160}(0\.6982|753|valueAdjust|Adjustment|adjustment).{220}' /tmp/j.js | head -6; fi; done
