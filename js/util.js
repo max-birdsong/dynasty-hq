@@ -63,7 +63,7 @@ export function lineChart(series, { w = 560, h: H = 180, yFmt = v => fmt(v), xLa
   const x0 = Math.min(...xs), x1 = Math.max(...xs);
   let y0 = yMin ?? Math.min(...ys), y1 = yMax ?? Math.max(...ys);
   if (y0 === y1) { y0 -= 1; y1 += 1; }
-  const L = 52, R = 10, T = 10, B = 24;
+  const L = 52, R = 24, T = 10, B = 24;
   const sx = x => L + (x1 === x0 ? (w - L - R) / 2 : (x - x0) / (x1 - x0) * (w - L - R));
   const sy = y => T + (1 - (y - y0) / (y1 - y0)) * (H - T - B);
   let svg = `<svg viewBox="0 0 ${w} ${H}" class="chart" role="img">`;

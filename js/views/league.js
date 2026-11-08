@@ -1,5 +1,6 @@
 import { M, leagueById, teamAssets, startersNow, playerWeekPts, simParams } from '../model.js';
 import { state } from '../state.js';
+import { curves, seasons, total } from '../equity.js';
 import { h, fmt, pct, sgn, lineChart, PALETTE } from '../util.js';
 import { table, adviceTag, modeTag, pctBar, posB, empty } from '../components.js';
 import { planPanel } from './trades.js';
@@ -26,13 +27,14 @@ export default function leagueView(id, tab = 'power') {
     ''));
   if (me) root.append(planPanel(L));
 
-  const tabs = [['power', 'Power rankings'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
+  const tabs = [['power', 'Power rankings'], ['equity', 'Win equity'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
   root.append(h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: k === tab ? 'on' : '', onclick: () => location.hash = `#/league/${id}/${k}` }, l))));
   const body = h('div', { class: 'panel' });
   root.append(body);
   if (tab === 'power') body.append(power(L));
   if (tab === 'roster') body.append(roster(L));
   if (tab === 'history') body.append(history(L));
+  if (tab === 'equity') body.append(equityTab(L));
   if (tab === 'picks') body.append(picks(L));
   if (tab === 'sim') body.append(simTab(L));
   return root;
@@ -188,4 +190,29 @@ function simTab(L) {
       { key: 'adj', label: 'Applied', n: true, fmt: v => v == null ? '–' : (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%' },
     ], rows, { sortKey: 'diff', rowClass: r => r.isMe ? 'me' : '' }));
   return wrap;
+}
+
+// win equity: title chances this season and the next three, for every team
+function equityTab(L) {
+  const c = curves(L), yrs = seasons(L);
+  const rows = L.teams.map(t => ({ t, owner: t.owner, isMe: t.isMe, c: c[t.rid], tot: total(c[t.rid]) })).sort((a, b) => b.tot - a.tot);
+  const rivals = rows.filter(r => !r.isMe).slice(0, 3);
+  const COLORS = ['#f59e0b', '#10b981', '#a855f7'];
+  const me = rows.find(r => r.isMe);
+  const pts = cv => cv.map((v, i) => [yrs[i], v]);
+  return h('div', {},
+    h('div', { class: 'panel' },
+      h('div', { class: 'small', style: { marginBottom: '6px' } }, me ? [h('b', {}, `You: ${me.tot.toFixed(2)} expected titles`), ` over ${yrs[0]}–${yrs.at(-1)} (an average team has ${(yrs.length / L.teams.length).toFixed(2)}). `,
+        me.c[0] > me.c.at(-1) * 1.5 ? 'Your equity is front-loaded: this is your window, and it closes.' : me.c.at(-1) > me.c[0] * 1.5 ? 'Your equity is back-loaded: you’re building toward later seasons.' : 'Your equity is fairly even across seasons.'] : ''),
+      lineChart([
+        ...(me ? [{ name: 'You', color: '#2563eb', width: 3, points: pts(me.c) }] : []),
+        ...rivals.map((r, i) => ({ name: r.owner, color: COLORS[i], width: 1.5, points: pts(r.c) })),
+        { name: 'Average team', color: '#9aa4b2', width: 1, points: yrs.map(y => [y, 1 / L.teams.length]) },
+      ], { yFmt: v => Math.round(v * 100) + '%', yMin: 0 })),
+    table([
+      { key: 'owner', label: 'Team', n: false, fmt: (v, r) => r.isMe ? h('b', {}, v) : v },
+      ...yrs.map((y, i) => ({ key: 'y' + i, label: String(y), n: true, sort: r => r.c[i], fmt: (v, r) => Math.round(r.c[i] * 100) + '%' })),
+      { key: 'tot', label: 'Expected titles', n: true, fmt: v => v.toFixed(2) },
+    ], rows, { sortKey: 'tot', rowClass: r => r.isMe ? 'me' : '' }),
+    h('p', { class: 'small muted' }, `${yrs[0]} is the simulator's title odds. Later seasons are projected: each player's value is aged forward (QBs hold until about 32, RBs fade after 25, WRs after 28, TEs after 28.5), picks become rookies, and title chances follow each team's share of league value, pulled a little toward average for each season further out (nobody knows 2029). Use the Trades calculator to see how a deal moves your curve.`));
 }

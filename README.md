@@ -77,3 +77,5 @@ Because the repo is public, anyone with the link can read `data/state.json`, whi
 **Waiver farm** (Waivers page): Find (free agents worth a spot now, with FAAB bid from what the league actually pays), Stash (backups to grab before the injury), Harvest (players you added, value then vs now, sell signals, buyers and the pick to ask for), Consolidate (packaging 3rds and 4ths into a better pick), Roster audit (dead spots, open taxi spots).
 
 **Chance he accepts:** a logistic model on the offer as he'd see it (edge on the calculator he trades by, whether it meets a need, favourites you're asking for, how active he is, past rejections, deal size). Starts from sensible weights and tunes itself on your logged offers once 5+ have an outcome. Suggestions rank by value × chance of acceptance.
+
+**Win equity curves:** title chances this season (simulator) and the next three (value aged forward by position, title chances by share of league value, shrunk toward average further out). League page "Win equity" tab for every team; the trade calculator overlays your curve before and after, plus expected titles over the four seasons.

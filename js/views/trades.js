@@ -3,7 +3,8 @@ import { state, logTrade, updateTrade, deleteTrade, settings, save } from '../st
 import { evalTrade, simDelta, suggest, tradeValue, calcEdge, calcValue } from '../trade.js';
 import { teamPlan } from '../plan.js';
 import { loadTrades, tradeSides, pickIndex } from '../owners.js';
-import { h, fmt, sgn, pct, toast, sleep, f1 } from '../util.js';
+import { h, fmt, sgn, pct, toast, sleep, f1, lineChart } from '../util.js';
+import { curves, seasons, total } from '../equity.js';
 import { preferredCalc } from '../affinity.js';
 import { pAccept, reasons, learnedFrom } from '../accept.js';
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
@@ -86,14 +87,14 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       r.memory.same ? h('div', { class: 'flag ' + (['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status) ? 'bad' : '') }, `You sent this exact offer on ${new Date(r.memory.same.created).toLocaleDateString()}: ${r.memory.same.status}`) : '',
       r.memory.overlap.filter(o => o !== r.memory.same).slice(0, 3).map(o => h('div', { class: 'flag' }, `Earlier ask for ${o.getNames.join(' + ')} (${new Date(o.created).toLocaleDateString()}): ${o.status}`))),
     h('div', { class: 'row', style: { marginTop: '10px' } },
-      !showSim && r.me ? h('button', { class: 'btn ghost small', onclick: async e => { e.target.disabled = true; simBox.replaceChildren(h('span', { class: 'muted small' }, 'Simulating…')); await sleep(20); const d = simDelta(L, r); d.L = L; simBox.replaceChildren(simTable(d, partner)); e.target.disabled = false; } }, 'Simulate playoff / title impact') : '',
+      !showSim && r.me ? h('button', { class: 'btn ghost small', onclick: async e => { e.target.disabled = true; simBox.replaceChildren(h('span', { class: 'muted small' }, 'Simulating…')); await sleep(20); const d = simDelta(L, r); d.L = L; d.r = r; simBox.replaceChildren(simTable(d, partner)); e.target.disabled = false; } }, 'Simulate playoff / title impact') : '',
       h('button', { class: 'btn small', onclick: () => { logTrade(toLog(r)); toast('Logged as sent'); } }, 'Log as sent')),
     simBox);
   // in the calculator, re-simulate the season automatically whenever the trade changes
   if (showSim && r.me) {
     simBox.replaceChildren(h('div', { class: 'muted small', style: { marginTop: '10px' } }, 'Simulating the season with and without this trade…'));
     clearTimeout(evalPanel._t);
-    evalPanel._t = setTimeout(() => { if (!simBox.isConnected) return; const d = simDelta(L, r); d.L = L; d.value = tradeValue(L, r, d); simBox.replaceChildren(simTable(d, partner)); }, 250);
+    evalPanel._t = setTimeout(() => { if (!simBox.isConnected) return; const d = simDelta(L, r); d.L = L; d.r = r; d.value = tradeValue(L, r, d); simBox.replaceChildren(simTable(d, partner)); }, 250);
   }
   return el;
 }
@@ -122,7 +123,8 @@ function simTable(d, partner) {
         v?.pickShift && Math.abs(v.pickShift) >= 50 ? ` (draft slot ${f1(L, v.pickShift)})` : '',
         dB >= 0.03 ? h('div', { class: 'pos' }, "Raises your bye odds: Sanderson's best reason to buy.") : dB <= -0.03 ? h('div', { class: 'neg' }, 'Costs you bye equity.') : '')),
     h('div', { class: 'sides', style: { marginTop: '10px' } }, team('You', d.me), team(partner.owner, d.them)),
-    h('p', { class: 'small muted', style: { marginTop: '6px' } }, 'Grey = now, coloured = after. Both seasons use the same luck; changes of 1% or less are noise.'));
+    h('p', { class: 'small muted', style: { marginTop: '6px' } }, 'Grey = now, coloured = after. Both seasons use the same luck; changes of 1% or less are noise.'),
+    d.r ? equityPreview(L, d, partner) : '');
 }
 
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
@@ -138,6 +140,26 @@ export function toLog(r) {
 }
 
 // ---------------- suggestions ----------------
+// ---------- win equity curve: this season and the next three, before vs after ----------
+function equityPreview(L, d, partner) {
+  const r = d.r, me = L.me;
+  const gk = new Set(r.give.map(a => a.key)), tk = new Set(r.get.map(a => a.key));
+  const mine = teamAssets(L, me), theirs = teamAssets(L, partner);
+  const before = curves(L), after = curves(L,
+    { [me.rid]: [...mine.filter(a => !gk.has(a.key)), ...r.get], [partner.rid]: [...theirs.filter(a => !tk.has(a.key)), ...r.give] },
+    { [me.rid]: d.me[1].title, [partner.rid]: d.them[1].title });
+  const yrs = seasons(L), pts = c => c.map((v, i) => [yrs[i], v]);
+  const tB = total(before[me.rid]), tA = total(after[me.rid]), pB = total(before[partner.rid]), pA = total(after[partner.rid]);
+  return h('div', { style: { marginTop: '14px' } },
+    h('div', { class: 'small' }, h('b', {}, 'Win equity, this season + next 3: '), `you ${tB.toFixed(2)} → `, h('b', { class: tA >= tB ? 'pos' : 'neg' }, tA.toFixed(2)), ` expected titles (${tA - tB >= 0 ? '+' : ''}${(tA - tB).toFixed(2)}) · ${partner.owner} ${pB.toFixed(2)} → ${pA.toFixed(2)}`),
+    lineChart([
+      { name: 'You now', color: '#9aa4b2', width: 1.5, points: pts(before[me.rid]) },
+      { name: 'You after', color: '#2563eb', width: 3, points: pts(after[me.rid]) },
+      { name: `${partner.owner} after`, color: '#f59e0b', width: 2, points: pts(after[partner.rid]) },
+    ], { h: 170, yFmt: v => Math.round(v * 100) + '%', yMin: 0 }),
+    h('p', { class: 'small muted' }, 'This season from the simulator; later seasons projected from how each roster’s value ages, turned into title chances by share of league value. The total is the sum: expected titles over the four seasons.'));
+}
+
 // ---------- chance he accepts ----------
 function acceptLine(L, r, partner) {
   const box = h('div', { style: { marginTop: '10px' } });
