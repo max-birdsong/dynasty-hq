@@ -12,3 +12,4 @@ jobs:
           for js in $(grep -oE '(/_next/static|/static/js|/assets)/[^"]+\.js' /tmp/p.html | sort -u); do curl -s -A "$UA" "https://fantasycalc.com$js" -o /tmp/j.js; if grep -qE '0\.6982|753|valueAdjust|adjustment' /tmp/j.js; then echo "== $js"; grep -oE '.{160}(0\.6982|753|valueAdjust|Adjustment|adjustment).{220}' /tmp/j.js | head -6; fi; done
           curl -sL -A "$UA" https://fantasycalc.com/main-O6W3MZSK.js -o /tmp/m.js
           for c in $(grep -oE 'chunk-[A-Z0-9]+\.js' /tmp/m.js | sort -u); do curl -sL -A "$UA" "https://fantasycalc.com/$c" -o /tmp/c.js; if grep -qE '0\.6982|valueAdjust|Adjustment|adjustment|\b753\b' /tmp/c.js; then echo "== $c"; grep -oE '.{250}(0\.6982|valueAdjust|Adjustment|adjustment|[^0-9]753[^0-9]).{300}' /tmp/c.js | head -6; fi; done
+          curl -sL -A "$UA" https://fantasycalc.com/chunk-H3SE54JA.js -o /tmp/h.js; grep -oE 'function Qi\(.{0,700}' /tmp/h.js | head -2
