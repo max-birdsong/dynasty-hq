@@ -60,8 +60,15 @@ export function calcValue(L, a, k) {
   return a.pick ? (c.picks[f][calcPickName(L, a)] || 0) : (c[f][a.id] || 0);
 }
 // the partner's gain on calculator k, as a share of the bigger side (positive = he wins)
+// Like the calculators themselves, a pile of pieces is worth less than one star: KeepTradeCut and DynastyProcess add a
+// "value adjustment" for the side getting the best player, FantasyCalc its own 2-for-1 rule. For KTC / DP we compare
+// each side as (sum of value^p)^(1/p), which matches KTC's adjustment closely (e.g. Reed + Dobbins + a late 3rd,
+// 7,732 summed, comes out well below Garrett Wilson's 5,783 plus his +5,148 adjustment); for FC we use its own rule.
+const STUD = { ktc: 2.4, dp: 2 }; // 2.4 reproduces KTC's own verdict on a real 3-for-1 (-29% vs KTC -29%)
+const sideValue = (vals, p) => Math.pow(vals.reduce((s, v) => s + Math.pow(Math.max(0, v), p), 0), 1 / p);
 export function calcEdge(L, give, get, k) {
-  const g = give.reduce((s, a) => s + (calcValue(L, a, k) || 0), 0), t = get.reduce((s, a) => s + (calcValue(L, a, k) || 0), 0);
+  if (k === 'fc') { const f = fcSides(give.map(a => a.fc || 0), get.map(a => a.fc || 0)); return f.partnerMargin / Math.max(1, f.A, f.B); }
+  const p = STUD[k] || 2, g = sideValue(give.map(a => calcValue(L, a, k) || 0), p), t = sideValue(get.map(a => calcValue(L, a, k) || 0), p);
   return (g - t) / Math.max(1, g, t);
 }
 
@@ -133,7 +140,7 @@ export function checkRules(L, partner, r) {
   // he asked for exactly this (owner card "Looking for"): no rebuilder premium, no age objections
   const want = rulesOf(partner.ownerId, L.id)?.want;
   const asked = want === 'dump' ? (r.them ? r.them.rosAfter < r.them.rosBefore : true) : want && r.give.some(a => !a.pick) && r.give.every(a => a.pick || (want === 'vets' ? true : want === 'youth' ? (a.age || 30) <= 24 : a.pos === want));
-  const need = want === 'dump' && asked ? -0.1 * Math.max(r.fc.A, r.fc.B) - (r.fc.adjB || 0) : mode === 'rebuild' && !tankHelp && !asked ? R.rebuilderFcMargin * Math.max(r.fc.A, r.fc.B) : 0;
+  const need = want === 'dump' && asked ? -0.1 * Math.max(r.fc.A, r.fc.B) : mode === 'rebuild' && !tankHelp && !asked ? R.rebuilderFcMargin * Math.max(r.fc.A, r.fc.B) : 0;
   if (r.fc.partnerMargin < need) f.push({ bad: true, msg: mode === 'rebuild' && need > 0 ? `Rebuilder needs a clear FC win (≥ +${Math.round(need)})` : 'Partner loses on FantasyCalc' });
   if (mode === 'rebuild' && !asked) {
     for (const a of r.give) if (tooOldFor(a, R)) f.push({ bad: true, msg: `${a.name} is ${Math.floor(a.age)}: too few years left for a rebuilder` });
@@ -333,9 +340,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     const cands = [];
     for (const gs of want ? [1, 2, 3] : [1, 2]) for (const ts of [1, 2]) {
       for (const g of combos(myPool, gs)) for (const t of combos(theirs, ts)) {
-        // a tanker dumping points doesn't care about roster spots (no 2-for-1 markdown) and takes a little under market
-        const fc = want === 'dump' ? (() => { const A = sum(g.map(a => a.fc)), B = sum(t.map(a => perceived(a, p))); return { A, B, partnerMargin: A - B }; })()
-          : fcSides(g.map(a => a.fc * biasFactor(p.ownerId, a)), t.map(a => perceived(a, p)));
+        // a tanker dumping points takes a little under market (but piles of pieces still don't add up to a star)
+        const fc = fcSides(g.map(a => a.fc * biasFactor(p.ownerId, a)), t.map(a => perceived(a, p)));
         // people aren't ATMs: owners overvalue what they already have, so they need to come out a bit ahead
         // ...unless they've put the player on the block: then they're a willing seller and fair is enough
         const onBlock = t.some(a => a.id && blockIds.has(String(a.id)));

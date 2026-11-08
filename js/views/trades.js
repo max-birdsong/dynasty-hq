@@ -187,10 +187,9 @@ function marketVerdicts(L, r, partner) {
     const pickName = a => { const [, y, rd] = a.key.split(':'); const tier = a.slot && +y === +L.season + 1 ? (a.slot <= n / 3 ? 'Early' : a.slot <= 2 * n / 3 ? 'Mid' : 'Late') : 'Mid'; return `${y} ${tier} ${ORD_N[rd] || rd + 'th'}`; };
     const pc = preferredCalc(partner.ownerId);
     const rows = [['ktc', 'KeepTradeCut'], ['fc', 'FantasyCalc'], ['dp', 'DynastyProcess']].filter(([k]) => k === 'fc' || c[k]).map(([k, label]) => {
-      // FantasyCalc: the site's own league-specific values (Dynasty Daddy's FC feed has no picks)
-      const v = k === 'fc' ? (a => a.fc || 0) : (a => a.pick ? (c[k].picks[sf][pickName(a)] || 0) : (c[k][sf][a.id] || 0));
-      const give = r.give.reduce((s, a) => s + v(a), 0), get = r.get.reduce((s, a) => s + v(a), 0);
-      return { k, label, d: (get - give) / Math.max(1, give, get) };
+      // same math as the calculators themselves, value adjustment included (a pile of pieces < one star)
+      M.calcs ||= c;
+      return { k, label, d: -calcEdge(L, r.give, r.get, k) };
     });
     rows.push({ k: 'tat', label: 'Sanderson (your view)', d: (r.get.reduce((s, a) => s + (a.tat || 0), 0) - r.give.reduce((s, a) => s + (a.tat || 0), 0)) / Math.max(1, r.give.reduce((s, a) => s + (a.tat || 0), 0), r.get.reduce((s, a) => s + (a.tat || 0), 0)) });
     // one click: add the picks his calculator values most per Sanderson point they cost you, until it's fair for him
