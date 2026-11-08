@@ -457,24 +457,25 @@ export function spreadValue(L, y, ord, center, sd) {
 // (Sanderson value, discounted for age), weakest first
 // share of value a player keeps over the next year, by position and age (at the start of that year). Measured, not
 // guessed: DynastyProcess values every November 2019-2025 against the next November, value-weighted, each year
-// rescaled to the same total, players who fell out of the rankings counted as zero, ages smoothed over +-1 year.
+// rescaled to the same total, players who fell out of the rankings counted as zero, ages smoothed over +-1 year (about 900 player-seasons).
+// Splitting further (value rank, years in the league, last year's trend) did not predict better out of sample.
 // The average rosterable player keeps 84%: busts and decline are refilled by each new rookie class (picks).
 export const KEEP = {
-  QB: { 21: 0.85, 22: 0.93, 23: 0.96, 24: 0.94, 25: 0.92, 26: 0.92, 27: 0.86, 28: 0.84, 29: 0.89, 30: 0.84, 31: 0.72, 32: 0.69, 33: 0.61, 34: 0.44 },
-  RB: { 21: 0.96, 22: 0.89, 23: 0.84, 24: 0.85, 25: 0.86, 26: 0.75, 27: 0.59, 28: 0.53, 29: 0.5 },
-  WR: { 21: 1.04, 22: 1.03, 23: 0.98, 24: 0.93, 25: 0.87, 26: 0.78, 27: 0.7, 28: 0.69, 29: 0.63, 30: 0.48, 31: 0.36, 32: 0.36 },
-  TE: { 22: 0.93, 23: 0.95, 24: 1.0, 25: 1.0, 26: 0.8, 27: 0.6, 28: 0.57, 29: 0.56 },
+  QB: { 21: 0.9, 22: 0.97, 23: 0.98, 24: 0.93, 25: 0.91, 26: 0.91, 27: 0.86, 28: 0.84, 29: 0.9, 30: 0.91, 31: 0.87, 32: 0.79, 33: 0.64, 34: 0.56, 35: 0.54 },
+  RB: { 21: 0.93, 22: 0.86, 23: 0.81, 24: 0.81, 25: 0.83, 26: 0.73, 27: 0.55, 28: 0.49 },
+  WR: { 21: 1.08, 22: 1.06, 23: 1.0, 24: 0.94, 25: 0.87, 26: 0.79, 27: 0.72, 28: 0.69, 29: 0.61, 30: 0.47, 31: 0.37, 32: 0.36 },
+  TE: { 22: 1.01, 23: 1.03, 24: 1.01, 25: 0.95, 26: 0.83, 27: 0.69, 28: 0.6, 29: 0.58 },
 };
-// Studs age better: in the same data, players ranked in the top 24 overall kept far more past their prime than the
-// rest (RBs and WRs ~78-80% a year vs ~55%, QBs ~94% vs ~66%). Young studs get no boost (from the top, the usual move
-// is down). `elite` = he is currently a top-24 player.
-const ELITE_FLOOR = { QB: 0.9, RB: 0.78, WR: 0.78, TE: 0.78 };
+// Studs age a little better: with age and position held fixed, a top-24 player past the young years kept about 5
+// points more of his value a year than others (90% range -1 to +14 points, so weak evidence). Young studs get nothing.
+// `elite` = he is currently a top-24 player.
+const STUD_BONUS = 0.05;
 const YOUNG = { QB: 27, RB: 24, WR: 25, TE: 25 };
 export function keepRate(pos, age, elite = false) {
   const t = KEEP[pos] || KEEP.WR, ks = Object.keys(t).map(Number);
   const a = Math.floor(age), lo = Math.min(...ks), hi = Math.max(...ks);
   const base = t[Math.min(hi, Math.max(lo, a))];
-  return elite && age >= (YOUNG[pos] ?? 25) ? Math.max(base, ELITE_FLOOR[pos] ?? 0.78) : base;
+  return elite && age >= (YOUNG[pos] ?? 25) ? Math.min(1, base + STUD_BONUS) : base;
 }
 // the market value of the 24th-best player in a league (the stud line)
 export function studLine(L) {
