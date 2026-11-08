@@ -1,7 +1,7 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
 import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies, CAREER_END, playerWeekPts } from './model.js';
 import { settings, state } from './state.js';
-import { affinityFlags, stance } from './affinity.js';
+import { affinityFlags, stance, biasFactor } from './affinity.js';
 import { simulate } from './sim.js';
 import { teamPlan, winNowValue } from './plan.js';
 import { sum } from './util.js';
@@ -40,6 +40,8 @@ export function perceived(a, partner) {
   let v = a.pick && a.slot && a.fcLooks ? (a.ask ?? a.fcLooks) : a.fc;
   // micro-market: in leagues where picks have traded above or below market, owners price them that way
   if (a.pick && partner?._pickIndex) v *= partner._pickIndex;
+  // and this owner's own lean (overvalues RBs, undervalues picks...), from his trade history
+  if (partner?.ownerId) v *= biasFactor(partner.ownerId, a);
   return v;
 }
 
@@ -72,7 +74,7 @@ export function tradeType(L, r) {
 
 export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}) {
   const give = giveKeys.map(k => asset(L, k)), get = getKeys.map(k => asset(L, k));
-  const fc = fcSides(give.map(a => a.fc), get.map(a => perceived(a, partner)));
+  const fc = fcSides(give.map(a => a.fc * biasFactor(partner.ownerId, a)), get.map(a => perceived(a, partner)));
   const tatGain = sum(get.map(a => a.tat)) - sum(give.map(a => a.tat));
   const r = { L, partner, giveKeys, getKeys, give, get, fc, tatGain, flags: [] };
   // how the trade shifts your three currencies (picks / this season's production / future years)
@@ -281,7 +283,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     const cands = [];
     for (const gs of [1, 2]) for (const ts of [1, 2]) {
       for (const g of combos(mine, gs)) for (const t of combos(theirs, ts)) {
-        const fc = fcSides(g.map(a => a.fc), t.map(a => perceived(a, p)));
+        const fc = fcSides(g.map(a => a.fc * biasFactor(p.ownerId, a)), t.map(a => perceived(a, p)));
         // people aren't ATMs: owners overvalue what they already have, so they need to come out a bit ahead
         // ...unless they've put the player on the block: then they're a willing seller and fair is enough
         const onBlock = t.some(a => a.id && blockIds.has(String(a.id)));

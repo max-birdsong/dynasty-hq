@@ -2,7 +2,7 @@ import { M, leagueById } from '../model.js';
 import { state, noteOf, setNote } from '../state.js';
 import { profiles, pickIndex } from '../owners.js';
 import { h, fmt, sgn, f1 } from '../util.js';
-import { loadAffinity, portfolio } from '../affinity.js';
+import { loadAffinity, portfolio, tendencies } from '../affinity.js';
 import { modeTag, posB, empty, table } from '../components.js';
 
 export default async function ownersView(id, ownerId) {
@@ -47,13 +47,14 @@ export default async function ownersView(id, ownerId) {
 // across every league you share with this owner: who he owns a lot of, buys and sells
 function portfolioLine(t) {
   if (t.isMe) return '';
-  const pf = portfolio(t.ownerId);
-  if (!pf || (!pf.core.length && !pf.buying.length && !pf.selling.length)) return '';
+  const pf = portfolio(t.ownerId), td = tendencies(t.ownerId);
+  if ((!pf || (!pf.core.length && !pf.buying.length && !pf.selling.length)) && !td.length) return '';
   const nmS = r => r.name.split(' ').slice(-1)[0];
   return h('div', { class: 'small', style: { marginTop: '6px' } },
-    pf.core.length ? h('div', {}, h('b', {}, 'Owns a lot of: '), pf.core.map(r => `${nmS(r)} ×${r.own}`).join(', ')) : '',
-    pf.buying.length ? h('div', {}, h('b', { class: 'pos' }, 'Buying lately: '), pf.buying.map(nmS).join(', ')) : '',
-    pf.selling.length ? h('div', {}, h('b', { class: 'neg' }, 'Selling lately: '), pf.selling.map(nmS).join(', ')) : '');
+    td.length ? h('div', { class: 'row', style: { gap: '4px', marginBottom: '4px' } }, td.map(x => h('span', { class: 'tag ' + (x.v > 0 ? 'push' : 'tank'), title: x.detail }, x.label))) : '',
+    !pf ? '' : pf.core.length ? h('div', {}, h('b', {}, 'Owns a lot of: '), pf.core.map(r => `${nmS(r)} ×${r.own}`).join(', ')) : '',
+    !pf ? '' : pf.buying.length ? h('div', {}, h('b', { class: 'pos' }, 'Buying lately: '), pf.buying.map(nmS).join(', ')) : '',
+    !pf ? '' : pf.selling.length ? h('div', {}, h('b', { class: 'neg' }, 'Selling lately: '), pf.selling.map(nmS).join(', ')) : '');
 }
 
 function card(L, p, S) {
