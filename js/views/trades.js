@@ -1,5 +1,5 @@
 import { M, leagueById, teamAssets, asset, isPick } from '../model.js';
-import { state, logTrade, updateTrade, deleteTrade, settings, save, rawRules, setRules } from '../state.js';
+import { state, logTrade, updateTrade, deleteTrade, settings, save, rawRules, setRules, rulesOf } from '../state.js';
 import { evalTrade, simDelta, suggest, tradeValue, calcEdge, calcValue } from '../trade.js';
 import { teamPlan } from '../plan.js';
 import { loadTrades, tradeSides, pickIndex } from '../owners.js';
@@ -233,7 +233,7 @@ function suggestions(L) {
   const S = settings();
   const box = h('div');
   const out = h('div');
-  const run = async (leagues, mode = 'value') => {
+  const run = async (leagues, mode = 'value', partners = null) => {
     if (!M.calcs) M.calcs = await loadCalcs();
     await import('../affinity.js').then(a => a.loadAffinity()).catch(() => {});
     out.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), mode === 'title' ? 'Simulating the season for each candidate trade (about 20 seconds)…' : 'Searching trades…'));
@@ -244,7 +244,7 @@ function suggestions(L) {
       const pi = await pickIndex(lg).catch(() => null);
       lg.pickIndex = pi;
       for (const t of lg.teams) t._pickIndex = pi?.index || null;
-      all = all.concat(suggest(lg, { mode })); await sleep(0);
+      all = all.concat(suggest(lg, { mode, partners })); await sleep(0);
     }
     all.sort((a, b) => b.score - a.score);
     if (!all.length && mode === 'title') { out.replaceChildren(empty('No trade found that adds at least 1% title odds at an acceptable long-term price.')); return; }
@@ -264,6 +264,7 @@ function suggestions(L) {
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues'), h('button', { class: 'btn ghost', title: 'Trades ranked by how much they raise your title odds, with what each costs long-term', onclick: () => run([L], 'title') }, '🏆 Biggest title swings')))),
     out);
   box.insertBefore(blockPanel(L), box.firstChild);
+  { const rq = requestsPanel(L, run); if (rq) box.insertBefore(rq, box.firstChild); }
   box.insertBefore(planPanel(L, { compact: true }), box.firstChild);
   if (!state().tatSets.length) out.append(h('div', { class: 'panel' }, 'Upload Sanderson rankings on the ', h('a', { href: '#/values' }, 'Values page'), ' first. Without them every player is valued at half his FC value, so suggestions are meaningless.'));
   return box;
@@ -271,6 +272,17 @@ function suggestions(L) {
 
 // Sleeper doesn't make trade blocks public, so they're marked by hand. Listed players are always considered,
 // and the owner only needs a fair deal (no endowment premium), since they've said they want to sell.
+// requests from the league chat / DMs ("looking for vets for picks"), set on owner cards
+function requestsPanel(L, run) {
+  const reqs = L.teams.filter(t => !t.isMe).map(t => ({ t, r: rulesOf(t.ownerId, L.id) })).filter(x => x.r?.want);
+  if (!reqs.length) return null;
+  const label = w => w === 'vets' ? 'vets for picks' : w === 'youth' ? 'young players' : `a ${w}`;
+  return h('div', { class: 'panel', style: { borderLeft: '3px solid var(--accent)' } }, h('h2', {}, '🎯 Requests in ' + L.nick),
+    reqs.map(({ t, r }) => h('div', { class: 'row spread', style: { padding: '4px 0' } },
+      h('span', { class: 'small' }, h('b', {}, t.owner), ` is looking for ${label(r.want)}`, h('span', { class: 'muted' }, ` · until ${new Date(r.untilWant).toLocaleDateString()}`)),
+      h('button', { class: 'btn small', onclick: () => run([L], 'value', [t.rid]) }, 'Find trades'))));
+}
+
 function blockPanel(L) {
   const S = settings();
   const list = () => ((S.block ||= {})[L.id] ||= []);

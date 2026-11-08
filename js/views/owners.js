@@ -71,7 +71,13 @@ function rulesBox(L, t) {
       h('div', { class: 'row', style: { gap: '12px', marginTop: '4px', flexWrap: 'wrap', alignItems: 'center' } }, h('b', {}, `In ${L.nick}:`),
         ...[['noFirsts', 'won’t trade his 1sts'], ['noPicks', 'won’t trade any of his picks'], ['paused', 'not trading right now']].map(([k, l]) =>
           h('label', {}, h('input', { type: 'checkbox', checked: !expired(G) && !!G[k], onchange: e => save('league', { [k]: e.target.checked }) }), ' ' + l)),
-        (G.noFirsts || G.noPicks || G.paused) && !expired(G) ? h('span', {}, 'for ', dur('league')) : ''));
+        (G.noFirsts || G.noPicks || G.paused) && !expired(G) ? h('span', {}, 'for ', dur('league')) : ''),
+      // what he asked for (league chat, DMs): suggestions build around it
+      (() => { const W = raw.wants?.[L.id] || {}, on = W.want && !expired(W);
+        return h('div', { class: 'row', style: { gap: '8px', marginTop: '4px', alignItems: 'center', flexWrap: 'wrap' } }, h('b', {}, `Looking for in ${L.nick}:`),
+          h('select', { onchange: e => { const v = e.target.value; setRules(t.ownerId, { ...raw, wants: { ...(raw.wants || {}), [L.id]: v ? { want: v, durKey: '14', until: Date.now() + 14 * 864e5 } : null } }); draw(); } },
+            [['', 'nothing in particular'], ['vets', 'vets (pays with picks)'], ['youth', 'young players'], ['QB', 'a QB'], ['RB', 'an RB'], ['WR', 'a WR'], ['TE', 'a TE']].map(([v, l]) => h('option', { value: v, selected: (on ? W.want : '') === v }, l))),
+          on ? h('span', { class: 'muted' }, `until ${new Date(W.until).toLocaleDateString()} · `, h('a', { href: `#/trades/${L.id}/${t.rid}/suggest` }, 'find trades →')) : ''); })());
   };
   draw();
   return box;

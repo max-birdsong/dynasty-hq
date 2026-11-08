@@ -113,8 +113,10 @@ export function rulesOf(id, leagueId) {
   const r = S.ownerNotes[id]?.rules;
   if (!r) return null;
   const p = live(r.players), l = leagueId ? live(r.leagues?.[leagueId]) : null;
-  if (!p && !l) return null;
-  return { noPlayers: p?.noPlayers || [], noFirsts: !!l?.noFirsts, noPicks: !!l?.noPicks, paused: !!l?.paused, untilPlayers: p?.until ?? null, untilLeague: l?.until ?? null };
+  const w = live(r.wants?.[leagueId]);
+  if (!p && !l && !w) return null;
+  return { noPlayers: p?.noPlayers || [], noFirsts: !!l?.noFirsts, noPicks: !!l?.noPicks, paused: !!l?.paused, untilPlayers: p?.until ?? null, untilLeague: l?.until ?? null,
+    want: w?.want || null, untilWant: w?.until ?? null };
 }
 export const rawRules = id => S.ownerNotes[id]?.rules || {};
 export function setRules(id, rules) { S.ownerNotes[id] = { text: '', ...(S.ownerNotes[id] || {}), rules, t: Date.now() }; save(); }
