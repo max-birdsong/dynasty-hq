@@ -2,6 +2,7 @@
 import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies, CAREER_END, playerWeekPts } from './model.js';
 import { settings, state } from './state.js';
 import { affinityFlags, stance, biasFactor, preferredCalc } from './affinity.js';
+import { pAccept } from './accept.js';
 import { simulate } from './sim.js';
 import { teamPlan, winNowValue } from './plan.js';
 import { sum } from './util.js';
@@ -383,6 +384,11 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0) + (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
     r.dTitle = r.sim.me[1].title - r.sim.me[0].title;
     if (T) r.score = r.dTitle;
+  }
+  // rank by expected value: value to you × chance he accepts (title-swing mode keeps its own order)
+  for (const r of out) {
+    const a = pAccept(L, r.partner, r); r.pAccept = a.p; r.acceptF = a.f;
+    if (!T) r.score *= a.p / 0.3; // scaled so an average-odds offer keeps its score
   }
   // keep the list varied: each asset appears in at most two suggestions
   const used = new Map(), final = [];

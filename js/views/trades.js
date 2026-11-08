@@ -5,6 +5,7 @@ import { teamPlan } from '../plan.js';
 import { loadTrades, tradeSides, pickIndex } from '../owners.js';
 import { h, fmt, sgn, pct, toast, sleep, f1 } from '../util.js';
 import { preferredCalc } from '../affinity.js';
+import { pAccept, reasons, learnedFrom } from '../accept.js';
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
 
 const STATUSES = ['sent', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
@@ -81,6 +82,7 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       r.flags.some(f => !f.info) ? r.flags.filter(f => !f.info).map(f => h('div', { class: 'flag ' + (f.bad ? 'bad' : f.warn ? 'warnf' : '') }, (f.bad ? '✕ ' : f.warn ? '⚠️ ' : '• ') + f.msg)) : h('div', { class: 'flag ok' }, '✓ Fits the partner and your lineup rules'),
       r.flags.filter(f => f.info).map(f => h('div', { class: 'flag' }, f.msg)),
       marketVerdicts(L, r, partner),
+      acceptLine(L, r, partner),
       r.memory.same ? h('div', { class: 'flag ' + (['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status) ? 'bad' : '') }, `You sent this exact offer on ${new Date(r.memory.same.created).toLocaleDateString()}: ${r.memory.same.status}`) : '',
       r.memory.overlap.filter(o => o !== r.memory.same).slice(0, 3).map(o => h('div', { class: 'flag' }, `Earlier ask for ${o.getNames.join(' + ')} (${new Date(o.created).toLocaleDateString()}): ${o.status}`))),
     h('div', { class: 'row', style: { marginTop: '10px' } },
@@ -130,10 +132,25 @@ export function toLog(r) {
     leagueId: r.L.id, leagueNick: r.L.nick, partnerOwnerId: r.partner.ownerId, partnerName: r.partner.owner, partnerRid: r.partner.rid,
     give: r.giveKeys, get: r.getKeys, giveNames: r.give.map(a => a.name), getNames: r.get.map(a => a.name),
     fcMargin: Math.round(r.fc.partnerMargin), tatGain: Math.round(r.tatGain),
+    // what the acceptance model saw when you sent it, so it can learn from the outcome
+    ...(() => { try { const a = pAccept(r.L, r.partner, r); return { features: a.f, pAccept: +a.p.toFixed(3) }; } catch { return {}; } })(),
   };
 }
 
 // ---------------- suggestions ----------------
+// ---------- chance he accepts ----------
+function acceptLine(L, r, partner) {
+  const box = h('div', { style: { marginTop: '10px' } });
+  loadCalcs().then(c => {
+    M.calcs ||= c;
+    const { p, f } = pAccept(L, partner, r), n = learnedFrom();
+    box.replaceChildren(h('div', {}, h('b', {}, `Chance ${partner.owner} accepts: ~${Math.round(p * 100)}%`),
+      h('span', { class: 'muted small' }, n >= 5 ? ` (tuned on ${n} of your logged offers)` : ' (starting estimate: log your offers and outcomes to tune it)')),
+      h('ul', { class: 'small', style: { margin: '4px 0 0', paddingLeft: '18px' } }, reasons(f).map(x => h('li', {}, x))));
+  });
+  return box;
+}
+
 // ---------- market verdicts: the trade on each calculator ----------
 let calcsP = null;
 const loadCalcs = () => calcsP || (calcsP = fetch('data/calcs.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null));
@@ -270,6 +287,8 @@ function suggestionCard(r) {
       r.them ? ` · theirs ${sgn(r.them.rosAfter - r.them.rosBefore, 1)}` : ''),
     h('div', { class: 'small muted', style: { marginTop: '4px' } }, h('b', {}, r.mixLabel), ` · picks ${sgn(r.mix.picks)}, this season ${sgn(r.mix.now)}, future years ${sgn(r.mix.future)}`),
     r.flags.filter(f => f.warn).map(f => h('div', { class: 'small warn' }, '⚠️ ' + f.msg)),
+    r.pAccept != null ? h('div', { class: 'small', style: { cursor: 'pointer' }, title: reasons(r.acceptF).join('\n'), onclick: () => toast(reasons(r.acceptF).join(' · ')) },
+      h('b', {}, `~${Math.round(r.pAccept * 100)}% he accepts`), h('span', { class: 'muted' }, ' · ' + (reasons(r.acceptF)[0] || ''))) : '',
     r.calcPref ? h('div', { class: 'small pos' }, `Fair for ${r.partner.owner} on ${({ ktc: 'KeepTradeCut', dp: 'DynastyProcess' })[r.calcPref]}, the calculator he trades by` + (r.sweetened?.length ? `: sweetened with ${r.sweetened.join(' + ')}` : '') + '.') : '',
     r.flags.filter(f => f.info).map(f => h('div', { class: 'small muted' }, f.msg)),
     r.memory.overlap.length ? h('div', { class: 'small warn' }, `Asked for ${r.memory.overlap[0].getNames.join(' + ')} before: ${r.memory.overlap[0].status}`) : '',

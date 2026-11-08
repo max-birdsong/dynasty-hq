@@ -75,3 +75,5 @@ Because the repo is public, anyone with the link can read `data/state.json`, whi
 **What a title is worth:** worked out per league from its values: long-term value buys title chances over the next few seasons, roughly in proportion to value share (the exponent is fitted from your leagues). Typically 20+ base 1sts per title, so 1% of title odds is worth a few tenths of a 1st. "Extend the window" trades add long-term value while costing at most 2% title odds.
 
 **Waiver farm** (Waivers page): Find (free agents worth a spot now, with FAAB bid from what the league actually pays), Stash (backups to grab before the injury), Harvest (players you added, value then vs now, sell signals, buyers and the pick to ask for), Consolidate (packaging 3rds and 4ths into a better pick), Roster audit (dead spots, open taxi spots).
+
+**Chance he accepts:** a logistic model on the offer as he'd see it (edge on the calculator he trades by, whether it meets a need, favourites you're asking for, how active he is, past rejections, deal size). Starts from sensible weights and tunes itself on your logged offers once 5+ have an outcome. Suggestions rank by value × chance of acceptance.
