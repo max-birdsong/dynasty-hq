@@ -276,7 +276,7 @@ function suggestions(L) {
 function requestsPanel(L, run) {
   const reqs = L.teams.filter(t => !t.isMe).map(t => ({ t, r: rulesOf(t.ownerId, L.id) })).filter(x => x.r?.want);
   if (!reqs.length) return null;
-  const label = w => w === 'vets' ? 'vets for picks' : w === 'youth' ? 'young players' : `a ${w}`;
+  const label = w => w === 'vets' ? 'vets for picks' : w === 'dump' ? 'to dump points (tanking): buy his producers with picks or injured / bench players' : w === 'youth' ? 'young players' : `a ${w}`;
   return h('div', { class: 'panel', style: { borderLeft: '3px solid var(--accent)' } }, h('h2', {}, '🎯 Requests in ' + L.nick),
     reqs.map(({ t, r }) => h('div', { class: 'row spread', style: { padding: '4px 0' } },
       h('span', { class: 'small' }, h('b', {}, t.owner), ` is looking for ${label(r.want)}`, h('span', { class: 'muted' }, ` · until ${new Date(r.untilWant).toLocaleDateString()}`)),

@@ -2,7 +2,7 @@
 // offer log (accepted vs rejected / ignored / withdrawn): Sleeper never shows rejected offers, so your log is the
 // only data that can teach it. Each logged offer stores the features below at the time you sent it.
 import { M } from './model.js';
-import { state } from './state.js';
+import { state, rulesOf } from './state.js';
 import { behaviour, preferredCalc, stance } from './affinity.js';
 import { calcEdge } from './trade.js';
 
@@ -15,6 +15,9 @@ const sig = x => 1 / (1 + Math.exp(-x));
 export function features(L, partner, r) {
   const pc = preferredCalc(partner.ownerId);
   const edge = pc && pc !== 'fc' && M.calcs?.[pc] ? calcEdge(L, r.give, r.get, pc) : (r.fc ? r.fc.partnerMargin / Math.max(1, r.fc.A, r.fc.B) : 0);
+  // a tanker dumping points values shedding them: up to 10% under market still reads as fair to him
+  const want = rulesOf(partner.ownerId, L.id)?.want;
+  const edgeAdj = want === 'dump' && r.them && r.them.rosAfter < r.them.rosBefore ? 0.1 : 0;
   const bh = behaviour(partner.ownerId);
   const lbl = bh[0]?.label || '';
   // past no's from this owner: full weight in this league, half weight in your other shared leagues
@@ -23,7 +26,7 @@ export function features(L, partner, r) {
     .reduce((s, t) => s + (t.leagueId === L.id ? 1 : 0.5), 0);
   return {
     bias: 1,
-    edge: Math.max(-0.4, Math.min(0.4, edge)),
+    edge: Math.max(-0.4, Math.min(0.4, edge + edgeAdj)),
     goal: r.theirGoal || (r.them && r.them.rosAfter > r.them.rosBefore + 2 && partner.mode === 'contend') ? 1 : 0,
     fav: r.get.filter(a => a.id && (stance(partner.ownerId, a.id, L.id)?.likes || 0) >= 2).length,
     pieces: r.give.length + r.get.length,

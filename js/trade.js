@@ -132,15 +132,15 @@ export function checkRules(L, partner, r) {
   const tankHelp = isTanking(L, partner) && r.them && r.them.rosAfter < r.them.rosBefore - 1;
   // he asked for exactly this (owner card "Looking for"): no rebuilder premium, no age objections
   const want = rulesOf(partner.ownerId, L.id)?.want;
-  const asked = want && r.give.some(a => !a.pick) && r.give.every(a => a.pick || (want === 'vets' ? true : want === 'youth' ? (a.age || 30) <= 24 : a.pos === want));
-  const need = mode === 'rebuild' && !tankHelp && !asked ? R.rebuilderFcMargin * Math.max(r.fc.A, r.fc.B) : 0;
+  const asked = want === 'dump' ? (r.them ? r.them.rosAfter < r.them.rosBefore : true) : want && r.give.some(a => !a.pick) && r.give.every(a => a.pick || (want === 'vets' ? true : want === 'youth' ? (a.age || 30) <= 24 : a.pos === want));
+  const need = want === 'dump' && asked ? -0.1 * Math.max(r.fc.A, r.fc.B) - (r.fc.adjB || 0) : mode === 'rebuild' && !tankHelp && !asked ? R.rebuilderFcMargin * Math.max(r.fc.A, r.fc.B) : 0;
   if (r.fc.partnerMargin < need) f.push({ bad: true, msg: mode === 'rebuild' && need > 0 ? `Rebuilder needs a clear FC win (≥ +${Math.round(need)})` : 'Partner loses on FantasyCalc' });
   if (mode === 'rebuild' && !asked) {
     for (const a of r.give) if (tooOldFor(a, R)) f.push({ bad: true, msg: `${a.name} is ${Math.floor(a.age)}: too few years left for a rebuilder` });
   }
   if (mode !== 'contend' && !asked) for (const a of r.give) if (a.pos === 'RB' && (a.age || 0) >= R.oldRbAge) f.push({ bad: true, msg: `Old RB ${a.name} to a non-contender` });
   if (r.them && mode === 'contend' && r.them.rosAfter < r.them.rosBefore - R.contenderMaxDrop) f.push({ bad: true, msg: `Contender loses ${(r.them.rosBefore - r.them.rosAfter).toFixed(1)} pts/wk` });
-  if (r.takesStartingQb && mode !== 'rebuild') f.push({ bad: true, msg: 'Takes their starting QB without one going back' });
+  if (r.takesStartingQb && mode !== 'rebuild' && want !== 'dump') f.push({ bad: true, msg: 'Takes their starting QB without one going back' });
   if (r.tatGain < 0) f.push({ bad: false, msg: 'Sanderson loss' });
   // don't hand out your own diamond
   for (const a of r.give) {
@@ -195,7 +195,10 @@ export function simDelta(L, r, runs = 3000) {
 function combos(arr, k) {
   if (k === 1) return arr.map(x => [x]);
   const out = [];
-  for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) out.push([arr[i], arr[j]]);
+  for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
+    if (k === 2) out.push([arr[i], arr[j]]);
+    else for (let l = j + 1; l < arr.length; l++) out.push([arr[i], arr[j], arr[l]]);
+  }
   return out;
 }
 
@@ -313,24 +316,32 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     let theirs = [...top, ...fillers, ...listed];
     // he asked for something in the league chat (owner card: "Looking for"): build around it, no premium needed
     const want = rulesOf(p.ownerId, L.id)?.want || null;
-    const VET = { QB: 29, RB: 26, WR: 27, TE: 27.5 };
-    const fits = a => !a.pick && (want === 'vets' ? (a.age || 0) >= (VET[a.pos] ?? 27) && a.fc >= 300
+    const VET = { QB: 29, RB: 26, WR: 27, TE: 27.5 }, OUT_NOW = new Set(['Out', 'IR', 'PUP', 'Sus', 'Doubtful']);
+    // dumping points (tanking, often to lower max PF): he gives players who score now, and wants back things that
+    // don't score this season: picks, injured players, young bench players
+    const scoresNow = (a, mineSide) => !a.pick && (mineSide ? -margOf(a, false).reg : margOf(a, true).reg) > 0.5;
+    const quiet = a => a.pick || OUT_NOW.has(M.players[a.id]?.injury_status) || reg.reduce((s, w) => s + playerWeekPts(L, a.id, w), 0) / Math.max(1, reg.length) < 6;
+    const fits = a => want === 'dump' ? quiet(a) : !a.pick && (want === 'vets' ? (a.age || 0) >= (VET[a.pos] ?? 27) && a.fc >= 300
       : want === 'youth' ? (a.age || 30) <= 24 : want ? a.pos === want : false);
     let myPool = mine;
     if (want) {
-      myPool = teamAssets(L, L.me).filter(a => fits(a) && !(a.id && untouch.has(a.id))).sort((a, b) => b.fc - a.fc).slice(0, 12);
+      myPool = teamAssets(L, L.me).filter(a => (want === 'dump' ? quiet(a) && (a.fc > 150) : fits(a)) && !(a.id && untouch.has(a.id))).sort((a, b) => b.fc - a.fc).slice(0, 14);
       if (want === 'vets') theirs = all.filter(a => a.pick && a.fc > 150); // he pays in picks
+      // a tanker keeps his young core: the pool is his producers aged 25+ (QBs 28+)
+      if (want === 'dump') theirs = all.filter(a => !a.pick && (a.age || 0) >= (a.pos === 'QB' ? 28 : 25) && reg.reduce((s, w) => s + playerWeekPts(L, a.id, w), 0) / Math.max(1, reg.length) >= 8).sort((a, b) => b.fc - a.fc).slice(0, 14);
     }
     const cands = [];
-    for (const gs of [1, 2]) for (const ts of [1, 2]) {
+    for (const gs of want ? [1, 2, 3] : [1, 2]) for (const ts of [1, 2]) {
       for (const g of combos(myPool, gs)) for (const t of combos(theirs, ts)) {
-        const fc = fcSides(g.map(a => a.fc * biasFactor(p.ownerId, a)), t.map(a => perceived(a, p)));
+        // a tanker dumping points doesn't care about roster spots (no 2-for-1 markdown) and takes a little under market
+        const fc = want === 'dump' ? (() => { const A = sum(g.map(a => a.fc)), B = sum(t.map(a => perceived(a, p))); return { A, B, partnerMargin: A - B }; })()
+          : fcSides(g.map(a => a.fc * biasFactor(p.ownerId, a)), t.map(a => perceived(a, p)));
         // people aren't ATMs: owners overvalue what they already have, so they need to come out a bit ahead
         // ...unless they've put the player on the block: then they're a willing seller and fair is enough
         const onBlock = t.some(a => a.id && blockIds.has(String(a.id)));
         const tankHelp = tanker && t.some(a => !a.pick && (theirPts.get(a.id) || 0) > 3);
         const asked = want && g.every(fits);
-        const need = onBlock || tankHelp || asked ? 0 : (p.mode === 'rebuild' ? R.rebuilderFcMargin : 0.03) * Math.max(fc.A, fc.B);
+        const need = want === 'dump' && asked ? -0.1 * fc.B : onBlock || tankHelp || asked ? 0 : (p.mode === 'rebuild' ? R.rebuilderFcMargin : 0.03) * Math.max(fc.A, fc.B);
         if (fc.partnerMargin < need || fc.partnerMargin > need + 0.3 * fc.B + 400) continue;
         if (!asked && p.mode === 'rebuild' && g.some(a => tooOldFor(a, R))) continue;
         if (!asked && p.mode !== 'contend' && g.some(a => a.pos === 'RB' && (a.age || 0) >= R.oldRbAge)) continue;
@@ -393,7 +404,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     r.goals = g.met; r.theirGoal = g.theirs;
     const blk = new Set((S.block?.[L.id] || []).map(String));
     const wantR = rulesOf(r.partner.ownerId, L.id)?.want;
-    if (wantR) r.theirGoal = wantR === 'vets' ? 'Asked for vets' : wantR === 'youth' ? 'Asked for youth' : `Asked for a ${wantR}`;
+    if (wantR) r.theirGoal = wantR === 'vets' ? 'Asked for vets' : wantR === 'dump' ? 'Dumping points' : wantR === 'youth' ? 'Asked for youth' : `Asked for a ${wantR}`;
     else if (r.get.some(a => a.id && blk.has(String(a.id)))) r.theirGoal = 'On their block';
     else if (isTanking(L, r.partner) && r.them && r.them.rosAfter < r.them.rosBefore - 1) r.theirGoal = 'Helps their tank';
     else { const fav = r.give.find(a => a.id && (stance(r.partner.ownerId, a.id, L.id)?.likes || 0) >= 2); if (fav) r.theirGoal = `He likes ${M.players[fav.id]?.last_name || fav.name}`; }

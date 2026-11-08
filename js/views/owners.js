@@ -76,7 +76,7 @@ function rulesBox(L, t) {
       (() => { const W = raw.wants?.[L.id] || {}, on = W.want && !expired(W);
         return h('div', { class: 'row', style: { gap: '8px', marginTop: '4px', alignItems: 'center', flexWrap: 'wrap' } }, h('b', {}, `Looking for in ${L.nick}:`),
           h('select', { onchange: e => { const v = e.target.value; setRules(t.ownerId, { ...raw, wants: { ...(raw.wants || {}), [L.id]: v ? { want: v, durKey: '14', until: Date.now() + 14 * 864e5 } : null } }); draw(); } },
-            [['', 'nothing in particular'], ['vets', 'vets (pays with picks)'], ['youth', 'young players'], ['QB', 'a QB'], ['RB', 'an RB'], ['WR', 'a WR'], ['TE', 'a TE']].map(([v, l]) => h('option', { value: v, selected: (on ? W.want : '') === v }, l))),
+            [['', 'nothing in particular'], ['vets', 'vets (pays with picks)'], ['dump', 'dumping points (tanking / max PF)'], ['youth', 'young players'], ['QB', 'a QB'], ['RB', 'an RB'], ['WR', 'a WR'], ['TE', 'a TE']].map(([v, l]) => h('option', { value: v, selected: (on ? W.want : '') === v }, l))),
           on ? h('span', { class: 'muted' }, `until ${new Date(W.until).toLocaleDateString()} · `, h('a', { href: `#/trades/${L.id}/${t.rid}/suggest` }, 'find trades →')) : ''); })());
   };
   draw();
