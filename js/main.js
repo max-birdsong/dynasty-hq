@@ -39,6 +39,7 @@ async function boot(force = false) {
     await loadAll(prog);
     if (M.errors.length) console.warn(M.errors);
     route();
+    setTimeout(() => import('./affinity.js').then(a => a.loadAffinity()).catch(() => {}), 1500);
     if (M.needsPlayoffFit) setTimeout(async () => { await fitPlayoffVariance(); M.needsPlayoffFit = false; }, 300);
 
   } catch (e) {

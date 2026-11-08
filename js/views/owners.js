@@ -2,6 +2,7 @@ import { M, leagueById } from '../model.js';
 import { state, noteOf, setNote } from '../state.js';
 import { profiles, pickIndex } from '../owners.js';
 import { h, fmt, sgn, f1 } from '../util.js';
+import { loadAffinity, portfolio } from '../affinity.js';
 import { modeTag, posB, empty, table } from '../components.js';
 
 export default async function ownersView(id, ownerId) {
@@ -12,6 +13,7 @@ export default async function ownersView(id, ownerId) {
     M.leagues.filter(x => x.me).map(x => h('a', { href: `#/owners/${x.id}`, class: 'tag' + (x.id === id ? ' push' : '') }, x.nick))));
   if (!L) return root;
   const P = await profiles(L);
+  await Promise.race([loadAffinity(), new Promise(r => setTimeout(r, 6000))]).catch(() => {});
   const pi = await pickIndex(L).catch(() => null);
   if (pi?.index) root.append(h('div', { class: 'panel' }, h('h2', {}, 'How this league prices picks'),
     h('p', { class: 'small', style: { margin: 0 } }, pi.index ? `In ${pi.n} trades of picks for players, the players sent back were worth ${Math.round(pi.index * 100)}% of the picks' market value at the time. ${pi.index > 1.1 ? 'Picks fetch a premium here: a good league to sell picks in.' : pi.index < 0.9 ? 'Picks go cheap here: a good league to buy picks in.' : 'Picks trade close to market here.'} Suggestions use this when pricing picks.` : `Only ${pi.n} pick-for-player trades so far, not enough to tell how this league prices picks.`)));
@@ -40,6 +42,18 @@ export default async function ownersView(id, ownerId) {
   root.append(cards);
   if (ownerId) setTimeout(() => document.getElementById('o-' + ownerId)?.scrollIntoView({ behavior: 'smooth' }), 50);
   return root;
+}
+
+// across every league you share with this owner: who he owns a lot of, buys and sells
+function portfolioLine(t) {
+  if (t.isMe) return '';
+  const pf = portfolio(t.ownerId);
+  if (!pf || (!pf.core.length && !pf.buying.length && !pf.selling.length)) return '';
+  const nmS = r => r.name.split(' ').slice(-1)[0];
+  return h('div', { class: 'small', style: { marginTop: '6px' } },
+    pf.core.length ? h('div', {}, h('b', {}, 'Owns a lot of: '), pf.core.map(r => `${nmS(r)} ×${r.own}`).join(', ')) : '',
+    pf.buying.length ? h('div', {}, h('b', { class: 'pos' }, 'Buying lately: '), pf.buying.map(nmS).join(', ')) : '',
+    pf.selling.length ? h('div', {}, h('b', { class: 'neg' }, 'Selling lately: '), pf.selling.map(nmS).join(', ')) : '');
 }
 
 function card(L, p, S) {
@@ -75,6 +89,7 @@ function card(L, p, S) {
       p.tags.map(x => h('span', { class: 'tag' }, x))),
     h('div', { class: 'small' }, p.needs.length ? h('span', {}, h('b', {}, 'Needs '), p.needs.join(', ')) : '', p.needs.length && p.surplus.length ? ' · ' : '', p.surplus.length ? h('span', {}, h('b', {}, 'Deep at '), p.surplus.join(', ')) : '',
       p.trades.length ? h('div', {}, `${p.trades.length} trade${p.trades.length > 1 ? 's' : ''} · net `, h('span', { class: p.fcNet >= 0 ? 'pos' : 'neg' }, f1(L, p.fcNet)), ' on FC') : h('div', { class: 'muted' }, 'No trades yet')),
+    portfolioLine(t),
     h('details', { style: { marginTop: '6px' } }, h('summary', { class: 'small muted' }, 'Details'), more),
     t.isMe ? '' : h('div', { class: 'row', style: { marginTop: '8px', gap: '6px' } },
       h('a', { class: 'btn small', href: `#/trades/${L.id}/${t.rid}` }, 'Build a trade'),

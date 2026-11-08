@@ -1,6 +1,7 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
 import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies, CAREER_END, playerWeekPts } from './model.js';
 import { settings, state } from './state.js';
+import { affinityFlags, stance } from './affinity.js';
 import { simulate } from './sim.js';
 import { teamPlan, winNowValue } from './plan.js';
 import { sum } from './util.js';
@@ -123,6 +124,9 @@ export function checkRules(L, partner, r) {
     if (a.p101 > 0.25) f.push({ bad: false, warn: true, msg: `Careful: your ${a.short.split(' (')[0]} has a ${a.p101 > 0.995 ? '>99%' : Math.round(a.p101 * 100) + '%'} chance of being the 1.01. On Sanderson's curve that's worth about ${Math.round(a.tat).toLocaleString()}, far more than any calculator's "early 1st" price.` });
     if (a.futureSlot && a.futureSlot <= Math.ceil(L.teams.length / 3)) f.push({ bad: false, warn: true, msg: `Careful: once age is factored in your roster ranks ${L.teams.length - a.futureSlot + 1} of ${L.teams.length} for next year, so your ${a.short} is likely an early pick (≈#${a.futureSlot}). The market prices it as an ordinary 1st.` });
   }
+  // what the partner thinks of the players moving (portfolio across shared leagues)
+  f.push(...affinityFlags(L, partner, r));
+  if (r.give.some(a => a.id && M.players[a.id]?.injury_status === 'IR')) f.push({ info: true, msg: 'IR players count as out for the rest of the season here (Sleeper projects them at zero). If he’s due back before the playoffs, he’s worth more to a contender than shown.' });
   // "Buying at the Deadline": protect the window and the rebuild pick
   const me = L.me, plan = L.plan;
   if (me && r.tatGain < 0) {
@@ -323,6 +327,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     const blk = new Set((S.block?.[L.id] || []).map(String));
     if (r.get.some(a => a.id && blk.has(String(a.id)))) r.theirGoal = 'On their block';
     else if (isTanking(L, r.partner) && r.them && r.them.rosAfter < r.them.rosBefore - 1) r.theirGoal = 'Helps their tank';
+    else { const fav = r.give.find(a => a.id && (stance(r.partner.ownerId, a.id, L.id)?.likes || 0) >= 2); if (fav) r.theirGoal = `He likes ${M.players[fav.id]?.last_name || fav.name}`; }
     r.type = tradeType(L, r);
     if (r.type.id === 'preference') r.pureValue = true;
     if (!T) r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
