@@ -465,16 +465,27 @@ export const KEEP = {
   WR: { 21: 1.04, 22: 1.03, 23: 0.98, 24: 0.93, 25: 0.87, 26: 0.78, 27: 0.7, 28: 0.69, 29: 0.63, 30: 0.48, 31: 0.36, 32: 0.36 },
   TE: { 22: 0.93, 23: 0.95, 24: 1.0, 25: 1.0, 26: 0.8, 27: 0.6, 28: 0.57, 29: 0.56 },
 };
-export function keepRate(pos, age) {
+// Studs age better: in the same data, players ranked in the top 24 overall kept far more past their prime than the
+// rest (RBs and WRs ~78-80% a year vs ~55%, QBs ~94% vs ~66%). Young studs get no boost (from the top, the usual move
+// is down). `elite` = he is currently a top-24 player.
+const ELITE_FLOOR = { QB: 0.9, RB: 0.78, WR: 0.78, TE: 0.78 };
+const YOUNG = { QB: 27, RB: 24, WR: 25, TE: 25 };
+export function keepRate(pos, age, elite = false) {
   const t = KEEP[pos] || KEEP.WR, ks = Object.keys(t).map(Number);
   const a = Math.floor(age), lo = Math.min(...ks), hi = Math.max(...ks);
-  return t[Math.min(hi, Math.max(lo, a))];
+  const base = t[Math.min(hi, Math.max(lo, a))];
+  return elite && age >= (YOUNG[pos] ?? 25) ? Math.max(base, ELITE_FLOOR[pos] ?? 0.78) : base;
+}
+// the market value of the 24th-best player in a league (the stud line)
+export function studLine(L) {
+  if (L._studLine == null) { const v = L.teams.flatMap(t => t.players.map(id => asset(L, 'p:' + id).fc || 0)).sort((a, b) => b - a); L._studLine = v[23] || Infinity; }
+  return L._studLine;
 }
 // value a player is expected to hold next season (for next year's standings)
-const ageKeep = a => keepRate(a.pos, a.age || 26);
+const ageKeep = (a, L) => keepRate(a.pos, a.age || 26, (a.fc || 0) >= studLine(L));
 export function futureSlot(L, rid) {
   if (!L._futOrder) {
-    const s = new Map(L.teams.map(t => [t.rid, t.players.map(id => asset(L, 'p:' + id)).reduce((x, a) => x + a.tat * ageKeep(a), 0)]));
+    const s = new Map(L.teams.map(t => [t.rid, t.players.map(id => asset(L, 'p:' + id)).reduce((x, a) => x + a.tat * ageKeep(a, L), 0)]));
     L._futOrder = [...L.teams].sort((a, b) => s.get(a.rid) - s.get(b.rid)).map(t => t.rid);
   }
   return L._futOrder.indexOf(+rid) + 1;
