@@ -145,8 +145,9 @@ function marketVerdicts(L, r, partner) {
     const sf = L.fmt.numQbs === 2 ? 'sf' : 'one', n = L.numTeams;
     const pickName = a => { const [, y, rd] = a.key.split(':'); const tier = a.slot && +y === +L.season + 1 ? (a.slot <= n / 3 ? 'Early' : a.slot <= 2 * n / 3 ? 'Mid' : 'Late') : 'Mid'; return `${y} ${tier} ${ORD_N[rd] || rd + 'th'}`; };
     const pc = preferredCalc(partner.ownerId);
-    const rows = [['ktc', 'KeepTradeCut'], ['fc', 'FantasyCalc'], ['dp', 'DynastyProcess']].filter(([k]) => c[k]).map(([k, label]) => {
-      const v = a => a.pick ? (c[k].picks[sf][pickName(a)] || 0) : (c[k][sf][a.id] || 0);
+    const rows = [['ktc', 'KeepTradeCut'], ['fc', 'FantasyCalc'], ['dp', 'DynastyProcess']].filter(([k]) => k === 'fc' || c[k]).map(([k, label]) => {
+      // FantasyCalc: the site's own league-specific values (Dynasty Daddy's FC feed has no picks)
+      const v = k === 'fc' ? (a => a.fc || 0) : (a => a.pick ? (c[k].picks[sf][pickName(a)] || 0) : (c[k][sf][a.id] || 0));
       const give = r.give.reduce((s, a) => s + v(a), 0), get = r.get.reduce((s, a) => s + v(a), 0);
       return { k, label, d: (get - give) / Math.max(1, give, get) };
     });

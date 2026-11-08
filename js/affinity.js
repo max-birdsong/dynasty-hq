@@ -168,7 +168,7 @@ export function behaviour(ownerId) {
   }
   if (g.lineup?.weeks >= 6) {
     const r = g.lineup.holes / g.lineup.weeks;
-    if (r >= 0.25) out.push({ kind: 'bad', label: 'Leaves lineup holes', why: `Empty or zero-point starters in ${g.lineup.holes} of ${g.lineup.weeks} team-weeks: checked out in some leagues` });
+    if (r >= 0.1) out.push({ kind: 'bad', label: 'Leaves lineup holes', why: `Empty starting slots in ${g.lineup.holes} of ${g.lineup.weeks} team-weeks: checked out in some leagues` });
   }
   if (g.panic?.sold >= 3 && g.panic.panic / g.panic.sold >= 0.3) out.push({ kind: 'good', label: 'Panic seller', why: `${g.panic.panic} of ${g.panic.sold} players he traded away had dropped 20%+ in value in the three weeks before. Buy from him right after bad news.` });
   const cs = Object.entries(g.calc || {}).filter(([, c]) => c.n >= 3).sort((a, b) => a[1].e - b[1].e);

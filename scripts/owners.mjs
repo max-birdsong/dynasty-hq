@@ -82,8 +82,7 @@ await pool([...leagueInfo.keys()], 8, async lid => {
   for (let w = 1; w < week; w++) {
     for (const m of await get(`${SL}/league/${lid}/matchups/${w}`) || []) {
       const o = ridOwner.get(m.roster_id); if (!who.has(o)) continue;
-      const pts = m.starters_points || [];
-      const hole = (m.starters || []).some((id, i) => id === '0' || (!['K', 'DEF'].includes(pos(id)) && (pts[i] ?? 1) === 0));
+      const hole = (m.starters || []).some(id => id === '0' || id === 0 || id == null); // truly empty slots only
       slot(o).lineup.weeks++; if (hole) slot(o).lineup.holes++;
     }
   }
