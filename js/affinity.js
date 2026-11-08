@@ -73,9 +73,14 @@ export function stance(ownerId, pid, hereLid) {
     // across all his dynasty leagues
     const own = g.own[pid] || 0, buy = g.buy[pid] || 0, sell = g.sell[pid] || 0;
     const notes = []; let likes = 0;
-    if (own >= 2) { notes.push(`rosters him in ${own} of his ${g.n} leagues`); likes += own - 1; }
+    const e = g.hist?.[pid] || {};
+    const how = [e.d && `drafted him ${e.d}×`, e.t && `traded for him ${e.t}×`, e.w && `picked him up ${e.w}×`].filter(Boolean);
+    const gone = [e.x && `traded him away ${e.x}×`, e.r && `cut him ${e.r}×`].filter(Boolean);
+    if (own >= 2) { notes.push(`rosters him in ${own} of his ${g.n} leagues${how.length ? ` (${how.join(', ')})` : ''}`); likes += own - 1 + (e.d || 0) * 0.5 + (e.t || 0); }
+    else if (how.length) notes.push(how.join(', '));
+    if (gone.length) { notes.push(gone.join(', ')); likes -= (e.x || 0); }
     if (buy) { notes.push(`added him ${buy}× in the last 90 days`); likes += 2 * buy; }
-    if (sell) { notes.push(`traded him away ${sell}× lately`); likes -= 2 * sell; }
+    if (sell && !e.x) { notes.push(`traded him away ${sell}× lately`); likes -= 2 * sell; } else if (sell) likes -= sell;
     if (notes.length) return { likes, notes, shared: g.n };
   }
   const a = M.affinity?.get(ownerId)?.get(String(pid));
@@ -113,7 +118,8 @@ export function portfolio(ownerId) {
   const g = M.ownersGlobal?.[ownerId];
   if (g) {
     const rows = (o, f) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pid, n]) => ({ pid, name: nm(pid), pos: M.players[pid]?.position, own: n, label: f(n) }));
-    return { all: true, n: g.n, core: rows(g.own, n => `${n}/${g.n}`), buying: rows(g.buy, n => n), selling: rows(g.sell, n => n) };
+    const howShort = pid => { const e = g.hist?.[pid]; if (!e) return ''; const p = [e.d && `${e.d}d`, e.t && `${e.t}t`, e.w && `${e.w}w`, e.x && `−${e.x}`].filter(Boolean); return p.length ? ` (${p.join(' ')})` : ''; };
+    return { all: true, n: g.n, core: rows(g.own, n => `${n}/${g.n}`).map(r => ({ ...r, label: r.label + howShort(r.pid) })), buying: rows(g.buy, n => n), selling: rows(g.sell, n => n) };
   }
   const m = M.affinity?.get(ownerId);
   if (!m) return null;

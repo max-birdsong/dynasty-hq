@@ -63,7 +63,9 @@ async function fcFor(l) {
 
 // 3. rosters + transactions in each league
 const O = {};
-const slot = o => O[o] || (O[o] = { own: {}, buy: {}, sell: {}, tend: {}, act: { last: 0, trades: 0, waivers: 0 }, when: { h: Array(24).fill(0), d: Array(7).fill(0) }, lineup: { weeks: 0, holes: 0 }, panic: { sold: 0, panic: 0 }, calc: { ktc: [], fc: [], dp: [] } });
+const slot = o => O[o] || (O[o] = { own: {}, buy: {}, sell: {}, tend: {}, act: { last: 0, trades: 0, waivers: 0 }, when: { h: Array(24).fill(0), d: Array(7).fill(0) }, lineup: { weeks: 0, holes: 0 }, panic: { sold: 0, panic: 0 }, calc: { ktc: [], fc: [], dp: [] }, hist: {} });
+// acquisition history per player: d = drafted, t = traded for, w = waivers / free agent, x = traded away, r = released
+const hist = (o, p, k) => { const H = slot(o).hist; const e = H[p] || (H[p] = {}); e[k] = (e[k] || 0) + 1; };
 const tslot = (o, c) => { const t = slot(o).tend; return t[c] || (t[c] = []); };
 const cls = a => a.pick ? 'picks' : pos(a.id) || '?';
 const ORD = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
@@ -90,6 +92,8 @@ await pool([...leagueInfo.keys()], 8, async lid => {
     for (const t of await get(`${SL}/league/${lid}/transactions/${w}`) || []) {
       if (t.status !== 'complete') continue;
       const when = t.status_updated || t.created, recent = Date.now() - when < RECENT;
+      for (const [p, rid] of Object.entries(t.adds || {})) { const o = ridOwner.get(+rid); if (who.has(o)) hist(o, p, t.type === 'trade' ? 't' : 'w'); }
+      for (const [p, rid] of Object.entries(t.drops || {})) { const o = ridOwner.get(+rid); if (who.has(o)) hist(o, p, t.type === 'trade' ? 'x' : 'r'); }
       for (const rid of t.roster_ids || []) {
         const o = ridOwner.get(+rid); if (!who.has(o)) continue;
         const a = slot(o).act; a.last = Math.max(a.last, when);
@@ -130,6 +134,21 @@ await pool([...leagueInfo.keys()], 8, async lid => {
       }
     }
   }
+  // drafts this season and last (last season's league holds last year's rookie draft), and last season's moves
+  const seasons = [{ lid, ridOwner }];
+  if (l.previous_league_id) { const pros = await get(`${SL}/league/${l.previous_league_id}/rosters`) || []; seasons.push({ lid: l.previous_league_id, ridOwner: new Map(pros.map(r => [r.roster_id, r.owner_id])), prev: true }); }
+  for (const se of seasons) {
+    for (const d of await get(`${SL}/league/${se.lid}/drafts`) || []) {
+      if (d.status !== 'complete') continue;
+      for (const pk of await get(`${SL}/draft/${d.draft_id}/picks`) || []) if (pk.player_id && who.has(pk.picked_by)) hist(pk.picked_by, String(pk.player_id), 'd');
+    }
+    if (!se.prev) continue;
+    for (let w = 1; w <= 18; w++) for (const t of await get(`${SL}/league/${se.lid}/transactions/${w}`) || []) {
+      if (t.status !== 'complete') continue;
+      for (const [p, rid] of Object.entries(t.adds || {})) { const o = se.ridOwner.get(+rid); if (who.has(o)) hist(o, p, t.type === 'trade' ? 't' : 'w'); }
+      for (const [p, rid] of Object.entries(t.drops || {})) { const o = se.ridOwner.get(+rid); if (who.has(o)) hist(o, p, t.type === 'trade' ? 'x' : 'r'); }
+    }
+  }
 });
 
 // 4. compact output
@@ -140,7 +159,9 @@ for (const [o, d] of Object.entries(O)) {
   for (const [c, xs] of Object.entries(d.tend)) { const ys = xs.map(x => Math.max(-0.6, Math.min(0.6, x))); tend[c] = { v: +(ys.reduce((a, b) => a + b, 0) / ys.length).toFixed(3), n: ys.length }; }
   const calc = Object.fromEntries(Object.entries(d.calc).filter(([, xs]) => xs.length).map(([k, xs]) => [k, { e: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(3), n: xs.length }]));
   out[o] = { n: nLeagues[o] || 0, own: Object.fromEntries(top(d.own, 2)), buy: Object.fromEntries(top(d.buy, 1)), sell: Object.fromEntries(top(d.sell, 1)), tend,
-    act: d.act, when: d.when, lineup: d.lineup, panic: d.panic, calc };
+    act: d.act, when: d.when, lineup: d.lineup, panic: d.panic, calc,
+    // history only where it says something: players he rosters in 2+ leagues, or ever traded for / away
+    hist: Object.fromEntries(Object.entries(d.hist).filter(([p, e]) => (d.own[p] || 0) >= 2 || e.t || e.x).slice(0, 150)) };
 }
 fs.mkdirSync('data', { recursive: true });
 fs.writeFileSync('data/owners.json', JSON.stringify({ updated: new Date().toISOString(), season, owners: out }));

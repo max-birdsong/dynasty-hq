@@ -54,7 +54,7 @@ function portfolioLine(t) {
     bh.length || td.length ? h('div', { class: 'row', style: { gap: '4px', marginBottom: '4px' } },
       bh.map(x => h('span', { class: 'tag ' + (x.kind === 'bad' ? 'bad' : x.kind === 'good' ? 'push' : ''), title: x.why, style: { cursor: 'pointer' }, onclick: () => toast(x.why) }, x.label)),
       td.map(x => h('span', { class: 'tag ' + (x.v > 0 ? 'push' : 'tank'), title: x.detail, style: { cursor: 'pointer' }, onclick: () => toast(`${x.label}: ${x.detail}`) }, x.label))) : '',
-    !pf ? '' : pf.core.length ? h('div', {}, h('b', {}, pf.all ? `Owns a lot of (all ${pf.n} of his leagues): ` : 'Owns a lot of: '), pf.core.map(r => `${nmS(r)} ${pf.all ? r.label : '×' + r.own}`).join(', ')) : '',
+    !pf ? '' : pf.core.length ? h('div', {}, h('b', {}, pf.all ? `Owns a lot of (all ${pf.n} of his leagues): ` : 'Owns a lot of: '), pf.core.map(r => `${nmS(r)} ${pf.all ? r.label : '×' + r.own}`).join(', '), pf.all ? h('span', { class: 'muted', title: 'd = drafted, t = traded for, w = waivers, −n = traded away' }, ' · d drafted, t traded for, w waivers, − traded away') : '') : '',
     !pf ? '' : pf.buying.length ? h('div', {}, h('b', { class: 'pos' }, 'Buying lately: '), pf.buying.map(nmS).join(', ')) : '',
     !pf ? '' : pf.selling.length ? h('div', {}, h('b', { class: 'neg' }, 'Selling lately: '), pf.selling.map(nmS).join(', ')) : '');
 }
