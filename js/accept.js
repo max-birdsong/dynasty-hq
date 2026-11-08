@@ -17,7 +17,10 @@ export function features(L, partner, r) {
   const edge = pc && pc !== 'fc' && M.calcs?.[pc] ? calcEdge(L, r.give, r.get, pc) : (r.fc ? r.fc.partnerMargin / Math.max(1, r.fc.A, r.fc.B) : 0);
   const bh = behaviour(partner.ownerId);
   const lbl = bh[0]?.label || '';
-  const prev = state().trades.filter(t => t.leagueId === L.id && t.partnerRid === partner.rid && ['rejected', 'ignored', 'withdrawn'].includes(t.status)).length;
+  // past no's from this owner: full weight in this league, half weight in your other shared leagues
+  const no = t => ['rejected', 'ignored', 'withdrawn'].includes(t.status);
+  const prev = state().trades.filter(t => no(t) && (t.partnerOwnerId === partner.ownerId || (t.leagueId === L.id && t.partnerRid === partner.rid)))
+    .reduce((s, t) => s + (t.leagueId === L.id ? 1 : 0.5), 0);
   return {
     bias: 1,
     edge: Math.max(-0.4, Math.min(0.4, edge)),
@@ -63,7 +66,7 @@ export function reasons(f) {
   if (f.fav) out.push([w.fav * f.fav, `asks for ${f.fav} player${f.fav > 1 ? 's' : ''} he's attached to`]);
   if (f.dormant) out.push([w.dormant, 'he’s been inactive']);
   else if (f.active) out.push([w.active, 'he trades a lot']);
-  if (f.rejectedBefore) out.push([w.rejectedBefore * f.rejectedBefore, `he turned down ${f.rejectedBefore} of your offers before`]);
+  if (f.rejectedBefore) out.push([w.rejectedBefore * f.rejectedBefore, `he turned down your offers before (${f.rejectedBefore % 1 ? f.rejectedBefore.toFixed(1) : f.rejectedBefore}, other leagues count half)`]);
   if (f.pieces >= 5) out.push([w.pieces * f.pieces, `${f.pieces} pieces is a lot to process`]);
   return out.sort((a, b) => Math.abs(b[0]) - Math.abs(a[0])).map(([v, s]) => (v >= 0 ? '+ ' : '− ') + s);
 }
