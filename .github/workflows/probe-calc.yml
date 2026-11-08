@@ -5,11 +5,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          for m in 0 1 2 3 4 5 6 7 8 9 10 11; do
-            curl -s -A "dynasty-hq personal" "https://dynasty-daddy.com/api/v1/player/all/today?market=$m" -o /tmp/m.json
-            node -e '
-              const a=JSON.parse(require("fs").readFileSync("/tmp/m.json"));const by=n=>a.find(x=>x.full_name===n)||{};
-              const k=Object.keys(a[0]).filter(x=>/value|rank/i.test(x));
-              const picks=a.filter(x=>x.position==="PI"||/20\d\d.*(1st|Round)/i.test(x.full_name)).slice(0,3).map(x=>x.full_name+":"+x.sf_trade_value);
-              console.log("market '$m'", a.length, "JSN", by("Jaxon Smith-Njigba").sf_trade_value, "Gibbs", by("Jahmyr Gibbs").sf_trade_value, "Allen", by("Josh Allen").sf_trade_value, "Swift", by("D'"'"'Andre Swift").sf_trade_value, "|", picks.join(", "), "| keys", k.join(","))' || echo "market $m failed"
-          done
+          curl -s -A "Mozilla/5.0 dynasty-hq personal" https://keeptradecut.com/dynasty-rankings -o /tmp/k.html
+          node -e '
+            const s=require("fs").readFileSync("/tmp/k.html","utf8");const m=s.match(/var playersArray = (\[.*?\]);/s);
+            if(!m){console.log("no playersArray");process.exit()}
+            const a=JSON.parse(m[1]);const f=n=>a.find(x=>x.playerName===n);
+            for(const n of ["Josh Allen","Jahmyr Gibbs","Jaxon Smith-Njigba","D'"'"'Andre Swift"]){const p=f(n);console.log("KTC",n,p&&p.superflexValues&&p.superflexValues.value,p&&p.oneQBValues&&p.oneQBValues.value)}'
