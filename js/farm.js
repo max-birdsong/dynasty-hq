@@ -156,20 +156,20 @@ export function stash(L, rostered) {
 export async function faabModel(L) {
   const mv = await moves(L);
   const budget = L.lg?.settings?.waiver_budget || 100;
-  const fourth = L.fc.picks.get(`${+L.season + 1} 4th`) || 400, third = L.fc.picks.get(`${+L.season + 1} 3rd`) || 800;
-  const tier = v => v >= third ? 3 : v >= fourth ? 2 : v >= fourth * 0.3 ? 1 : 0;
-  const bids = [[], [], [], []];
-  for (const m of mv) if (m.type === 'waiver' && m.bid != null) bids[tier(fcv(L, m.pid))].push(m.bid);
+  // what this league pays per point of market value: median of bid / value over past winning bids
+  const pairs = [];
+  for (const m of mv) if (m.type === 'waiver' && m.bid > 0) { const v = fcv(L, m.pid); if (v >= 100) pairs.push(m.bid / v); }
   const q = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
-  const stats = bids.map(a => ({ n: a.length, med: q(a, 0.5), hi: q(a, 0.8) }));
+  const rate = q(pairs, 0.6); // a bit above the median, to actually win
   return {
     budget,
-    // bid to win: the 80th percentile of what similar players went for here (falls back to the next tier with data)
-    suggest(v, hot = false) {
-      let t = tier(v); if (hot) t = Math.min(3, t + 1);
-      for (let k = t; k >= 0; k--) if (stats[k].n >= 3) return { bid: Math.max(1, stats[k].hi), med: stats[k].med, n: stats[k].n };
-      return null;
-    }, stats,
+    // bid scaled to the player's value at this league's going rate, more for injury openings / news, and never
+    // more than a quarter of what you have left (40% for urgent claims): the season is long
+    suggest(v, hot = false, left = budget) {
+      if (rate == null || pairs.length < 3) return null;
+      const raw = Math.round(rate * v * (hot ? 1.5 : 1));
+      return { bid: Math.max(1, Math.min(raw, Math.floor(left * (hot ? 0.4 : 0.25)))), n: pairs.length, raw };
+    },
   };
 }
 

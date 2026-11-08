@@ -57,7 +57,7 @@ async function show(pane) {
 }
 
 const card = (...kids) => h('div', { class: 'panel', style: { padding: '10px 14px', marginBottom: '8px' } }, ...kids);
-const bidTxt = (c, L, v, hot) => { const m = c.faab[L.id]?.suggest(v, hot); return m ? ` · bid ~$${m.bid}` : ''; };
+const bidTxt = (c, L, v, hot) => { const m = c.faab[L.id]?.suggest(v, hot, c.left[L.id] ?? undefined); return m ? ` · bid ~$${m.bid}` : ''; };
 const leagueChip = (c, x, extra = '') => h('a', { class: 'pill', style: { marginRight: '6px', display: 'inline-block', marginBottom: '4px' }, href: `https://sleeper.com/leagues/${x.L.id}/players`, target: '_blank', rel: 'noopener' },
   x.L.nick, h('span', { class: 'muted' }, extra + (c.left[x.L.id] != null ? ` · $${c.left[x.L.id]} left` : '')));
 const openCalc = (L, rid, give, get) => { const box = document.getElementById('app'); box.replaceChildren(h('div', {}, h('a', { href: '#/waivers/x/' + tab }, '← back'), calculator(L, rid, { give, get }))); };
@@ -96,14 +96,15 @@ async function find(c) {
       shown.length ? h('div', {}, shown.map(r => card(
         h('div', { class: 'row spread' },
           h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` ${r.team}${r.age ? ' · ' + r.age : ''}`)),
-          h('div', { class: 'small', style: { textAlign: 'right' } }, r.v ? h('b', {}, f1(r.L, r.v, false)) : h('span', { class: 'muted' }, 'no market value yet'), r.price ? h('span', { class: 'muted' }, ` · ${r.price}`) : '')),
+          h('div', { class: 'small', style: { textAlign: 'right' } }, r.v ? h('span', {}, h('span', { class: 'muted' }, 'market '), h('b', {}, f1(r.L, r.v, false))) : h('span', { class: 'muted' }, 'no market value yet'), r.price ? h('span', { class: 'muted' }, ` · ${r.price}`) : '',
+            r.L.tatMap?.get(r.id) ? h('div', { class: 'muted' }, `Sanderson ${f1(r.L, r.L.tatMap.get(r.id), false)}`) : '')),
         h('div', { class: 'row', style: { gap: '4px', margin: '6px 0' } }, r.tags.map(t => h('span', { class: 'tag' + (t.endsWith('next man up') || t === 'r/DynastyFF news' ? ' bad' : '') }, t))),
         r.buzz?.posts?.length ? h('div', { class: 'small', style: { marginBottom: '4px' } }, r.buzz.posts.slice(0, 2).map(p => h('a', { href: p.link, target: '_blank', rel: 'noopener', style: { display: 'block' } }, '💬 ' + p.title.slice(0, 90)))) : '',
         h('div', { class: 'small' }, h('span', { class: 'muted' }, `Free in ${r.leagues.length}: `),
           r.leagues.sort((a, b) => b.gain - a.gain).map(x => leagueChip(c, x, (x.drop ? ` · drop ${x.drop.name.split(' ').slice(-1)[0]}` : '') + bidTxt(c, x.L, x.v, x.hurt || x.buzz?.news)))))))
         : empty(filter === 'All' ? 'Nothing worth a roster spot right now.' : 'Nothing in this group right now.'),
       h('p', { class: 'muted small' }, (job?.updated ? `r/DynastyFF last checked ${new Date(job.updated).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}. ` : '') +
-        'Drop = your lowest-value player who isn’t starting, on IR or taxi. Bid = what similar players have gone for in that league (80th percentile, one tier up for injury openings and news).'));
+        'Drop = your lowest-value player who isn’t starting, on IR or taxi. Bid = this league’s going rate per point of value × his value (1.5× for injury openings and news), capped at a quarter of your FAAB left.'));
   };
   draw();
   return box;
@@ -229,7 +230,7 @@ async function queue(c) {
         drops.shift();
       }
       let bid = null;
-      if (left != null) { const m = fm?.suggest(r.v, urgent); bid = Math.min(left, m ? m.bid : (urgent ? Math.ceil(left * 0.1) : 1)); left -= bid; }
+      if (left != null) { const m = fm?.suggest(r.v, urgent, left); bid = Math.min(left, m ? m.bid : Math.max(1, Math.floor(left * (urgent ? 0.1 : 0.02)))); left -= bid; }
       claims.push({ r, drop, bid, done: st === 'done', urgent });
     }
     if (claims.length) leagues.push({ L, claims, prio: me.settings?.waiver_position, faab: c.left[L.id], score: Math.max(...claims.map(x => x.r.score)) });
@@ -248,11 +249,11 @@ async function queue(c) {
             h('span', { class: 'small' }, x.urgent ? '🚨 ' : '', 'Add ', posB(x.r.pos), h('b', {}, x.r.name), ` (${x.r.team})`,
               x.drop ? h('span', { class: 'muted' }, ` · drop ${x.drop.name}`) : h('span', { class: 'muted' }, ' · open roster spot'),
               x.bid != null ? h('b', {}, ` · bid $${x.bid}`) : '',
-              h('div', { class: 'muted' }, `${x.r.v ? f1(L, x.r.v, false) : 'no market value yet'}${x.r.price ? ' ' + x.r.price : ''}${x.r.tags.length ? ' · ' + x.r.tags[0] : ''}`))),
+              h('div', { class: 'muted' }, `${x.r.v ? `market ${f1(L, x.r.v, false)}` : 'no market value yet'}${x.r.price ? ' (' + x.r.price + ')' : ''}${L.tatMap?.get(x.r.id) ? ` · Sanderson ${f1(L, L.tatMap.get(x.r.id), false)}` : ''}${x.r.tags.length ? ' · ' + x.r.tags[0] : ''}`))),
           h('button', { class: 'btn ghost small', title: 'Skip this claim for the rest of the week', onclick: () => { S.claims[k] = 'skip'; save({ settingsChanged: true }); leagues.forEach(l => { l.claims = l.claims.filter(y => qkey(l.L, y.r.id) !== k); }); draw(); } }, 'Skip'));
       }))))
       : empty('Nothing to claim right now.'),
-    h('p', { class: 'muted small' }, 'Drops: your lowest-value bench player (never starters, IR or taxi), only when the add is clearly worth more (injury openings and Reddit news get more slack). Bids: what similar players went for in that league, one tier up for 🚨 claims, never more than your remaining FAAB across the queue. Sleeper has no link straight to a claim, so "Open in Sleeper" opens the league’s player search.'));
+    h('p', { class: 'muted small' }, 'Drops: your lowest-value bench player (never starters, IR or taxi), only when the add is clearly worth more (injury openings and Reddit news get more slack). Market = what you could flip him for (FantasyCalc; ≈ the pick it would fetch); Sanderson = what he’s worth to you. Bids: this league’s going rate per point of value (from past winning bids) × his value, 1.5× for 🚨 claims, capped at a quarter of your remaining FAAB (40% for 🚨). Sleeper has no link straight to a claim, so "Open in Sleeper" opens the league’s player search.'));
   draw();
   return box;
 }
