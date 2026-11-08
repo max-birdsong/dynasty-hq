@@ -1,5 +1,5 @@
 import { M, refreshValues, runSim, computePower, CLASS_TOP, classOf, applyTat, sandersonScale, titleWorthFor } from '../model.js';
-import { state, settings, save, ghToken, setGhToken, push, pull, setupLink, syncInfo, exportJson, importJson, encKey, setEncKey } from '../state.js';
+import { state, settings, save, ghToken, setGhToken, push, pull, setupLink, syncInfo, exportJson, importJson } from '../state.js';
 import { h, toast } from '../util.js';
 import { cclear } from '../db.js';
 
@@ -98,11 +98,7 @@ export default function settingsView() {
       } }, 'Copy link for my phone') : '',
       ghToken() ? h('button', { class: 'btn ghost', onclick: () => { if (confirm('Stop syncing on this device?')) { setGhToken(''); window.DHQ.route(); } } }, 'Disconnect this device') : ''),
     linkBox,
-    // the repo is public: the synced file is encrypted with a key that only your devices have
-    h('div', { class: 'row', style: { marginTop: '10px', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } }, h('b', { class: 'small' }, 'Encryption key'),
-      encKey() ? h('button', { class: 'btn ghost small', onclick: async () => { try { await navigator.clipboard.writeText(encKey()); toast('Key copied. Keep a copy somewhere safe (e.g. your password manager).'); } catch { prompt('Your key:', encKey()); } } }, 'Copy key (backup)') : h('span', { class: 'small muted' }, 'created on the first sync'),
-      h('input', { placeholder: 'paste key from your other device', style: { width: '240px' }, onchange: async e => { try { setEncKey(e.target.value); toast('Key saved'); await pull(); window.DHQ.route(); } catch (err) { toast(err.message, 'err'); } } })),
-    h('p', { class: 'small muted', style: { marginBottom: 0 } }, 'Your notes, trade log and filters are encrypted before they leave this device, so the public repo only holds unreadable data. The key stays on your devices and is included in the phone link. If you lose every device without a backup of the key, the synced copy can’t be read. Data is saved to data/state.json on the "data" branch (separate from the website code). Every change is saved within a few seconds, and the other device picks it up when you open or switch back to the site. If both devices change something at once, the two versions are merged: nothing is overwritten.')));
+    h('p', { class: 'small muted', style: { marginBottom: 0 } }, 'Data is saved to data/state.json on the "data" branch (separate from the website code). Every change is saved within a few seconds, and the other device picks it up when you open or switch back to the site. If both devices change something at once, the two versions are merged: nothing is overwritten.')));
 
   root.append(h('div', { class: 'panel' }, h('h2', {}, 'Backup'),
     h('div', { class: 'row' },
