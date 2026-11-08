@@ -240,7 +240,7 @@ async function queue(c) {
   const draw = () => box.replaceChildren(
     leagues.length ? h('div', {}, leagues.map(({ L, claims, prio, faab }) => h('div', { class: 'panel' },
       h('div', { class: 'row spread' }, h('h2', { style: { margin: 0 } }, L.nick),
-        h('span', { class: 'small muted' }, faab != null ? `$${faab} FAAB left` : prio ? `waiver priority #${prio}` : ''),
+        h('span', { class: 'small muted' }, faab != null ? `$${faab} FAAB left` + ((m => m ? ` · this league pays ~$${m.per1st} per 1st of value (${m.n} claims)` : ' · not enough past bids here: token bids')(c.faab[L.id]?.suggest(1000))) : prio ? `waiver priority #${prio}` : ''),
         h('a', { class: 'btn small', href: `https://sleeper.com/leagues/${L.id}/players`, target: '_blank', rel: 'noopener' }, 'Open in Sleeper')),
       claims.map(x => { const k = qkey(L, x.r.id); const st = S.claims[k];
         return h('div', { class: 'row spread', style: { borderTop: '1px solid var(--line)', padding: '8px 0', gap: '8px', opacity: st === 'done' ? 0.45 : 1 } },

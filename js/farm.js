@@ -156,11 +156,19 @@ export function stash(L, rostered) {
 export async function faabModel(L) {
   const mv = await moves(L);
   const budget = L.lg?.settings?.waiver_budget || 100;
-  // what this league pays per point of market value: median of bid / value over past winning bids
+  // what this league pays per point of market value, from past winning claims. Value is taken on the day of the
+  // claim (most pickups fizzle, so today's value would make the league look far richer than it is), $0 wins count,
+  // low-value claims are skipped, the top and bottom 10% are trimmed, and we use the median.
+  const dp = await loadDp().catch(() => null), valuer = dp ? makeValuer(dp, L) : null;
   const pairs = [];
-  for (const m of mv) if (m.type === 'waiver' && m.bid > 0) { const v = fcv(L, m.pid); if (v >= 100) pairs.push(m.bid / v); }
-  const q = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
-  const rate = q(pairs, 0.6); // a bit above the median, to actually win
+  for (const m of mv) {
+    if (m.type !== 'waiver' || m.bid == null) continue;
+    const v = (valuer && valuer.player(m.pid, m.t)) || fcv(L, m.pid);
+    if (v >= 300) pairs.push(m.bid / v);
+  }
+  pairs.sort((a, b) => a - b);
+  const cut = Math.floor(pairs.length * 0.1), core = pairs.slice(cut, pairs.length - cut);
+  const rate = core.length ? core[Math.floor(core.length / 2)] : null;
   return {
     budget,
     // bid scaled to the player's value at this league's going rate, more for injury openings / news, and never
@@ -168,7 +176,7 @@ export async function faabModel(L) {
     suggest(v, hot = false, left = budget) {
       if (rate == null || pairs.length < 3) return null;
       const raw = Math.round(rate * v * (hot ? 1.5 : 1));
-      return { bid: Math.max(1, Math.min(raw, Math.floor(left * (hot ? 0.4 : 0.25)))), n: pairs.length, raw };
+      return { bid: Math.max(1, Math.min(raw, Math.floor(left * (hot ? 0.4 : 0.25)))), n: pairs.length, raw, per1st: Math.round(rate * (L.fc.picks.get(`${+L.season + 1} 1st`) || 3000)) };
     },
   };
 }
