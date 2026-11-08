@@ -4,6 +4,7 @@ import { evalTrade, simDelta, suggest, tradeValue } from '../trade.js';
 import { teamPlan } from '../plan.js';
 import { loadTrades, tradeSides, pickIndex } from '../owners.js';
 import { h, fmt, sgn, pct, toast, sleep, f1 } from '../util.js';
+import { preferredCalc } from '../affinity.js';
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
 
 const STATUSES = ['sent', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
@@ -79,6 +80,7 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
     h('div', { class: 'flags' },
       r.flags.some(f => !f.info) ? r.flags.filter(f => !f.info).map(f => h('div', { class: 'flag ' + (f.bad ? 'bad' : f.warn ? 'warnf' : '') }, (f.bad ? '✕ ' : f.warn ? '⚠️ ' : '• ') + f.msg)) : h('div', { class: 'flag ok' }, '✓ Fits the partner and your lineup rules'),
       r.flags.filter(f => f.info).map(f => h('div', { class: 'flag' }, f.msg)),
+      marketVerdicts(L, r, partner),
       r.memory.same ? h('div', { class: 'flag ' + (['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status) ? 'bad' : '') }, `You sent this exact offer on ${new Date(r.memory.same.created).toLocaleDateString()}: ${r.memory.same.status}`) : '',
       r.memory.overlap.filter(o => o !== r.memory.same).slice(0, 3).map(o => h('div', { class: 'flag' }, `Earlier ask for ${o.getNames.join(' + ')} (${new Date(o.created).toLocaleDateString()}): ${o.status}`))),
     h('div', { class: 'row', style: { marginTop: '10px' } },
@@ -132,6 +134,32 @@ export function toLog(r) {
 }
 
 // ---------------- suggestions ----------------
+// ---------- market verdicts: the trade on each calculator ----------
+let calcsP = null;
+const loadCalcs = () => calcsP || (calcsP = fetch('data/calcs.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null));
+const ORD_N = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
+function marketVerdicts(L, r, partner) {
+  const box = h('div', { class: 'verdicts' });
+  loadCalcs().then(c => {
+    if (!c) return;
+    const sf = L.fmt.numQbs === 2 ? 'sf' : 'one', n = L.numTeams;
+    const pickName = a => { const [, y, rd] = a.key.split(':'); const tier = a.slot && +y === +L.season + 1 ? (a.slot <= n / 3 ? 'Early' : a.slot <= 2 * n / 3 ? 'Mid' : 'Late') : 'Mid'; return `${y} ${tier} ${ORD_N[rd] || rd + 'th'}`; };
+    const pc = preferredCalc(partner.ownerId);
+    const rows = [['ktc', 'KeepTradeCut'], ['fc', 'FantasyCalc'], ['dp', 'DynastyProcess']].filter(([k]) => c[k]).map(([k, label]) => {
+      const v = a => a.pick ? (c[k].picks[sf][pickName(a)] || 0) : (c[k][sf][a.id] || 0);
+      const give = r.give.reduce((s, a) => s + v(a), 0), get = r.get.reduce((s, a) => s + v(a), 0);
+      return { k, label, d: (get - give) / Math.max(1, give, get) };
+    });
+    rows.push({ k: 'tat', label: 'Sanderson (your view)', d: (r.get.reduce((s, a) => s + (a.tat || 0), 0) - r.give.reduce((s, a) => s + (a.tat || 0), 0)) / Math.max(1, r.give.reduce((s, a) => s + (a.tat || 0), 0), r.get.reduce((s, a) => s + (a.tat || 0), 0)) });
+    box.replaceChildren(h('div', { class: 'small muted', style: { margin: '10px 0 4px' } }, 'Market verdicts', pc ? ` · ${partner.owner} trades by ${rows.find(x => x.k === pc)?.label}` : ''),
+      ...rows.map(x => h('div', { class: 'vrow' + (x.k === pc ? ' pref' : '') },
+        h('span', { class: 'small' }, x.label),
+        h('span', { class: 'vbar' }, h('i', { style: { left: `${50 + Math.max(-48, Math.min(48, x.d * 100))}%` } })),
+        h('span', { class: 'small ' + (Math.abs(x.d) < 0.05 ? '' : x.d > 0 ? 'pos' : 'neg') }, Math.abs(x.d) < 0.05 ? 'Fair' : x.d > 0 ? `You +${Math.round(x.d * 100)}%` : `${partner.owner} +${Math.round(-x.d * 100)}%`))));
+  });
+  return box;
+}
+
 export const VERDICT = { BUY: 'push', HOLD: 'mid', CAREFUL: 'sell', RELOAD: 'tank', SELL: 'tank' };
 const KEY_LINE = /^(Deadline|If you filled|Even with|Filling |You don't own|Biggest hole|Trade goals)/;
 export function planPanel(L, { compact = false } = {}) {

@@ -128,3 +128,9 @@ code { font-family: var(--mono); font-size: 12px; background: var(--panel2); pad
 .panel.plan h2 { font-size: 16px; }
 details > summary { list-style: revert; }
 @media (max-width: 600px) { .top { flex-wrap: wrap; row-gap: 6px; } .top nav { order: 3; flex-basis: 100%; } .brand { margin-right: auto; } }
+.vrow { display: grid; grid-template-columns: 150px 1fr 110px; align-items: center; gap: 10px; padding: 3px 0; }
+.vrow.pref span:first-child { font-weight: 700; }
+.vbar { position: relative; height: 2px; background: var(--line); }
+.vbar::after { content: ''; position: absolute; left: 50%; top: -5px; width: 1px; height: 12px; background: var(--muted); }
+.vbar i { position: absolute; top: -5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--accent); }
+@media (max-width: 600px) { .vrow { grid-template-columns: 110px 1fr 90px; } }

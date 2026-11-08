@@ -146,3 +146,33 @@ export function biasFactor(ownerId, a) {
   if (!d || d.n < 2) return 1;
   return 1 + Math.max(-0.25, Math.min(0.25, d.v)) * d.n / (d.n + 2);
 }
+
+// ---------- behaviour profile (from the weekly scan across all his leagues) ----------
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const CALC_NAME = { ktc: 'KeepTradeCut', fc: 'FantasyCalc', dp: 'DynastyProcess' };
+export function behaviour(ownerId) {
+  const g = M.ownersGlobal?.[ownerId];
+  if (!g?.act) return [];
+  const out = [];
+  const days = (Date.now() - (g.act.last || 0)) / 864e5;
+  const months = Math.max(1, (Date.now() - Date.parse(`${M.season || new Date().getFullYear()}-08-15`)) / (30 * 864e5));
+  const tpm = g.act.trades / months;
+  if (!g.act.last || days > 30) out.push({ kind: 'bad', label: 'Dormant', why: g.act.last ? `No moves in ${Math.round(days)} days across his ${g.n} leagues: offers may sit unanswered` : 'No moves this season' });
+  else out.push({ kind: tpm >= 4 ? 'good' : '', label: tpm >= 4 ? 'Very active' : tpm >= 1 ? 'Active' : 'Quiet', why: `Last move ${days < 1 ? 'today' : Math.round(days) + 'd ago'} · ${tpm.toFixed(1)} trades/month · ${g.act.waivers} waiver adds this season (all ${g.n} leagues)` });
+  // when he trades (Berlin time): best 3-hour window and top days
+  const nT = g.when.h.reduce((a, b) => a + b, 0);
+  if (nT >= 4) {
+    let best = 0, bh = 0; for (let h = 0; h < 24; h++) { const s = g.when.h[h] + g.when.h[(h + 1) % 24] + g.when.h[(h + 2) % 24]; if (s > best) { best = s; bh = h; } }
+    const topD = g.when.d.map((n, i) => [n, i]).sort((a, b) => b[0] - a[0]).filter(([n]) => n >= nT * 0.2).slice(0, 2).map(([, i]) => DAYS[i]);
+    out.push({ kind: '', label: `Trades ${topD.join('/') || 'any day'} ${String(bh).padStart(2, '0')}–${String((bh + 3) % 24).padStart(2, '0')}h`, why: `${Math.round(best / nT * 100)}% of his ${nT} trades happened in that window (Berlin time). Send offers just before.` });
+  }
+  if (g.lineup?.weeks >= 6) {
+    const r = g.lineup.holes / g.lineup.weeks;
+    if (r >= 0.25) out.push({ kind: 'bad', label: 'Leaves lineup holes', why: `Empty or zero-point starters in ${g.lineup.holes} of ${g.lineup.weeks} team-weeks: checked out in some leagues` });
+  }
+  if (g.panic?.sold >= 3 && g.panic.panic / g.panic.sold >= 0.3) out.push({ kind: 'good', label: 'Panic seller', why: `${g.panic.panic} of ${g.panic.sold} players he traded away had dropped 20%+ in value in the three weeks before. Buy from him right after bad news.` });
+  const cs = Object.entries(g.calc || {}).filter(([, c]) => c.n >= 3).sort((a, b) => a[1].e - b[1].e);
+  if (cs.length >= 2 && cs[0][1].e < cs[1][1].e * 0.8) out.push({ kind: '', label: `Trades by ${CALC_NAME[cs[0][0]]}`, calc: cs[0][0], why: `His last ${cs[0][1].n} trades were ${Math.round(cs[0][1].e * 100)}% off even on ${CALC_NAME[cs[0][0]]} vs ${Math.round(cs[1][1].e * 100)}% on ${CALC_NAME[cs[1][0]]}. Pitch offers in those numbers.` });
+  return out;
+}
+export const preferredCalc = ownerId => behaviour(ownerId).find(b => b.calc)?.calc || null;
