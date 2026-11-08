@@ -1,0 +1,9 @@
+name: Probe CORS
+on: { workflow_dispatch: {} }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -s -D - -o /dev/null -H "Origin: https://max-birdsong.github.io" "https://dynasty-daddy.com/api/v1/player/all/today?market=0" | grep -i -E "^HTTP|access-control" || true
+          echo ---; curl -s -D - -o /dev/null -X OPTIONS -H "Origin: https://max-birdsong.github.io" -H "Access-Control-Request-Method: GET" "https://dynasty-daddy.com/api/v1/player/all/today?market=0" | grep -i -E "^HTTP|access-control" || true
