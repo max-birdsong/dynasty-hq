@@ -1,5 +1,5 @@
 import { M, leagueById, teamAssets, asset, isPick } from '../model.js';
-import { state, logTrade, updateTrade, deleteTrade, settings, save } from '../state.js';
+import { state, logTrade, updateTrade, deleteTrade, settings, save, rawRules, setRules } from '../state.js';
 import { evalTrade, simDelta, suggest, tradeValue, calcEdge, calcValue } from '../trade.js';
 import { teamPlan } from '../plan.js';
 import { loadTrades, tradeSides, pickIndex } from '../owners.js';
@@ -320,6 +320,25 @@ function suggestionCard(r) {
 }
 
 // ---------------- log ----------------
+// after a no: why? One tap sets the matching filter on his owner card, so suggestions stop offering the same thing
+function whyRow(t, redraw) {
+  if (!['rejected', 'countered', 'ignored'].includes(t.status) || !t.partnerOwnerId) return null;
+  const raw = rawRules(t.partnerOwnerId), P = raw.players || {}, G = raw.leagues?.[t.leagueId] || {};
+  const month = () => ({ durKey: '30', until: Date.now() + 30 * 864e5 });
+  const nick = t.leagueNick || leagueById(t.leagueId)?.nick || 'this league';
+  const setP = ids => { setRules(t.partnerOwnerId, { ...raw, players: { ...month(), ...P, noPlayers: ids } }); };
+  const setG = patch => { setRules(t.partnerOwnerId, { ...raw, leagues: { ...(raw.leagues || {}), [t.leagueId]: { ...month(), ...G, ...patch } } }); };
+  const chip = (on, label, fn) => h('button', { class: 'tag' + (on ? ' push' : ''), style: { cursor: 'pointer', marginRight: '6px', marginBottom: '4px' }, onclick: () => { fn(!on); const why = new Set(t.why || []); on ? why.delete(label) : why.add(label); updateTrade(t.id, { why: [...why] }); redraw(); } }, (on ? '✓ ' : '') + label);
+  const np = P.noPlayers || [];
+  const players = (t.give || []).filter(k => k.startsWith('p:')).map(k => k.slice(2));
+  return h('tr', {}, h('td', { colspan: 10, style: { paddingTop: 0, whiteSpace: 'normal' } }, h('span', { class: 'small muted', style: { marginRight: '6px' } }, 'Why?'),
+    ...players.map((id, i) => chip(np.includes(id), `Not interested in ${t.giveNames[(t.give || []).indexOf('p:' + id)] || M.players[id]?.full_name || id}`, on => setP(on ? [...new Set([...np, id])] : np.filter(x => x !== id)))),
+    chip(!!G.noFirsts, `Won’t trade his 1sts in ${nick}`, on => setG({ noFirsts: on })),
+    chip(!!G.noPicks, `Won’t trade any picks in ${nick}`, on => setG({ noPicks: on })),
+    chip(!!G.paused, `Not trading in ${nick} right now`, on => setG({ paused: on })),
+    h('span', { class: 'small muted' }, ' (sets his filters for a month; change them on his owner card)')));
+}
+
 function logView() {
   const S = state();
   const box = h('div', { class: 'panel' });
@@ -332,13 +351,14 @@ function logView() {
       status,
       rows.length ? h('div', { class: 'tablewrap', style: { marginTop: '10px' } }, h('table', {},
         h('thead', {}, h('tr', {}, ['Date', 'League', 'Partner', 'You send', 'You get', 'TAT', 'FC them', 'Status', 'Notes', ''].map(x => h('th', {}, x)))),
-        h('tbody', {}, rows.map(t => h('tr', {},
+        h('tbody', {}, rows.flatMap(t => [h('tr', {},
           h('td', {}, new Date(t.created).toLocaleDateString()), h('td', {}, t.leagueNick || leagueById(t.leagueId)?.nick || ''), h('td', {}, t.partnerName),
           h('td', { style: { whiteSpace: 'normal', minWidth: '140px' } }, t.giveNames.join(' + ')), h('td', { style: { whiteSpace: 'normal', minWidth: '140px' } }, t.getNames.join(' + ')),
           h('td', { class: 'n ' + (t.tatGain >= 0 ? 'pos' : 'neg') }, sgn(t.tatGain)), h('td', { class: 'n' }, sgn(t.fcMargin)),
           h('td', {}, h('select', { onchange: e => { updateTrade(t.id, { status: e.target.value }); draw(); } }, STATUSES.map(s => h('option', { selected: s === t.status }, s))), t.auto ? h('span', { class: 'muted small' }, ' auto') : ''),
           h('td', {}, h('input', { value: t.notes || '', placeholder: 'note', onchange: e => updateTrade(t.id, { notes: e.target.value }) })),
-          h('td', {}, h('button', { class: 'btn ghost small', onclick: () => { if (confirm('Delete this log entry?')) { deleteTrade(t.id); draw(); } } }, '✕'))))))) : empty('No trades logged yet. Use "Log as sent" in the calculator or on a suggestion.'));
+          h('td', {}, h('button', { class: 'btn ghost small', onclick: () => { if (confirm('Delete this log entry?')) { deleteTrade(t.id); draw(); } } }, '✕'))),
+          whyRow(t, draw)].filter(Boolean))))) : empty('No trades logged yet. Use "Log as sent" in the calculator or on a suggestion.'));
   };
   draw();
   detectAccepted().then(n => { status.textContent = n ? `Found ${n} accepted trade(s) on Sleeper and marked them.` : 'Open offers are checked against completed Sleeper trades every time you open this page.'; if (n) draw(); });
