@@ -116,9 +116,14 @@ export async function consolidations(L) {
       if (!big.fc) continue;
       for (const g of combos) {
         if (g.some(a => +a.key.split(':')[2] <= +r)) continue; // must actually move up a round
+        // real owners only package one round up: picks two rounds below count for little, three or more for
+        // nothing (nobody gives a 1st for a stack of 4ths), and the package needs a pick from the round right below
+        const gap = a => +a.key.split(':')[2] - +r;
+        if (!g.some(a => gap(a) === 1)) continue;
+        const counts = a => gap(a) === 1 ? 1 : gap(a) === 2 ? 0.3 : 0;
         // FantasyCalc's own 2-for-1 rule: the side getting the single better asset gets credit for the roster spot,
         // so a pile of small picks is worth less than its sum
-        const sides = fcSides(g.map(a => a.fc * (pi?.index || 1)), [big.fc]);
+        const sides = fcSides(g.map(a => a.fc * counts(a) * (pi?.index || 1)), [big.fc]);
         const give = sides.A;
         if (sides.partnerMargin < margin * sides.B || sides.partnerMargin > 0.25 * sides.B) continue; // they win, but not by a mile
         const tatLoss = g.reduce((s, a) => s + a.tat, 0) - big.tat;
