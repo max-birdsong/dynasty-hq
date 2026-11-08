@@ -14,6 +14,8 @@ export function loadAffinity() {
   if (loading) return loading;
   loading = (async () => {
     const A = new Map();
+    // the weekly owner scan covers every dynasty league your opponents are in, not just yours
+    M.ownersGlobal = (await fetch('data/owners.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null))?.owners || null;
     const dp = await loadDp().catch(() => null);
     // valuation tendencies: per owner, per asset class, how far from market (at the time) he buys and sells
     const T = new Map();
@@ -66,6 +68,16 @@ const nm = id => M.players[id]?.full_name || id;
 
 // how an owner feels about a player, as short notes. likes > 0 means attached / buying, < 0 means selling.
 export function stance(ownerId, pid, hereLid) {
+  const g = M.ownersGlobal?.[ownerId];
+  if (g) {
+    // across all his dynasty leagues
+    const own = g.own[pid] || 0, buy = g.buy[pid] || 0, sell = g.sell[pid] || 0;
+    const notes = []; let likes = 0;
+    if (own >= 2) { notes.push(`rosters him in ${own} of his ${g.n} leagues`); likes += own - 1; }
+    if (buy) { notes.push(`added him ${buy}× in the last 90 days`); likes += 2 * buy; }
+    if (sell) { notes.push(`traded him away ${sell}× lately`); likes -= 2 * sell; }
+    if (notes.length) return { likes, notes, shared: g.n };
+  }
   const a = M.affinity?.get(ownerId)?.get(String(pid));
   if (!a) return null;
   const shared = M.leagues.filter(L => L.teams.some(t => t.ownerId === ownerId)).length;
@@ -98,6 +110,11 @@ export function affinityFlags(L, partner, r) {
 
 // an owner's portfolio for the owner card
 export function portfolio(ownerId) {
+  const g = M.ownersGlobal?.[ownerId];
+  if (g) {
+    const rows = (o, f) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pid, n]) => ({ pid, name: nm(pid), pos: M.players[pid]?.position, own: n, label: f(n) }));
+    return { all: true, n: g.n, core: rows(g.own, n => `${n}/${g.n}`), buying: rows(g.buy, n => n), selling: rows(g.sell, n => n) };
+  }
   const m = M.affinity?.get(ownerId);
   if (!m) return null;
   const rows = [...m.entries()].map(([pid, a]) => ({ pid, name: nm(pid), pos: M.players[pid]?.position, own: a.own.length, buy: a.buy, sell: a.sell }));
@@ -110,16 +127,22 @@ export function portfolio(ownerId) {
 
 const CLS = { picks: 'picks', QB: 'QBs', RB: 'RBs', WR: 'WRs', TE: 'TEs' };
 // "Overvalues RBs (+18% over market, 3 trades)": at least 2 trades and a 10% lean
+function tendMap(ownerId) {
+  const loc = M.tendencies?.get(ownerId) || {}, glo = M.ownersGlobal?.[ownerId]?.tend || {};
+  const out = {};
+  for (const c of new Set([...Object.keys(loc), ...Object.keys(glo)])) out[c] = (glo[c]?.n || 0) >= (loc[c]?.n || 0) ? glo[c] : loc[c];
+  return out;
+}
 export function tendencies(ownerId) {
-  const m = M.tendencies?.get(ownerId);
-  if (!m) return [];
+  const m = tendMap(ownerId);
+  if (!Object.keys(m).length) return [];
   return Object.entries(m).filter(([c, d]) => CLS[c] && d.n >= 2 && Math.abs(d.v) >= 0.1)
     .map(([c, d]) => ({ c, v: d.v, n: d.n, label: `${d.v > 0 ? 'Overvalues' : 'Undervalues'} ${CLS[c]}`, detail: `${d.v > 0 ? '+' : ''}${Math.round(d.v * 100)}% vs market, ${d.n} trades` }))
     .sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
 }
 // how much an owner's view of an asset differs from market: shrunk toward 1 with few trades, capped at ±25%
 export function biasFactor(ownerId, a) {
-  const d = M.tendencies?.get(ownerId)?.[a.pick ? 'picks' : a.pos];
+  const d = tendMap(ownerId)[a.pick ? 'picks' : a.pos];
   if (!d || d.n < 2) return 1;
   return 1 + Math.max(-0.25, Math.min(0.25, d.v)) * d.n / (d.n + 2);
 }
