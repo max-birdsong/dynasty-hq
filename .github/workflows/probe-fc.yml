@@ -1,0 +1,10 @@
+name: Probe FC
+on: { workflow_dispatch: {} }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="Mozilla/5.0 dynasty-hq personal"
+          curl -s -A "$UA" https://www.fantasycalc.com/trade-calculator -o /tmp/p.html; echo "page $(wc -c </tmp/p.html)"
+          for js in $(grep -oE '/_next/static/[^"]+\.js' /tmp/p.html | sort -u); do curl -s -A "$UA" "https://www.fantasycalc.com$js" -o /tmp/j.js; if grep -qE '0\.6982|753|valueAdjust|adjustment' /tmp/j.js; then echo "== $js"; grep -oE '.{160}(0\.6982|753|valueAdjust|Adjustment|adjustment).{220}' /tmp/j.js | head -6; fi; done
