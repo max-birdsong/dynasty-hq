@@ -136,6 +136,8 @@ export function toLog(r) {
     fcMargin: Math.round(r.fc.partnerMargin), tatGain: Math.round(r.tatGain),
     // what the acceptance model saw when you sent it, so it can learn from the outcome
     ...(() => { try { const a = pAccept(r.L, r.partner, r); return { features: a.f, pAccept: +a.p.toFixed(3) }; } catch { return {}; } })(),
+    // how the offer looked to him on each calculator, so his answer can confirm or overrule which one he uses
+    ...(() => { try { const ce = {}; for (const k of ['ktc', 'fc', 'dp']) { const e = calcEdge(r.L, r.give, r.get, k); if (Number.isFinite(e) && (k === 'fc' || M.calcs?.[k])) ce[k] = +e.toFixed(3); } return { calcEdges: ce }; } catch { return {}; } })(),
   };
 }
 
@@ -361,6 +363,19 @@ function logView() {
           whyRow(t, draw)].filter(Boolean))))) : empty('No trades logged yet. Use "Log as sent" in the calculator or on a suggestion.'));
   };
   draw();
+  // older entries: add how each offer looked on each calculator (today's values), so past answers count too
+  loadCalcs().then(c => {
+    M.calcs ||= c;
+    for (const t of S.trades) {
+      if (t.calcEdges || !t.give?.length) continue;
+      const L = leagueById(t.leagueId); if (!L) continue;
+      try {
+        const give = t.give.map(k => asset(L, k)), get = t.get.map(k => asset(L, k)), ce = {};
+        for (const k of ['ktc', 'fc', 'dp']) { const e = calcEdge(L, give, get, k); if (Number.isFinite(e) && (k === 'fc' || M.calcs?.[k])) ce[k] = +e.toFixed(3); }
+        updateTrade(t.id, { calcEdges: ce });
+      } catch {}
+    }
+  });
   detectAccepted().then(n => { status.textContent = n ? `Found ${n} accepted trade(s) on Sleeper and marked them.` : 'Open offers are checked against completed Sleeper trades every time you open this page.'; if (n) draw(); });
   return box;
 }

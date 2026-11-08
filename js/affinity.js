@@ -1,6 +1,7 @@
 // Owner portfolios across the leagues you share: who they own a lot of, who they've been buying, who they've been
 // selling. Owners get attached to players (and sour on them), and that's the cheapest edge in a negotiation.
 import { M } from './model.js';
+import { state } from './state.js';
 import * as api from './api.js';
 import { pool } from './util.js';
 import { loadTrades, tradeSides } from './owners.js';
@@ -178,7 +179,24 @@ export function behaviour(ownerId) {
   }
   if (g.panic?.sold >= 3 && g.panic.panic / g.panic.sold >= 0.3) out.push({ kind: 'good', label: 'Panic seller', why: `${g.panic.panic} of ${g.panic.sold} players he traded away had dropped 20%+ in value in the three weeks before. Buy from him right after bad news.` });
   const cs = Object.entries(g.calc || {}).filter(([, c]) => c.n >= 3).sort((a, b) => a[1].e - b[1].e);
-  if (cs.length >= 2 && cs[0][1].e < cs[1][1].e * 0.8) out.push({ kind: '', label: `Trades by ${CALC_NAME[cs[0][0]]}`, calc: cs[0][0], why: `His last ${cs[0][1].n} trades were ${Math.round(cs[0][1].e * 100)}% off even on ${CALC_NAME[cs[0][0]]} vs ${Math.round(cs[1][1].e * 100)}% on ${CALC_NAME[cs[1][0]]}. Pitch offers in those numbers.` });
+  // your own offers to him overrule the scan: a no on an offer that was clearly good for him on calculator k, or a
+  // yes on one that was bad for him on k, counts against k
+  const mine = state().trades.filter(t => t.partnerOwnerId === ownerId && t.calcEdges && ['accepted', 'rejected', 'ignored', 'withdrawn'].includes(t.status));
+  const against = k => mine.filter(t => { const e = t.calcEdges[k]; if (e == null) return false; return t.status === 'accepted' ? e <= -0.05 : e >= 0.05; }).length;
+  const forIt = k => mine.filter(t => { const e = t.calcEdges[k]; return e != null && (t.status === 'accepted' ? e >= -0.02 : e < 0); }).length;
+  let pick = cs.length >= 2 && cs[0][1].e < cs[1][1].e * 0.8 ? cs[0][0] : null;
+  if (mine.length) {
+    const ks = ['ktc', 'fc', 'dp'].filter(k => mine.some(t => t.calcEdges[k] != null));
+    const score = k => forIt(k) - 2 * against(k) + (k === pick ? 1 : 0);
+    const best = ks.sort((a, b) => score(b) - score(a))[0];
+    if (pick && against(pick) > 0) pick = best && against(best) === 0 ? best : null;
+    else if (!pick && best && against(best) === 0 && forIt(best) >= 2) pick = best;
+  }
+  if (pick) {
+    const c = g.calc?.[pick], hist = mine.length ? ` Your ${mine.length} offer${mine.length > 1 ? 's' : ''} to him: ${against(pick) ? against(pick) + ' contradict it' : 'consistent with it'}.` : '';
+    out.push({ kind: '', label: `Trades by ${CALC_NAME[pick]}${mine.length && against(pick) === 0 && forIt(pick) ? ' ✓' : ''}`, calc: pick,
+      why: (c ? `His last ${c.n} trades were ${Math.round(c.e * 100)}% off even on ${CALC_NAME[pick]}.` : 'Based on how he answered your offers.') + hist + ' Pitch offers in those numbers.' });
+  } else if (cs.length >= 2 && cs[0][1].e < cs[1][1].e * 0.8) out.push({ kind: 'bad', label: 'Calculator unclear', why: `His trades looked like ${CALC_NAME[cs[0][0]]}, but he turned down an offer that was clearly good for him there. Treat his valuations as his own.` });
   return out;
 }
 export const preferredCalc = ownerId => behaviour(ownerId).find(b => b.calc)?.calc || null;
