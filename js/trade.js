@@ -1,7 +1,7 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
 import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies, CAREER_END, playerWeekPts } from './model.js';
 import { settings, state } from './state.js';
-import { affinityFlags, stance, biasFactor } from './affinity.js';
+import { affinityFlags, stance, biasFactor, preferredCalc } from './affinity.js';
 import { simulate } from './sim.js';
 import { teamPlan, winNowValue } from './plan.js';
 import { sum } from './util.js';
@@ -43,6 +43,25 @@ export function perceived(a, partner) {
   // and this owner's own lean (overvalues RBs, undervalues picks...), from his trade history
   if (partner?.ownerId) v *= biasFactor(partner.ownerId, a);
   return v;
+}
+
+// ---------- other calculators (KeepTradeCut, DynastyProcess via Dynasty Daddy; data/calcs.json, loaded into M.calcs) ----------
+const ORD_N = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
+export function calcPickName(L, a) {
+  const [, y, rd] = a.key.split(':'), n = L.numTeams;
+  const tier = a.slot && +y === +L.season + 1 ? (a.slot <= n / 3 ? 'Early' : a.slot <= 2 * n / 3 ? 'Mid' : 'Late') : 'Mid';
+  return `${y} ${tier} ${ORD_N[rd] || rd + 'th'}`;
+}
+export function calcValue(L, a, k) {
+  if (k === 'fc') return a.fc || 0;
+  const c = M.calcs?.[k]; if (!c) return null;
+  const f = L.fmt.numQbs === 2 ? 'sf' : 'one';
+  return a.pick ? (c.picks[f][calcPickName(L, a)] || 0) : (c[f][a.id] || 0);
+}
+// the partner's gain on calculator k, as a share of the bigger side (positive = he wins)
+export function calcEdge(L, give, get, k) {
+  const g = give.reduce((s, a) => s + (calcValue(L, a, k) || 0), 0), t = get.reduce((s, a) => s + (calcValue(L, a, k) || 0), 0);
+  return (g - t) / Math.max(1, g, t);
 }
 
 // Rebuilders want players with years left. The age cap is set for WRs and shifts with each position's career length,
@@ -308,8 +327,24 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     }
     cands.sort((a, b) => b.score - a.score);
     let kept = 0;
+    // the calculator this owner actually trades by (KeepTradeCut for most), and the extra he'll want for favourites
+    const pc = preferredCalc(p.ownerId), usePc = pc && pc !== 'fc' && M.calcs?.[pc];
+    const myPicks = teamAssets(L, L.me).filter(a => a.pick && +a.key.split(':')[2] >= 2);
     for (const c of cands.slice(0, 60)) {
-      const r = evalTrade(L, p, c.g.map(a => a.key), c.t.map(a => a.key));
+      let giveKeys = c.g.map(a => a.key), sweet = [];
+      if (usePc) {
+        const fav = c.t.filter(a => a.id && (stance(p.ownerId, a.id, L.id)?.likes || 0) >= 2).length;
+        const target = 0.05 * fav; // he holds out for more on players he's attached to
+        let edge = calcEdge(L, c.g, c.t, pc);
+        if (edge < target - 0.15) continue; // too far off on his calculator to fix with small picks
+        // sweeten with the picks his calculator likes most relative to what they cost you on Sanderson's scale
+        const pool = myPicks.filter(a => !giveKeys.includes(a.key)).map(a => ({ a, cv: calcValue(L, a, pc) || 0 })).filter(x => x.cv > 0).sort((x, y) => (x.a.tat || 1) / x.cv - (y.a.tat || 1) / y.cv);
+        while (edge < target && sweet.length < 2 && pool.length) { const x = pool.shift(); sweet.push(x.a); edge = calcEdge(L, [...c.g, ...sweet], c.t, pc); }
+        if (edge < target) continue;
+        giveKeys = [...giveKeys, ...sweet.map(a => a.key)];
+      }
+      const r = evalTrade(L, p, giveKeys, c.t.map(a => a.key));
+      if (usePc) { r.calcPref = pc; r.sweetened = sweet.map(a => a.name); }
       if (r.flags.some(f => f.bad)) continue;
       if (r.memory.same && ['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status)) continue;
       r.value = tradeValue(L, r);

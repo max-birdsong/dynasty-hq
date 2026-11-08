@@ -1,6 +1,6 @@
 import { M, leagueById, teamAssets, asset, isPick } from '../model.js';
 import { state, logTrade, updateTrade, deleteTrade, settings, save } from '../state.js';
-import { evalTrade, simDelta, suggest, tradeValue } from '../trade.js';
+import { evalTrade, simDelta, suggest, tradeValue, calcEdge, calcValue } from '../trade.js';
 import { teamPlan } from '../plan.js';
 import { loadTrades, tradeSides, pickIndex } from '../owners.js';
 import { h, fmt, sgn, pct, toast, sleep, f1 } from '../util.js';
@@ -152,11 +152,25 @@ function marketVerdicts(L, r, partner) {
       return { k, label, d: (get - give) / Math.max(1, give, get) };
     });
     rows.push({ k: 'tat', label: 'Sanderson (your view)', d: (r.get.reduce((s, a) => s + (a.tat || 0), 0) - r.give.reduce((s, a) => s + (a.tat || 0), 0)) / Math.max(1, r.give.reduce((s, a) => s + (a.tat || 0), 0), r.get.reduce((s, a) => s + (a.tat || 0), 0)) });
+    // one click: add the picks his calculator values most per Sanderson point they cost you, until it's fair for him
+    let sweetBtn = '';
+    if (pc && pc !== 'fc') {
+      M.calcs ||= c;
+      let edge = calcEdge(L, r.give, r.get, pc);
+      if (edge < 0) {
+        const pool = teamAssets(L, L.me).filter(a => a.pick && +a.key.split(':')[2] >= 2 && !r.give.some(g => g.key === a.key))
+          .map(a => ({ a, cv: calcValue(L, a, pc) || 0 })).filter(x => x.cv > 0).sort((x, y) => (x.a.tat || 1) / x.cv - (y.a.tat || 1) / y.cv);
+        const add = [];
+        while (edge < 0 && add.length < 3 && pool.length) { add.push(pool.shift().a); edge = calcEdge(L, [...r.give, ...add], r.get, pc); }
+        if (edge >= 0) sweetBtn = h('button', { class: 'btn ghost small', style: { marginTop: '6px' }, onclick: () => { const app = document.getElementById('app'); app.replaceChildren(calculator(L, partner.rid, { give: [...r.give.map(a => a.key), ...add.map(a => a.key)], get: r.get.map(a => a.key) })); } },
+          `Sweeten for his calculator: add ${add.map(a => a.name.split(' (')[0]).join(' + ')}`);
+      }
+    }
     box.replaceChildren(h('div', { class: 'small muted', style: { margin: '10px 0 4px' } }, 'Market verdicts', pc ? ` · ${partner.owner} trades by ${rows.find(x => x.k === pc)?.label}` : ''),
       ...rows.map(x => h('div', { class: 'vrow' + (x.k === pc ? ' pref' : '') },
         h('span', { class: 'small' }, x.label),
         h('span', { class: 'vbar' }, h('i', { style: { left: `${50 + Math.max(-48, Math.min(48, x.d * 100))}%` } })),
-        h('span', { class: 'small ' + (Math.abs(x.d) < 0.05 ? '' : x.d > 0 ? 'pos' : 'neg') }, Math.abs(x.d) < 0.05 ? 'Fair' : x.d > 0 ? `You +${Math.round(x.d * 100)}%` : `${partner.owner} +${Math.round(-x.d * 100)}%`))));
+        h('span', { class: 'small ' + (Math.abs(x.d) < 0.05 ? '' : x.d > 0 ? 'pos' : 'neg') }, Math.abs(x.d) < 0.05 ? 'Fair' : x.d > 0 ? `You +${Math.round(x.d * 100)}%` : `${partner.owner} +${Math.round(-x.d * 100)}%`))), sweetBtn);
   });
   return box;
 }
@@ -179,6 +193,8 @@ function suggestions(L) {
   const box = h('div');
   const out = h('div');
   const run = async (leagues, mode = 'value') => {
+    if (!M.calcs) M.calcs = await loadCalcs();
+    await import('../affinity.js').then(a => a.loadAffinity()).catch(() => {});
     out.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), mode === 'title' ? 'Simulating the season for each candidate trade (about 20 seconds)…' : 'Searching trades…'));
     await sleep(30);
     let all = [];
@@ -254,6 +270,7 @@ function suggestionCard(r) {
       r.them ? ` · theirs ${sgn(r.them.rosAfter - r.them.rosBefore, 1)}` : ''),
     h('div', { class: 'small muted', style: { marginTop: '4px' } }, h('b', {}, r.mixLabel), ` · picks ${sgn(r.mix.picks)}, this season ${sgn(r.mix.now)}, future years ${sgn(r.mix.future)}`),
     r.flags.filter(f => f.warn).map(f => h('div', { class: 'small warn' }, '⚠️ ' + f.msg)),
+    r.calcPref ? h('div', { class: 'small pos' }, `Fair for ${r.partner.owner} on ${({ ktc: 'KeepTradeCut', dp: 'DynastyProcess' })[r.calcPref]}, the calculator he trades by` + (r.sweetened?.length ? `: sweetened with ${r.sweetened.join(' + ')}` : '') + '.') : '',
     r.flags.filter(f => f.info).map(f => h('div', { class: 'small muted' }, f.msg)),
     r.memory.overlap.length ? h('div', { class: 'small warn' }, `Asked for ${r.memory.overlap[0].getNames.join(' + ')} before: ${r.memory.overlap[0].status}`) : '',
     h('div', { class: 'row', style: { marginTop: '8px' } },
