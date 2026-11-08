@@ -5,17 +5,19 @@ import { scanLeague, indexTeams } from '../waiverscan.js';
 import { ledger, consolidations, stash, faabModel, audit } from '../farm.js';
 import { calculator } from './trades.js';
 import { h, f1, sleep, fmt } from '../util.js';
+import { settings, save } from '../state.js';
 import { posB, empty, modeTag } from '../components.js';
 
-const TABS = [['find', 'Find'], ['stash', 'Stash'], ['harvest', 'Harvest'], ['consolidate', 'Consolidate'], ['audit', 'Roster audit']];
+const TABS = [['queue', 'Claim queue'], ['find', 'Find'], ['stash', 'Stash'], ['harvest', 'Harvest'], ['consolidate', 'Consolidate'], ['audit', 'Roster audit']];
 const BLURB = {
+  queue: 'Your claims, ready to enter: per league, who to add, who to drop and what to bid. Check them off as you go.',
   find: 'Free agents worth a roster spot now: injury openings, r/DynastyFF buzz, backup RBs and QBs, risers.',
   stash: 'Backups to grab before the injury: chance the starter misses time this season × what the backup would be worth as the starter.',
   harvest: 'Players you picked up this season: what they cost, what they’re worth now, when to sell, and who will pay.',
   consolidate: 'Turn piles of 3rds and 4ths into one better pick. Each deal keeps the partner ahead on FantasyCalc.',
   audit: 'Roster spots doing nothing: cut them for lottery tickets, and use open taxi spots.',
 };
-let filter = 'All', tab = 'find', ctxP = null, ctxAt = 0;
+let filter = 'All', tab = 'queue', ctxP = null, ctxAt = 0;
 
 export default function waiversView(_, sub) {
   if (sub && BLURB[sub]) tab = sub;
@@ -50,7 +52,7 @@ async function show(pane) {
   pane.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), 'Checking rosters in each league…'));
   try {
     const c = await ctx();
-    pane.replaceChildren(await ({ find, stash: stashTab, harvest, consolidate, audit: auditTab })[tab](c));
+    pane.replaceChildren(await ({ queue, find, stash: stashTab, harvest, consolidate, audit: auditTab })[tab](c));
   } catch (e) { pane.replaceChildren(h('div', { class: 'err-box' }, 'Something went wrong: ' + e.message)); console.error(e); }
 }
 
@@ -61,7 +63,7 @@ const leagueChip = (c, x, extra = '') => h('a', { class: 'pill', style: { margin
 const openCalc = (L, rid, give, get) => { const box = document.getElementById('app'); box.replaceChildren(h('div', {}, h('a', { href: '#/waivers/x/' + tab }, '← back'), calculator(L, rid, { give, get }))); };
 
 // ---------- Find ----------
-async function find(c) {
+async function scanAll(c) {
   const tr = await api.trending().catch(() => []);
   const trending = new Map((Array.isArray(tr) ? tr : []).map(x => [String(x.player_id), x.count]));
   // Reddit can't be read from the browser; the hourly GitHub job saves who's being talked about
@@ -77,6 +79,11 @@ async function find(c) {
     all.push(...scanLeague({ id: L.id, nick: L.nick, ny: +L.season + 1, sf: L.fmt.numQbs === 2, rostered: new Set(ros.flatMap(r => (r.players || []).map(String))), mine: myIds, protect,
       fc: id => L.fc.byId.get(id), pick: n => L.fc.picks.get(n) }, env).map(r => ({ ...r, L })));
   }
+  return { all, job };
+}
+
+async function find(c) {
+  const { all, job } = await scanAll(c);
   const by = new Map();
   for (const r of all) { const g = by.get(r.id) || by.set(r.id, { ...r, leagues: [] }).get(r.id); g.leagues.push(r); g.score = Math.max(g.score, r.score); if (r.v > g.v) { g.v = r.v; g.price = r.price; g.L = r.L; } }
   const rows = [...by.values()].sort((a, b) => b.score - a.score);
@@ -184,4 +191,68 @@ async function auditTab(c) {
         a.taxiFit.length ? `: move ${a.taxiFit.map(x => x.name).join(', ')} there to free a bench spot` : ': stash young players there') : ''));
   }
   return out.length ? h('div', {}, out) : empty('Every roster spot is earning its keep.');
+}
+
+// ---------- Claim queue ----------
+// Per league: the best few adds, each paired with its own drop (lowest-value bench player first; none if a roster spot
+// is open), and a FAAB bid that fits what's left. Checked-off and skipped claims are remembered (synced).
+const qkey = (L, id) => `${L.id}:${id}:${M.week}`;
+async function queue(c) {
+  const S = settings();
+  S.claims ||= {};
+  for (const k of Object.keys(S.claims)) if (!k.endsWith(':' + M.week)) delete S.claims[k]; // only this week's
+  const { all } = await scanAll(c);
+  const byL = new Map();
+  for (const r of all) (byL.get(r.L.id) || byL.set(r.L.id, []).get(r.L.id)).push(r);
+  const leagues = [];
+  for (const L of c.mine) {
+    const ros = c.live[L.id]; if (!ros) continue;
+    const me = ros.find(r => r.roster_id === L.me.rid) || {};
+    const ids = (me.players || []).map(String), res = new Set((me.reserve || []).map(String)), taxi = new Set((me.taxi || []).map(String));
+    const protect = new Set([...startersNow(L, ids).starters, ...res, ...taxi]);
+    const spots = (L.lg?.roster_positions || []).filter(p => p !== 'IR' && p !== 'TAXI').length;
+    let open = Math.max(0, spots - ids.filter(id => !res.has(id) && !taxi.has(id)).length);
+    const drops = ids.filter(id => !protect.has(id)).map(id => ({ id, name: M.players[id]?.full_name || id, v: L.fc.byId.get(id)?.value || 0 })).sort((a, b) => a.v - b.v);
+    const fm = c.faab[L.id];
+    let left = c.left[L.id];
+    const claims = [];
+    for (const r of (byL.get(L.id) || []).sort((a, b) => b.score - a.score)) {
+      if (claims.length >= 3) break;
+      const st = S.claims[qkey(L, r.id)];
+      if (st === 'skip') continue;
+      const urgent = r.hurt || r.buzz?.news;
+      let drop = null;
+      if (open > 0) open--;
+      else {
+        drop = drops[0];
+        if (!drop || !(urgent ? r.v >= drop.v * 0.8 : r.v > drop.v * 1.15 + 50)) continue;
+        drops.shift();
+      }
+      let bid = null;
+      if (left != null) { const m = fm?.suggest(r.v, urgent); bid = Math.min(left, m ? m.bid : (urgent ? Math.ceil(left * 0.1) : 1)); left -= bid; }
+      claims.push({ r, drop, bid, done: st === 'done', urgent });
+    }
+    if (claims.length) leagues.push({ L, claims, prio: me.settings?.waiver_position, faab: c.left[L.id], score: Math.max(...claims.map(x => x.r.score)) });
+  }
+  leagues.sort((a, b) => b.score - a.score);
+  const box = h('div');
+  const draw = () => box.replaceChildren(
+    leagues.length ? h('div', {}, leagues.map(({ L, claims, prio, faab }) => h('div', { class: 'panel' },
+      h('div', { class: 'row spread' }, h('h2', { style: { margin: 0 } }, L.nick),
+        h('span', { class: 'small muted' }, faab != null ? `$${faab} FAAB left` : prio ? `waiver priority #${prio}` : ''),
+        h('a', { class: 'btn small', href: `https://sleeper.com/leagues/${L.id}/players`, target: '_blank', rel: 'noopener' }, 'Open in Sleeper')),
+      claims.map(x => { const k = qkey(L, x.r.id); const st = S.claims[k];
+        return h('div', { class: 'row spread', style: { borderTop: '1px solid var(--line)', padding: '8px 0', gap: '8px', opacity: st === 'done' ? 0.45 : 1 } },
+          h('label', { class: 'row', style: { gap: '8px', cursor: 'pointer' } },
+            h('input', { type: 'checkbox', checked: st === 'done', onchange: e => { S.claims[k] = e.target.checked ? 'done' : undefined; save({ settingsChanged: true }); draw(); } }),
+            h('span', { class: 'small' }, x.urgent ? '🚨 ' : '', 'Add ', posB(x.r.pos), h('b', {}, x.r.name), ` (${x.r.team})`,
+              x.drop ? h('span', { class: 'muted' }, ` · drop ${x.drop.name}`) : h('span', { class: 'muted' }, ' · open roster spot'),
+              x.bid != null ? h('b', {}, ` · bid $${x.bid}`) : '',
+              h('div', { class: 'muted' }, `${x.r.v ? f1(L, x.r.v, false) : 'no market value yet'}${x.r.price ? ' ' + x.r.price : ''}${x.r.tags.length ? ' · ' + x.r.tags[0] : ''}`))),
+          h('button', { class: 'btn ghost small', title: 'Skip this claim for the rest of the week', onclick: () => { S.claims[k] = 'skip'; save({ settingsChanged: true }); leagues.forEach(l => { l.claims = l.claims.filter(y => qkey(l.L, y.r.id) !== k); }); draw(); } }, 'Skip'));
+      }))))
+      : empty('Nothing to claim right now.'),
+    h('p', { class: 'muted small' }, 'Drops: your lowest-value bench player (never starters, IR or taxi), only when the add is clearly worth more (injury openings and Reddit news get more slack). Bids: what similar players went for in that league, one tier up for 🚨 claims, never more than your remaining FAAB across the queue. Sleeper has no link straight to a claim, so "Open in Sleeper" opens the league’s player search.'));
+  draw();
+  return box;
 }
