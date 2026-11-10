@@ -153,6 +153,18 @@ export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}
   return r;
 }
 
+// A fresh injury: he played in one of the last two weeks and is now out. The calculators update with a lag (a day
+// for KTC, longer for the others), so for a few days they still price him as healthy while both owners have seen the
+// news. Long-standing injuries are left alone: the market has priced those. Share of value the news knocks off for now.
+const INJ_SEV = { Doubtful: 0.03, Out: 0.1, IR: 0.25, PUP: 0.25 };
+export function freshInjury(L, id) {
+  const p = M.players[id], sev = INJ_SEV[p?.injury_status];
+  if (!sev) return null;
+  const pts = L.pastPts?.[id] || [];
+  if (!pts.slice(-2).some(x => x > 3)) return null;
+  return { sev, status: p.injury_status, part: p.injury_body_part || '' };
+}
+
 export function checkRules(L, partner, r) {
   const R = settings().rules, f = [];
   const mode = partner.mode;
@@ -197,6 +209,8 @@ export function checkRules(L, partner, r) {
     if (me.tatTotalRank <= mid && rankAfter > mid) f.push({ bad: false, warn: true, msg: `This drops your buying power from ${me.tatTotalRank} to ${rankAfter} of ${n}. Below the middle is where spending futures for this season most often starts a rebuild early.` });
   }
   if (plan?.bp === 'low' && plan.keepFirst) for (const a of r.give) if (a.pick && a.orig === me?.rid && a.key.split(':')[2] === '1' && +a.key.split(':')[1] === plan.keepFirst) f.push({ bad: false, warn: true, msg: `Keep your ${plan.keepFirst} 1st if you can: your buying power is low, so that's likely your own high pick when the rebuild comes. Buy with nearer picks and vets instead.` });
+  for (const a of r.give) { const x = a.id && freshInjury(L, a.id); if (x) f.push({ bad: false, warn: true, msg: `${a.name.split(' (')[0]} just got hurt (${x.status}${x.part ? ', ' + x.part.toLowerCase() : ''}). The calculators may not show it yet, but ${partner.owner} will know: expect him to mark him down.` }); }
+  for (const a of r.get) { const x = a.id && freshInjury(L, a.id); if (x) f.push({ bad: false, warn: true, msg: `${a.name.split(' (')[0]} just got hurt (${x.status}${x.part ? ', ' + x.part.toLowerCase() : ''}): his value here may still be pre-injury. Check the news before you pay for him.` }); }
   return f;
 }
 

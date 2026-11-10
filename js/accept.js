@@ -4,11 +4,11 @@
 import { M } from './model.js';
 import { state, rulesOf } from './state.js';
 import { behaviour, preferredCalc, stance } from './affinity.js';
-import { calcEdge } from './trade.js';
+import { calcEdge, freshInjury } from './trade.js';
 
 // starting weights: an even offer on his calculator to an active owner ≈ 25-30%, +10% for him ≈ 45-50%,
 // -10% ≈ 10%, a dormant owner ≈ a quarter of that
-export const PRIOR = { bias: -0.9, edge: 9, goal: 0.6, fav: -0.5, unwanted: -0.6, hurt: -0.5, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
+export const PRIOR = { bias: -0.9, edge: 9, goal: 0.6, fav: -0.5, unwanted: -0.6, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
 const KEYS = Object.keys(PRIOR);
 const sig = x => 1 / (1 + Math.exp(-x));
 
@@ -19,7 +19,11 @@ export function features(L, partner, r) {
   const ks = ['ktc', 'fc', 'dp', 'fp'].filter(k => k === 'fc' || M.calcs?.[k]);
   const market = pc && (pc === 'fc' || M.calcs?.[pc]) ? calcEdge(L, r.give, r.get, pc) : ks.reduce((s, k) => s + calcEdge(L, r.give, r.get, k), 0) / ks.length;
   const seen = r.fc ? r.fc.partnerMargin / Math.max(1, r.fc.A, r.fc.B) : market, fcRaw = calcEdge(L, r.give, r.get, 'fc');
-  const edge = market + Math.max(-0.05, Math.min(0.05, seen - fcRaw));
+  // fresh injuries the calculators haven't caught up on: he marks a newly hurt player down (and is glad to send one)
+  const big = Math.max(1, r.give.reduce((s, x) => s + (x.fc || 0), 0), r.get.reduce((s, x) => s + (x.fc || 0), 0));
+  const inj = (side, sign) => side.reduce((s, x) => { const j = x.id && freshInjury(L, x.id); return s + (j ? sign * j.sev * (x.fc || 0) / big : 0); }, 0);
+  const injAdj = inj(r.give, -1) + inj(r.get, 1);
+  const edge = market + Math.max(-0.05, Math.min(0.05, seen - fcRaw)) + injAdj;
   // a tanker dumping points values shedding them: up to 10% under market still reads as fair to him
   const want = rulesOf(partner.ownerId, L.id)?.want;
   const edgeAdj = want === 'dump' && r.them && r.them.rosAfter < r.them.rosBefore ? 0.1 : 0;
@@ -36,12 +40,12 @@ export function features(L, partner, r) {
     fav: r.get.filter(a => a.id && (stance(partner.ownerId, a.id, L.id)?.likes || 0) >= 2).length,
     // players he'd receive that he has traded away or cut before, and players he'd receive who are out injured
     unwanted: r.give.filter(a => a.id && (stance(partner.ownerId, a.id, L.id)?.likes || 0) <= -1).length,
-    hurt: r.give.filter(a => a.id && /^(Out|IR|PUP|Sus)/i.test(M.players[a.id]?.injury_status || '')).length,
     pieces: r.give.length + r.get.length,
     active: /active/i.test(lbl) ? 1 : 0,
     dormant: lbl === 'Dormant' ? 1 : 0,
     rejectedBefore: Math.min(2, prev),
     calc: pc ? 1 : 0,
+    inj: injAdj,
   };
 }
 
@@ -77,7 +81,7 @@ export function reasons(f) {
   if (f.goal) out.push([w.goal, 'meets a need of his']);
   if (f.fav) out.push([w.fav * f.fav, `asks for ${f.fav} player${f.fav > 1 ? 's' : ''} he's attached to`]);
   if (f.unwanted) out.push([w.unwanted * f.unwanted, `sends him ${f.unwanted > 1 ? 'players' : 'a player'} he got rid of before`]);
-  if (f.hurt) out.push([w.hurt * f.hurt, `sends him ${f.hurt > 1 ? 'players who are' : 'a player who is'} out injured`]);
+  if (f.inj) out.push([w.edge * f.inj, f.inj < 0 ? `includes a fresh injury the calculators haven't priced yet: he'll mark it down (${Math.round(f.inj * 100)}% included above)` : `he gets to send a freshly injured player (+${Math.round(f.inj * 100)}% included above)`]);
   if (f.dormant) out.push([w.dormant, 'he’s been inactive']);
   else if (f.active) out.push([w.active, 'he trades a lot']);
   if (f.rejectedBefore) out.push([w.rejectedBefore * f.rejectedBefore, `he turned down your offers before (${f.rejectedBefore % 1 ? f.rejectedBefore.toFixed(1) : f.rejectedBefore}, other leagues count half)`]);
