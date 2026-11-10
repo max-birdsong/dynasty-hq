@@ -23,5 +23,24 @@
 },
 "episodes": {},
 "takes": [],
-"updated": "2026-11-10T07:31:22.902272+00:00"
+"updated": "2026-11-10T07:37:06.781847+00:00",
+"log": [
+"run 2026-11-10T07:37 model claude-haiku-5-5",
+"Fantasy Footballers Dynasty: 187 episodes in feed",
+"Fantasy Footballers Dynasty | Dynasty Trade-a-Palooza + Jonathan Taylor Trade Saga - Dynas: failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"FantasyPros Dynasty: 418 episodes in feed",
+"FantasyPros Dynasty | Dynasty Trade Block | November 2026 Trade Values: Lamar Jack: failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Dynasty Nerds: 968 episodes in feed",
+"Dynasty Nerds | The Biggest Risers and Fallers in Dynasty | Dynasty Fantasy : failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Dynasty Nerds | Midseason Startup Draft | Dynasty Fantasy Football Podcast E: failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Dynasty Nerds | 2027 Free Agency Preview | Dynasty Fantasy Football Podcast : failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Fantasy Football Today Dynasty: 259 episodes in feed",
+"Fantasy Football Today Dynasty | Russell Wilson, Kyle Long react Bears-Seahawks, NFC North ba: failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Fantasy Football Today Dynasty | Is It OVER or JUST BEGINNING? 10 Dynasty Players to Watch!: failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Fantasy Football Today Dynasty | Dynasty Rankings Update + Q&A: failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Under The Helmet: 600 episodes in feed",
+"Under The Helmet | Darren Waller Dominating, Jonathan Taylor's Last Game with C: failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Under The Helmet | Jonah Coleman, Justin Jefferson, and Josh Allen's Test: The : failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'",
+"Under The Helmet | League-Winning Players with Joe Bond of The Fantasy Six Pack: failed at transcribe: TypeError: open() got an unexpected keyword argument 'metadata_errors'"
+]
 }
