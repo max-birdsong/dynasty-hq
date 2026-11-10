@@ -21,7 +21,9 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: whisper-base-en-v1
-      - run: pip install --quiet faster-whisper requests 'av<15'   # PyAV 15 dropped an argument faster-whisper still passes
+      - run: |
+          sudo apt-get install -y -qq ffmpeg >/dev/null || true
+          pip install --quiet faster-whisper requests numpy
       - run: python scripts/podcasts.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
