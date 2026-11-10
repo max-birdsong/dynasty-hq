@@ -75,7 +75,7 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       h('div', {}, h('h3', {}, 'You get'), h('div', { class: 'assets' }, r.get.map(a => assetLine(a))))),
     h('div', { class: 'kpis' },
       kpi(h('span', { class: r.tatGain >= 0 ? 'pos' : 'neg', title: sgn(r.tatGain) + ' Sanderson points' }, f1(L, r.tatGain)), 'Sanderson gain (you)'),
-      kpi(delta(m), `FC for ${partner.owner}` + (r.fc.adjA || r.fc.adjB ? ` (adj ${fmt(r.fc.adjA || r.fc.adjB)})` : '')),
+      kpi(delta(m), `FC for ${partner.owner}, as he values things` + (r.fc.adjA || r.fc.adjB ? ` (adj ${fmt(r.fc.adjA || r.fc.adjB)})` : '')),
       r.me ? kpi(h('span', {}, delta(r.me.rosAfter - r.me.rosBefore, 1), ' / ', delta(r.me.poAfter - r.me.poBefore, 1)), 'Your pts/wk: now / playoffs') : '',
       r.them ? kpi(h('span', {}, delta(r.them.rosAfter - r.them.rosBefore, 1), ' / ', delta(r.them.poAfter - r.them.poBefore, 1)), `${partner.owner} pts/wk`) : ''),
     h('div', { class: 'small muted', style: { marginTop: '4px' } }, h('b', {}, r.mixLabel), ` · picks ${sgn(r.mix.picks)}, this season ${sgn(r.mix.now)}, future years ${sgn(r.mix.future)}`),

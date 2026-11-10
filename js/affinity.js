@@ -151,7 +151,8 @@ export function tendencies(ownerId) {
 export function biasFactor(ownerId, a) {
   const d = tendMap(ownerId)[a.pick ? 'picks' : a.pos];
   if (!d || d.n < 2) return 1;
-  return 1 + Math.max(-0.25, Math.min(0.25, d.v)) * d.n / (d.n + 2);
+  // shrink hard toward no lean: 14 trades give about 60% of the measured lean, 2 trades about 15%; never more than ±12%
+  return 1 + Math.max(-0.12, Math.min(0.12, d.v * d.n / (d.n + 10)));
 }
 
 // ---------- behaviour profile (from the weekly scan across all his leagues) ----------
