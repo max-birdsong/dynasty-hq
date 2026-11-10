@@ -86,7 +86,7 @@ def stamp(t):
 
 
 # ---------- take extraction ----------
-PROMPT_VERSION = 2
+PROMPT_VERSION = 3
 PROMPT = """Below is part of an auto-generated transcript of a dynasty fantasy football podcast episode ("{show}: {title}"). Each line starts with its timestamp [h:mm:ss]. Names may be misspelled by the transcription.
 
 Find the hosts' opinions about specific NFL players' DYNASTY value: their long-term trade value and outlook, the kind of thing that should make a dynasty manager buy, sell or hold him.
@@ -107,6 +107,8 @@ For each take return:
 - "quote": the host's exact words from the transcript that state the take, copied verbatim, at most {qw} words. Pick the sentence where the opinion is clearest, preferably one that names the player.
 - "t": the timestamp of the line where the quote starts, as h:mm:ss
 - "speaker": the host's name if the transcript makes it clear, else null
+- "price": if the host names a price, what he would pay for the player or want back for him (e.g. "a 1st and a young RB", "a mid 2nd", "3.05", "two 1sts", "not more than a 3rd"), written short in his terms; else null. Price talk is the most useful kind of take: when a host names a price, use the sentence with the price as the quote.
+- "price_dir": "pay" if that is what he would give to get the player, "ask" if it is what he would want back for him, "cap" if it is the most he would pay or the price he calls too high; else null
 - "sure": true only if the stance and the player are both unambiguous
 
 Return only a JSON array (empty if there are none), no other text.
@@ -261,6 +263,7 @@ def main():
                 if any(t["guid"] == ep["guid"] and t["pid"] == pid and (t["quote"] == quote or abs(t["t"] - sec) < 20) for t in data["takes"]):
                     continue
                 data["takes"].append({"pid": pid, "player": x.get("player"), "stance": x["stance"], "quote": quote, "t": sec,
+                                      "price": (x.get("price") or None) and str(x["price"])[:80], "price_dir": x.get("price_dir") if x.get("price_dir") in ("pay", "ask", "cap") else None,
                                       "speaker": x.get("speaker"), "show": show["name"], "episode": ep["title"], "date": ep["date"],
                                       "audio": ep["audio"], "link": ep["link"], "guid": ep["guid"]})
                 kept += 1

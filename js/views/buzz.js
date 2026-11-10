@@ -1,7 +1,7 @@
 // Podcast buzz page: what the dynasty podcasts are saying, player by player, in the hosts' own words.
 import { M } from '../model.js';
 import { h } from '../util.js';
-import { loadBuzz, summary, takesFor, disagreements } from '../buzz.js';
+import { loadBuzz, summary, takesFor, disagreements, priceIn1sts, marketIn1sts, priceLabel } from '../buzz.js';
 import { loadDp } from '../history.js';
 
 const STANCE = { buy: ['Buy', 'good'], breakout: ['Breakout', 'good'], sell: ['Sell', 'bad'], bust: ['Bust', 'bad'], hold: ['Hold', ''], neutral: ['Take', ''] };
@@ -19,6 +19,17 @@ function play(t) {
   if (audio.readyState >= 1) go(); else { audio.addEventListener('loadedmetadata', go, { once: true }); audio.load(); }
 }
 
+function priceBox(t) {
+  if (!t.price) return '';
+  const p = priceIn1sts(t.price), mk = marketIn1sts(M, t.pid);
+  const conv = p ? ` ≈ ${p.firsts.toFixed(p.firsts < 1 ? 2 : 1)} 1sts${p.partial ? ' + a player' : ''}` : '';
+  const vs = p && mk ? ` · market ≈ ${mk.toFixed(mk < 1 ? 2 : 1)} 1sts` : '';
+  // is his price above or below the market? (only when his price is all picks)
+  const gap = p && mk && !p.partial ? (p.firsts - mk) / mk : null;
+  const note = gap == null || Math.abs(gap) < 0.15 ? '' : t.price_dir === 'ask' || t.price_dir === 'cap' ? '' : gap > 0 ? ' (he’d pay over market)' : ' (below market: he thinks he’s overpriced)';
+  return h('div', { class: 'small', style: { marginTop: '3px', padding: '3px 8px', borderRadius: '6px', background: 'var(--panel2)', display: 'inline-block' } }, '💰 ', h('b', {}, priceLabel(t)), conv, vs, note);
+}
+
 function takeRow(t) {
   const [lbl, cls] = STANCE[t.stance] || [t.stance, ''];
   return h('div', { class: 'take', style: { padding: '6px 0', borderTop: '1px solid var(--line)' } },
@@ -26,6 +37,7 @@ function takeRow(t) {
       h('span', { class: 'tag ' + cls }, lbl),
       h('span', {}, '“', t.quote, '”'),
       h('button', { class: 'btn ghost small', title: 'Hear it from this moment', onclick: () => play(t) }, `▶ ${mmss(t.t)}`)),
+    priceBox(t),
     h('div', { class: 'small muted' }, [t.speaker, t.show].filter(Boolean).join(', '), ' · ',
       t.link ? h('a', { href: t.link, target: '_blank', rel: 'noopener' }, t.episode) : t.episode, ' · ', ago(t.date)));
 }
@@ -39,7 +51,7 @@ export default async function buzzView() {
     return root;
   }
   const mine = new Set(M.leagues.flatMap(L => L.me?.players || []).map(String));
-  let scope = 'mine', days = 30, q = '';
+  let scope = 'mine', days = 30, q = '', priced = false;
   const list = h('div');
   const name = pid => M.players[pid]?.full_name || pid;
   const shows = Object.keys(B.feeds || {});
@@ -48,13 +60,16 @@ export default async function buzzView() {
     const S = Object.values(summary(B, days))
       .filter(s => scope === 'all' || mine.has(s.pid))
       .filter(s => !q || name(s.pid).toLowerCase().includes(q))
-      .sort((a, b) => b.n - a.n || b.latest.localeCompare(a.latest));
+      .map(s => ({ ...s, priced: takesFor(B, s.pid, days).some(t => t.price) }))
+      .filter(s => !priced || s.priced)
+      .sort((a, b) => (b.priced - a.priced) || b.n - a.n || b.latest.localeCompare(a.latest));
     list.replaceChildren(...(S.length ? S.slice(0, 80).map(s => {
-      const p = M.players[s.pid], tk = takesFor(B, s.pid, days);
+      const p = M.players[s.pid], tk = takesFor(B, s.pid, days).sort((a, b) => (!!b.price - !!a.price) || b.date.localeCompare(a.date));
       const lean = s.net > 0 ? h('span', { class: 'tag good' }, `${s.up} buying${s.down ? `, ${s.down} selling` : ''}`) : s.net < 0 ? h('span', { class: 'tag bad' }, `${s.down} selling${s.up ? `, ${s.up} buying` : ''}`) : h('span', { class: 'tag' }, s.up ? 'split' : `${s.n} take${s.n > 1 ? 's' : ''}`);
       return h('details', { class: 'card', style: { marginBottom: '8px' }, open: S.length <= 6 },
         h('summary', { style: { cursor: 'pointer' } }, h('b', {}, name(s.pid)), ' ', h('span', { class: 'muted small' }, `${p?.position || ''} ${p?.team || ''}`), ' ', lean,
           mine.has(s.pid) ? h('span', { class: 'tag', style: { marginLeft: '6px' } }, 'yours') : '',
+          s.priced ? h('span', { class: 'tag', style: { marginLeft: '6px' } }, '💰 price named') : '',
           h('div', { class: 'small', style: { marginTop: '4px' } }, '“', tk[0].quote, '” ', h('span', { class: 'muted' }, `(${tk[0].show})`))),
         ...tk.map(takeRow));
     }) : [h('p', { class: 'muted' }, scope === 'mine' ? 'No takes on your players in this window. Switch to all players.' : 'No takes match.')]));
@@ -72,6 +87,7 @@ export default async function buzzView() {
       h('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap', alignItems: 'center' } },
         sel([['mine', 'Your players'], ['all', 'All players']], scope, v => scope = v),
         sel([[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days']], days, v => days = +v),
+        h('label', { class: 'small' }, h('input', { type: 'checkbox', onchange: e => { priced = e.target.checked; render(); } }), ' Prices only'),
         h('input', { placeholder: 'Find a player…', oninput: e => { q = e.target.value.toLowerCase(); render(); } })),
       h('div', { style: { marginTop: '8px' } }, audio, nowPlaying)),
     flags, list,
