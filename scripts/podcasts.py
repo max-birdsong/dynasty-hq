@@ -9,7 +9,7 @@ Runs in GitHub Actions (.github/workflows/podcasts.yml):
 
 Needs the repo secret ANTHROPIC_API_KEY. Without it the job exits quietly.
 """
-import datetime as dt, difflib, email.utils, json, os, re, sys, tempfile, time, unicodedata
+import traceback, datetime as dt, difflib, email.utils, json, os, re, sys, tempfile, time, unicodedata
 import xml.etree.ElementTree as ET
 import requests
 
@@ -176,6 +176,7 @@ def main():
         data = {"feeds": {}, "episodes": {}, "takes": []}
     idx = player_index()
     now = dt.datetime.now(dt.timezone.utc)
+    log = [f"run {now.isoformat()[:16]} model {MODEL}"]
     budget_end = time.time() + float(os.environ.get("BUDGET_MIN", "200")) * 60
     for show in SHOWS:
         feed = data["feeds"].get(show["name"], {}).get("url")
@@ -187,12 +188,14 @@ def main():
         try:
             eps = episodes(feed)
         except Exception as e:
-            print("feed failed", show["name"], e); continue
+            print("feed failed", show["name"], e); log.append(f"{show['name']}: feed failed: {e}"); continue
+        log.append(f"{show['name']}: {len(eps)} episodes in feed")
         new = [e for e in eps if e["guid"] not in data["episodes"] and (now - dt.datetime.fromisoformat(e["date"])).days <= MAX_AGE_DAYS]
         for ep in sorted(new, key=lambda e: e["date"], reverse=True)[:PER_SHOW]:
             if time.time() > budget_end:
                 print("time budget used up"); break
             print("episode:", show["name"], "|", ep["title"]); sys.stdout.flush()
+            stage = "download"
             try:
                 with tempfile.TemporaryDirectory() as d:
                     path = os.path.join(d, "ep.mp3")
@@ -200,10 +203,16 @@ def main():
                         r.raise_for_status()
                         with open(path, "wb") as f:
                             for chunk in r.iter_content(1 << 20): f.write(chunk)
-                    segs = transcribe(path)
+                    stage = "transcribe"
+                    t0 = time.time(); segs = transcribe(path)
+                    log.append(f"{show['name']} | {ep['title'][:60]}: {os.path.getsize(path) >> 20} MB, {len(segs)} segments in {time.time() - t0:.0f}s")
+                stage = "extract"
                 raw = extract(show["name"], ep["title"], segs, key)
             except Exception as e:
-                print("  failed:", e); continue
+                traceback.print_exc()
+                log.append(f"{show['name']} | {ep['title'][:60]}: failed at {stage}: {type(e).__name__}: {str(e)[:300]}")
+                data["log"] = log; json.dump(data, open(OUT, "w"), indent=0)
+                continue
             kept = 0
             for x in raw:
                 if not isinstance(x, dict) or x.get("stance") not in STANCES:
@@ -219,11 +228,13 @@ def main():
                 kept += 1
             data["episodes"][ep["guid"]] = {"show": show["name"], "title": ep["title"], "date": ep["date"], "takes": kept, "raw": len(raw)}
             print(f"  {kept} takes kept of {len(raw)}")
+            log.append(f"  -> {kept} takes kept of {len(raw)}")
             json.dump(data, open(OUT, "w"), indent=0)  # save as we go
     cut = (now - dt.timedelta(days=KEEP_DAYS)).isoformat()
     data["takes"] = [t for t in data["takes"] if t["date"] >= cut]
     data["episodes"] = {g: e for g, e in data["episodes"].items() if e["date"] >= cut}
     data["updated"] = now.isoformat()
+    data["log"] = log
     json.dump(data, open(OUT, "w"), indent=0)
 
 

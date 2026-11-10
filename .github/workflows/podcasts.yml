@@ -3,6 +3,9 @@ on:
   schedule:
     - cron: '17 4 * * *'    # daily: new dynasty podcast episodes -> player takes (data/buzz.json)
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['scripts/podcasts.py']   # re-run when the job changes
 permissions:
   contents: write
 concurrency: { group: podcasts, cancel-in-progress: false }
