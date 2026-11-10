@@ -26,7 +26,7 @@ PER_SHOW = 3               # new episodes per show per run (keeps the run under 
 KEEP_DAYS = 120            # takes older than this are dropped
 QUOTE_WORDS = 25
 MODEL = os.environ.get("BUZZ_MODEL", "claude-haiku-5-5")
-STANCES = ["buy", "sell", "hold", "breakout", "bust", "neutral"]
+STANCES = ["buy", "sell", "hold", "breakout", "bust"]
 UA = {"user-agent": "dynasty-hq podcast buzz (personal, non-commercial)"}
 
 
@@ -86,26 +86,50 @@ def stamp(t):
 
 
 # ---------- take extraction ----------
-PROMPT = """Below is an auto-generated transcript of a dynasty fantasy football podcast episode ("{show}: {title}"). Each line starts with its timestamp [h:mm:ss]. Names may be misspelled by the transcription.
+PROMPT_VERSION = 2
+PROMPT = """Below is part of an auto-generated transcript of a dynasty fantasy football podcast episode ("{show}: {title}"). Each line starts with its timestamp [h:mm:ss]. Names may be misspelled by the transcription.
 
-List every clear opinion the hosts give about a specific NFL player's fantasy value: buying or selling him, holding, a predicted breakout, a predicted bust, or a notable neutral assessment. Skip passing mentions, game recaps without an opinion, and rookies not yet in the NFL.
+Find the hosts' opinions about specific NFL players' DYNASTY value: their long-term trade value and outlook, the kind of thing that should make a dynasty manager buy, sell or hold him.
+
+Do NOT include: start/sit advice, streaming, this week's matchups, weekly projections, game recaps or stat lines without a value opinion, betting, real-NFL contract or team talk with no fantasy opinion, college prospects not yet in the NFL, and anything you are not sure is about this player.
+
+Stances:
+- "buy": the host would acquire him / thinks the market is too low on him
+- "sell": the host would move him / thinks the market is too high or his outlook is worse than his price
+- "hold": keep him, don't sell low or chase
+- "breakout": expects his value to rise sharply soon
+- "bust": thinks he is done or won't live up to his price
+(If a statement is negative about his future, it is sell or bust, never buy. "Regression candidate" is sell.)
 
 For each take return:
 - "player": the player's correct full name (fix transcription misspellings)
 - "stance": one of {stances}
-- "quote": the host's exact words from the transcript stating the take, copied verbatim, at most {qw} words (pick the key sentence)
+- "quote": the host's exact words from the transcript that state the take, copied verbatim, at most {qw} words. Pick the sentence where the opinion is clearest, preferably one that names the player.
 - "t": the timestamp of the line where the quote starts, as h:mm:ss
 - "speaker": the host's name if the transcript makes it clear, else null
+- "sure": true only if the stance and the player are both unambiguous
 
-Return only a JSON array, no other text.
+Return only a JSON array (empty if there are none), no other text.
 
 TRANSCRIPT:
 {text}"""
 
 
+CHUNK_S = 1500  # ~25 minutes per request: long episodes otherwise overflow the answer and come back empty
 def extract(show, title, segs, key):
+    out, start = [], 0
+    end = segs[-1][0] if segs else 0
+    while start <= end:
+        part = [x for x in segs if start - 60 <= x[0] < start + CHUNK_S]
+        if part:
+            out += extract_part(show, title, part, key)
+        start += CHUNK_S
+    return out
+
+
+def extract_part(show, title, segs, key):
     text = "\n".join(f"[{stamp(t)}] {s}" for t, s in segs)
-    body = {"model": MODEL, "max_tokens": 8000, "messages": [{"role": "user", "content": PROMPT.format(show=show, title=title, stances=", ".join(STANCES), qw=QUOTE_WORDS, text=text)}]}
+    body = {"model": MODEL, "max_tokens": 6000, "messages": [{"role": "user", "content": PROMPT.format(show=show, title=title, stances=", ".join(STANCES), qw=QUOTE_WORDS, text=text)}]}
     for attempt in range(4):
         r = requests.post("https://api.anthropic.com/v1/messages", json=body, timeout=600,
                           headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
@@ -113,8 +137,12 @@ def extract(show, title, segs, key):
             time.sleep(20 * (attempt + 1)); continue
         r.raise_for_status()
         out = "".join(c.get("text", "") for c in r.json()["content"])
-        m = re.search(r"\[.*\]", out, re.S)
-        return json.loads(m.group(0)) if m else []
+        # tolerate a cut-off answer: take every complete {...} object
+        objs = []
+        for m in re.finditer(r"\{[^{}]*\}", out):
+            try: objs.append(json.loads(m.group(0)))
+            except Exception: pass
+        return objs
     raise RuntimeError("API kept failing")
 
 
@@ -178,6 +206,10 @@ def main():
         data = json.load(open(OUT))
     except Exception:
         data = {"feeds": {}, "episodes": {}, "takes": []}
+    old = {g for g, e in data["episodes"].items() if e.get("v") != PROMPT_VERSION}
+    if old:
+        data["takes"] = [t for t in data["takes"] if t["guid"] not in old]
+        data["episodes"] = {g: e for g, e in data["episodes"].items() if g not in old}
     idx = player_index()
     now = dt.datetime.now(dt.timezone.utc)
     log = [f"run {now.isoformat()[:16]} model {MODEL}"]
@@ -219,18 +251,20 @@ def main():
                 continue
             kept = 0
             for x in raw:
-                if not isinstance(x, dict) or x.get("stance") not in STANCES:
+                if not isinstance(x, dict) or x.get("stance") not in STANCES or x.get("sure") is False:
                     continue
                 pid = match(x.get("player", ""), idx)
                 v = verbatim(x.get("quote", ""), segs, x.get("t"))
                 if not pid or not v:
                     continue
                 quote, sec = v
+                if any(t["guid"] == ep["guid"] and t["pid"] == pid and (t["quote"] == quote or abs(t["t"] - sec) < 20) for t in data["takes"]):
+                    continue
                 data["takes"].append({"pid": pid, "player": x.get("player"), "stance": x["stance"], "quote": quote, "t": sec,
                                       "speaker": x.get("speaker"), "show": show["name"], "episode": ep["title"], "date": ep["date"],
                                       "audio": ep["audio"], "link": ep["link"], "guid": ep["guid"]})
                 kept += 1
-            data["episodes"][ep["guid"]] = {"show": show["name"], "title": ep["title"], "date": ep["date"], "takes": kept, "raw": len(raw)}
+            data["episodes"][ep["guid"]] = {"show": show["name"], "title": ep["title"], "date": ep["date"], "takes": kept, "raw": len(raw), "v": PROMPT_VERSION}
             print(f"  {kept} takes kept of {len(raw)}")
             log.append(f"  -> {kept} takes kept of {len(raw)}")
             json.dump(data, open(OUT, "w"), indent=0)  # save as we go
