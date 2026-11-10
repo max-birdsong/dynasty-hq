@@ -155,13 +155,19 @@ export function evalTrade(L, partner, giveKeys, getKeys, { lineups = true } = {}
 
 // A fresh injury: he played in one of the last two weeks and is now out. The calculators update with a lag (a day
 // for KTC, longer for the others), so for a few days they still price him as healthy while both owners have seen the
-// news. Long-standing injuries are left alone: the market has priced those. Share of value the news knocks off for now.
-const INJ_SEV = { Doubtful: 0.03, Out: 0.1, IR: 0.25, PUP: 0.25 };
+// news. Long-standing injuries are left alone: the market has priced those.
+// How much the news is worth: the share of his value that is this season (1 / years of career left: small for a young
+// stud, large for an old vet) times the share of the rest of the season he misses, plus a little for recovery risk.
+// A young stud out two weeks loses ~3-4%; a 29-year-old RB on IR ~30%.
+const INJ_WEEKS = { Doubtful: 0.5, Out: 2, IR: 6, PUP: 6 }, INJ_RISK = { Doubtful: 0, Out: 0.01, IR: 0.03, PUP: 0.03 };
 export function freshInjury(L, id) {
-  const p = M.players[id], sev = INJ_SEV[p?.injury_status];
-  if (!sev) return null;
+  const p = M.players[id], wk = INJ_WEEKS[p?.injury_status];
+  if (!wk) return null;
   const pts = L.pastPts?.[id] || [];
   if (!pts.slice(-2).some(x => x > 3)) return null;
+  const left = Math.max(1, (L.playoffStart || 15) + 3 - M.week); // weeks left incl. the playoffs
+  const years = Math.max(1, Math.min(10, (CAREER_END[p.position] ?? 30) - (p.age || 25) + 1));
+  const sev = Math.min(0.35, (1 / years) * Math.min(1, wk / left) + INJ_RISK[p.injury_status]);
   return { sev, status: p.injury_status, part: p.injury_body_part || '' };
 }
 
