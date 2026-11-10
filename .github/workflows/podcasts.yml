@@ -5,7 +5,7 @@ on:
   workflow_dispatch: {}
   push:
     branches: [main]
-    paths: ['scripts/podcasts.py']   # re-run when the job changes
+    paths: ['scripts/podcasts.py', '.github/workflows/podcasts.yml']   # re-run when the job changes
 permissions:
   contents: write
 concurrency: { group: podcasts, cancel-in-progress: false }
@@ -21,7 +21,7 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: whisper-base-en-v1
-      - run: pip install --quiet faster-whisper requests
+      - run: pip install --quiet faster-whisper requests 'av<15'   # PyAV 15 dropped an argument faster-whisper still passes
       - run: python scripts/podcasts.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
