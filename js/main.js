@@ -9,8 +9,9 @@ import tradesView from './views/trades.js';
 import valuesView from './views/values.js';
 import waiversView from './views/waivers.js';
 import settingsView from './views/settings.js';
+import buzzView from './views/buzz.js';
 
-const routes = { '': dashboard, league: leagueView, owners: ownersView, trades: tradesView, values: valuesView, waivers: waiversView, settings: settingsView };
+const routes = { '': dashboard, league: leagueView, owners: ownersView, trades: tradesView, values: valuesView, waivers: waiversView, buzz: buzzView, settings: settingsView };
 const app = $('#app');
 
 export async function route() {

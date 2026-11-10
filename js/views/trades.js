@@ -7,6 +7,7 @@ import { h, fmt, sgn, pct, toast, sleep, f1, lineChart } from '../util.js';
 import { curves, seasons, total } from '../equity.js';
 import { preferredCalc } from '../affinity.js';
 import { pAccept, reasons, learnedFrom } from '../accept.js';
+import { loadBuzz, buzzLine, takesFor } from '../buzz.js';
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
 
 const STATUSES = ['sent', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
@@ -83,6 +84,7 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       r.flags.some(f => !f.info) ? r.flags.filter(f => !f.info).map(f => h('div', { class: 'flag ' + (f.bad ? 'bad' : f.warn ? 'warnf' : '') }, (f.bad ? '✕ ' : f.warn ? '⚠️ ' : '• ') + f.msg)) : h('div', { class: 'flag ok' }, '✓ Fits the partner and your lineup rules'),
       r.flags.filter(f => f.info).map(f => h('div', { class: 'flag' }, f.msg)),
       marketVerdicts(L, r, partner),
+      buzzBox(r),
       acceptLine(L, r, partner),
       r.memory.same ? h('div', { class: 'flag ' + (['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status) ? 'bad' : '') }, `You sent this exact offer on ${new Date(r.memory.same.created).toLocaleDateString()}: ${r.memory.same.status}`) : '',
       r.memory.overlap.filter(o => o !== r.memory.same).slice(0, 3).map(o => h('div', { class: 'flag' }, `Earlier ask for ${o.getNames.join(' + ')} (${new Date(o.created).toLocaleDateString()}): ${o.status}`))),
@@ -179,6 +181,21 @@ function acceptLine(L, r, partner) {
 let calcsP = null;
 const loadCalcs = () => calcsP || (calcsP = fetch('data/calcs.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null));
 const ORD_N = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
+// what the podcasts are saying about the players in this deal (last 30 days)
+function buzzBox(r) {
+  const box = h('div', { class: 'small', style: { marginTop: '8px' } });
+  loadBuzz().then(B => {
+    if (!B) return;
+    const rows = [...r.give.map(a => [a, 'you send']), ...r.get.map(a => [a, 'you get'])].filter(([a]) => a.id).map(([a, side]) => {
+      const line = buzzLine(B, a.id); if (!line) return null;
+      const t = takesFor(B, a.id)[0];
+      return h('div', {}, h('b', {}, a.name.split(' (')[0]), ` (${side}): ${line}. Latest: “${t.quote}” (${t.show}) `, h('a', { href: '#/buzz' }, 'all takes'));
+    }).filter(Boolean);
+    if (rows.length) box.replaceChildren(h('b', {}, 'Podcast buzz'), ...rows);
+  });
+  return box;
+}
+
 function marketVerdicts(L, r, partner) {
   const box = h('div', { class: 'verdicts' });
   loadCalcs().then(c => {
