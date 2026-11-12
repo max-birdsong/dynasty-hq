@@ -107,7 +107,8 @@ function portfolioLine(t) {
 
 function card(L, p, S) {
   const t = p.team;
-  const myOffers = S.trades.filter(x => x.leagueId === L.id && x.partnerOwnerId === t.ownerId);
+  const myOffers = S.trades.filter(x => x.dir !== 'in' && x.leagueId === L.id && x.partnerOwnerId === t.ownerId);
+  const hisOffers = S.trades.filter(x => x.dir === 'in' && x.partnerOwnerId === t.ownerId);
   const others = M.leagues.filter(x => x.id !== L.id && x.teams.some(tt => tt.ownerId === t.ownerId));
   const notes = h('textarea', { placeholder: 'Notes on this owner (shared across leagues)…', oninput: e => { clearTimeout(notes._t); notes._t = setTimeout(() => setNote(t.ownerId, e.target.value), 800); } });
   notes.value = noteOf(t.ownerId);
@@ -129,6 +130,9 @@ function card(L, p, S) {
         h('div', { class: 'small' }, h('span', { class: 'neg' }, 'Gave '), x.me.gave.map(a => h('span', { style: { marginRight: '6px' } }, posB(a.pos), a.name))))))) : '',
     myOffers.length ? h('div', { class: 'small', style: { marginTop: '6px' } }, h('b', {}, 'Your offers to them'),
       myOffers.slice(0, 6).map(o => h('div', { class: 'muted' }, `${new Date(o.created).toLocaleDateString()} · ${o.giveNames.join(' + ')} for ${o.getNames.join(' + ')} → `, h('span', { class: o.status === 'accepted' ? 'pos' : o.status === 'sent' ? '' : 'neg' }, o.status)))) : '',
+    // his offers to you: what he asked for is what he wants, what he offered he's willing to move
+    hisOffers.length ? h('div', { class: 'small', style: { marginTop: '6px' } }, h('b', {}, 'His offers to you'),
+      hisOffers.slice(0, 6).map(o => h('div', { class: 'muted' }, `${new Date(o.created).toLocaleDateString()}${o.leagueId !== L.id ? ` (${o.leagueNick})` : ''} · wanted ${o.giveNames.join(' + ')}, offered ${o.getNames.join(' + ')} → ${o.status}`))) : '',
     others.length ? h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'Also in: ', others.map(x => h('a', { href: `#/owners/${x.id}/${t.ownerId}`, style: { marginRight: '6px' } }, x.nick))) : '',
   ];
   return h('div', { class: 'card' + (t.isMe ? ' me' : ''), id: 'o-' + t.ownerId },

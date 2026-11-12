@@ -22,7 +22,7 @@ import { calcEdge, freshInjury } from './trade.js';
 //  filler: throw-ins he'd likely cut (players worth under 5% of the deal): reads as dumping your bench on him
 //  newToHim: asking for a player he acquired in the last 90 days: owners are attached to what they just went and got
 //  noRoom: he gets more players than he sends while his roster is full: someone has to be cut
-export const PRIOR = { bias: -0.9, edge: 7, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.0, starterForFuture: -1.0, ownTopPick: -2.2, filler: -0.4, newToHim: -0.5, noRoom: -0.5, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
+export const PRIOR = { bias: -0.9, edge: 7, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.0, starterForFuture: -1.0, ownTopPick: -2.2, heAsked: 0.9, heOffered: 0.5, filler: -0.4, newToHim: -0.5, noRoom: -0.5, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
 const PAST_PRIME = { QB: 31, RB: 26, WR: 28, TE: 28 };
 const KEYS = Object.keys(PRIOR);
 const sig = x => 1 / (1 + Math.exp(-x));
@@ -46,7 +46,7 @@ export function features(L, partner, r) {
   const lbl = bh[0]?.label || '';
   // past no's from this owner: full weight in this league, half weight in your other shared leagues
   const no = t => ['rejected', 'ignored', 'withdrawn'].includes(t.status);
-  const prev = state().trades.filter(t => no(t) && (t.partnerOwnerId === partner.ownerId || (t.leagueId === L.id && t.partnerRid === partner.rid)))
+  const prev = state().trades.filter(t => t.dir !== 'in' && no(t) && (t.partnerOwnerId === partner.ownerId || (t.leagueId === L.id && t.partnerRid === partner.rid)))
     .reduce((s, t) => s + (t.leagueId === L.id ? 1 : 0.5), 0);
   return {
     bias: 1,
@@ -56,6 +56,7 @@ export function features(L, partner, r) {
     // players he'd receive that he has traded away or cut before, and players he'd receive who are out injured
     unwanted: r.give.filter(a => a.id && (stance(partner.ownerId, a.id, L.id)?.likes || 0) <= -1).length,
     ...irritants(L, partner, r),
+    ...hisOffers(L, partner, r),
     pieces: r.give.length + r.get.length,
     active: /active/i.test(lbl) ? 1 : 0,
     dormant: lbl === 'Dormant' ? 1 : 0,
@@ -63,6 +64,17 @@ export function features(L, partner, r) {
     ...direction(L, partner, r),
     calc: pc ? 1 : 0,
     inj: injAdj,
+  };
+}
+
+// Offers he sent you are his revealed preferences: players he asked for, he wants; players he offered, he'll move.
+function hisOffers(L, partner, r) {
+  const cut = Date.now() - 120 * 864e5;
+  const inc = state().trades.filter(t => t.dir === 'in' && t.partnerOwnerId === partner.ownerId && t.created >= cut);
+  const asked = new Set(inc.flatMap(t => t.give || [])), offered = new Set(inc.flatMap(t => t.get || []));
+  return {
+    heAsked: Math.min(2, r.give.filter(a => asked.has(a.key)).length),
+    heOffered: Math.min(2, r.get.filter(a => offered.has(a.key)).length),
   };
 }
 
@@ -96,7 +108,7 @@ function direction(L, partner, r) {
 // weights: prior, pulled toward your logged outcomes once there are a few (MAP logistic regression, prior sd 1)
 let cache = null;
 export function weights() {
-  const data = state().trades.filter(t => t.features && ['accepted', 'rejected', 'ignored', 'withdrawn', 'countered'].includes(t.status));
+  const data = state().trades.filter(t => t.dir !== 'in' && t.features && ['accepted', 'rejected', 'ignored', 'withdrawn', 'countered'].includes(t.status));
   const key = data.map(t => t.id + t.status).join();
   if (cache?.key === key) return cache.w;
   const w = { ...PRIOR };
@@ -127,6 +139,8 @@ export function reasons(f) {
   if (f.oldToRebuilder > 0.2) out.push([w.oldToRebuilder * f.oldToRebuilder, `he's rebuilding and ${Math.round(f.oldToRebuilder * 100)}% of what he gets is past its prime`]);
   if (f.starterForFuture > 0.2) out.push([w.starterForFuture * f.starterForFuture, `he's contending and would lose starters without getting any back`]);
   if (f.ownTopPick) out.push([w.ownTopPick * f.ownTopPick, `asks for his own 1st that projects top 4: owners hold those tight`]);
+  if (f.heAsked) out.push([w.heAsked * f.heAsked, `sends him ${f.heAsked > 1 ? 'players' : 'a player'} he asked you for`]);
+  if (f.heOffered) out.push([w.heOffered * f.heOffered, `asks for ${f.heOffered > 1 ? 'players' : 'a player'} he offered you himself`]);
   if (f.filler) out.push([w.filler * f.filler, `${f.filler} throw-in${f.filler > 1 ? 's' : ''} he'd likely cut: reads as dumping your bench`]);
   if (f.newToHim) out.push([w.newToHim * f.newToHim, `asks for ${f.newToHim > 1 ? 'players' : 'a player'} he only just acquired`]);
   if (f.noRoom) out.push([w.noRoom * f.noRoom, `his roster is full: he'd have to cut ${f.noRoom} to take this`]);

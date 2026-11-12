@@ -13,6 +13,7 @@ const loadComps = () => compsP || (compsP = fetch('data/comps.json', { cache: 'n
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
 
 const STATUSES = ['sent', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
+const STATUSES_IN = ['received', 'accepted', 'rejected', 'countered'];
 
 export default function tradesView(id, partnerRid, sub) {
   const root = h('div');
@@ -92,7 +93,8 @@ export function evalPanel(r, { showSim = false, compact = false } = {}) {
       r.memory.overlap.filter(o => o !== r.memory.same).slice(0, 3).map(o => h('div', { class: 'flag' }, `Earlier ask for ${o.getNames.join(' + ')} (${new Date(o.created).toLocaleDateString()}): ${o.status}`))),
     h('div', { class: 'row', style: { marginTop: '10px' } },
       !showSim && r.me ? h('button', { class: 'btn ghost small', onclick: async e => { e.target.disabled = true; simBox.replaceChildren(h('span', { class: 'muted small' }, 'Simulating…')); await sleep(20); const d = simDelta(L, r); d.L = L; d.r = r; simBox.replaceChildren(simTable(d, partner)); e.target.disabled = false; } }, 'Simulate playoff / title impact') : '',
-      h('button', { class: 'btn small', onclick: () => { logTrade(toLog(r)); toast('Logged as sent'); } }, 'Log as sent')),
+      h('button', { class: 'btn small', onclick: () => { logTrade(toLog(r)); toast('Logged as sent'); } }, 'Log as sent'),
+      h('button', { class: 'btn ghost small', title: 'He sent you this offer: what he asks for (You send) and what he offers (You get)', onclick: () => { logTrade({ ...toLog(r), dir: 'in', status: 'received' }); toast(`Logged as received from ${partner.owner}`); } }, 'Log as received')),
     simBox);
   // in the calculator, re-simulate the season automatically whenever the trade changes
   if (showSim && r.me) {
@@ -394,20 +396,20 @@ function logView() {
   const status = h('div', { class: 'muted small' }, 'Checking Sleeper for accepted trades…');
   const draw = () => {
     const rows = S.trades;
-    const stats = STATUSES.map(s => [s, rows.filter(t => t.status === s).length]).filter(x => x[1]);
+    const stats = [...STATUSES, 'received'].map(s => [s, rows.filter(t => t.status === s && (s === 'received' || t.dir !== 'in')).length]).filter(x => x[1]);
     box.replaceChildren(
       h('div', { class: 'row spread' }, h('h2', { style: { margin: 0 } }, 'Trade log'), h('div', { class: 'row' }, stats.map(([s, n]) => h('span', { class: 'tag' }, `${s} ${n}`)))),
       status,
       rows.length ? h('div', { class: 'tablewrap', style: { marginTop: '10px' } }, h('table', {},
         h('thead', {}, h('tr', {}, ['Date', 'League', 'Partner', 'You send', 'You get', 'TAT', 'FC them', 'Status', 'Notes', ''].map(x => h('th', {}, x)))),
         h('tbody', {}, rows.flatMap(t => [h('tr', {},
-          h('td', {}, new Date(t.created).toLocaleDateString()), h('td', {}, t.leagueNick || leagueById(t.leagueId)?.nick || ''), h('td', {}, t.partnerName),
+          h('td', {}, new Date(t.created).toLocaleDateString()), h('td', {}, t.leagueNick || leagueById(t.leagueId)?.nick || ''), h('td', {}, t.partnerName, t.dir === 'in' ? h('span', { class: 'tag', style: { marginLeft: '4px' } }, 'his offer') : ''),
           h('td', { style: { whiteSpace: 'normal', minWidth: '140px' } }, t.giveNames.join(' + ')), h('td', { style: { whiteSpace: 'normal', minWidth: '140px' } }, t.getNames.join(' + ')),
           h('td', { class: 'n ' + (t.tatGain >= 0 ? 'pos' : 'neg') }, sgn(t.tatGain)), h('td', { class: 'n' }, sgn(t.fcMargin)),
-          h('td', {}, h('select', { onchange: e => { updateTrade(t.id, { status: e.target.value }); draw(); } }, STATUSES.map(s => h('option', { selected: s === t.status }, s))), t.auto ? h('span', { class: 'muted small' }, ' auto') : ''),
+          h('td', {}, h('select', { onchange: e => { updateTrade(t.id, { status: e.target.value }); draw(); } }, (t.dir === 'in' ? STATUSES_IN : STATUSES).map(s => h('option', { selected: s === t.status }, s))), t.auto ? h('span', { class: 'muted small' }, ' auto') : ''),
           h('td', {}, h('input', { value: t.notes || '', placeholder: 'note', onchange: e => updateTrade(t.id, { notes: e.target.value }) })),
           h('td', {}, h('button', { class: 'btn ghost small', onclick: () => { if (confirm('Delete this log entry?')) { deleteTrade(t.id); draw(); } } }, '✕'))),
-          whyRow(t, draw)].filter(Boolean))))) : empty('No trades logged yet. Use "Log as sent" in the calculator or on a suggestion.'));
+          t.dir === 'in' ? null : whyRow(t, draw)].filter(Boolean))))) : empty('No trades logged yet. Use "Log as sent" in the calculator or on a suggestion, or "Log as received" for an offer someone sent you.'));
   };
   draw();
   // older entries: add how each offer looked on each calculator (today's values), so past answers count too

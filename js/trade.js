@@ -222,7 +222,7 @@ export function checkRules(L, partner, r) {
 
 // What happened with similar offers before
 export function tradeMemory(L, partner, giveKeys, getKeys) {
-  const past = state().trades.filter(t => t.leagueId === L.id && t.partnerOwnerId === partner.ownerId);
+  const past = state().trades.filter(t => t.dir !== 'in' && t.leagueId === L.id && t.partnerOwnerId === partner.ownerId);
   const same = past.find(t => sameSet(t.give, giveKeys) && sameSet(t.get, getKeys));
   const overlap = past.filter(t => t.status !== 'accepted' && t.get.some(k => getKeys.includes(k)));
   return { same, overlap };
