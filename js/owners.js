@@ -62,8 +62,9 @@ export function tradeSides(L, tr, valuer = null) {
     s.fcNet = sum(s.got.map(a => a.fc)) - sum(s.gave.map(a => a.fc));
     s.tatNet = sum(s.got.map(a => a.tat)) - sum(s.gave.map(a => a.tat));
     for (const a of [...s.got, ...s.gave]) { const t = valueThen(a); a.fcThen = t.fc; a.tatThen = t.tat; }
-    s.fcNetThen = valuer ? sum(s.got.map(a => a.fcThen)) - sum(s.gave.map(a => a.fcThen)) : null;
-    s.tatNetThen = tmap ? sum(s.got.map(a => a.tatThen)) - sum(s.gave.map(a => a.tatThen)) : null;
+    const known = [...s.got, ...s.gave].every(a => a.fcThen > 0); // every piece valued as of that week, or no verdict
+    s.fcNetThen = valuer && known ? sum(s.got.map(a => a.fcThen)) - sum(s.gave.map(a => a.fcThen)) : null;
+    s.tatNetThen = tmap && known ? sum(s.got.map(a => a.tatThen)) - sum(s.gave.map(a => a.tatThen)) : null;
     s.valuedOn = valuer ? valuer.date(tr.created) : null; s.tatSet = set?.label || null;
   }
   return sides;
@@ -94,7 +95,7 @@ function posNeeds(L) {
 
 export async function profiles(L) {
   const trades = await loadTrades(L);
-  const valuer = makeValuer(await loadDp(), L);
+  const valuer = makeValuer(await loadDp(), L, { past: true });
   const { ranks } = posNeeds(L);
   const N = L.teams.length;
   const out = [];
@@ -139,19 +140,20 @@ export async function profiles(L) {
       return r;
     };
     const fcRecNow = rec('fcNet'), tatRec = rec('tatNet'), fcThenRec = rec('fcNetThen'), tatThenRec = rec('tatNetThen');
-    // judge on values at the time when we have them; hindsight otherwise
-    const fcRec = fcThenRec.n ? fcThenRec : fcRecNow;
+    // labels judge trades only by values from when they happened (never hindsight); no label without enough of those
+    const fcRec = fcThenRec;
     let style = null;
-    if (mine.length >= 3) {
-      if (fcRec.pct >= 0.6 && tatRec.pct >= 0.6) style = 'Shark';
-      else if (fcRec.pct <= 0.4 && tatRec.pct <= 0.4) style = 'Easy mark';
-      else if (fcRec.pct >= 0.6 && tatRec.pct < 0.5) style = 'Wins on market, not Sanderson';
-      else if (tatRec.pct >= 0.6 && fcRec.pct < 0.5) style = 'Sanderson-aligned';
+    if (fcThenRec.n >= 3 && tatThenRec.n >= 3) {
+      if (fcRec.pct >= 0.6 && tatThenRec.pct >= 0.6) style = 'Shark';
+      else if (fcRec.pct <= 0.4 && tatThenRec.pct <= 0.4) style = 'Easy mark';
+      else if (fcRec.pct >= 0.6 && tatThenRec.pct < 0.5) style = 'Wins on market, not Sanderson';
+      else if (tatThenRec.pct >= 0.6 && fcRec.pct < 0.5) style = 'Sanderson-aligned';
       else style = 'Fair trader';
       tags.push(style);
     }
-    if (mine.length >= 2 && tatNet - fcNet > 1500) tags.push('Thinks like Sanderson');
-    if (mine.length >= 2 && fcNet < -3000) tags.push('Loses trades on FC');
+    const thenNet = k => mine.reduce((x, tr) => x + (tr.me[k] ?? 0), 0);
+    if (fcThenRec.n >= 2 && thenNet('tatNetThen') - thenNet('fcNetThen') > 1500) tags.push('Thinks like Sanderson');
+    if (fcThenRec.n >= 2 && thenNet('fcNetThen') < -3000) tags.push('Loses trades on FC');
     const r = ranks[t.rid];
     const needs = Object.entries(r).filter(([, v]) => v > N * 0.66).map(([k]) => k);
     const surplus = Object.entries(r).filter(([, v]) => v <= Math.max(2, Math.round(N * 0.2))).map(([k]) => k);
@@ -186,7 +188,7 @@ export async function firstsSent(L) {
 // only players, compare the two sides at values from the week of the trade. >1 means picks fetch more than market.
 export async function pickIndex(L) {
   const trades = await loadTrades(L);
-  const valuer = makeValuer(await loadDp(), L);
+  const valuer = makeValuer(await loadDp(), L, { past: true });
   if (!valuer) return null;
   const ratios = [];
   for (const tr of trades) {

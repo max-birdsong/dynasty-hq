@@ -26,12 +26,14 @@ export function loadAffinity() {
       for (const t of L.teams) for (const pid of t.players) slot(t.ownerId, String(pid)).own.push(L.id);
       const owner = rid => L.teams.find(t => t.rid === +rid)?.ownerId;
       const trades = await loadTrades(L).catch(() => []);
-      const valuer = dp ? makeValuer(dp, L) : null;
+      const valuer = dp ? makeValuer(dp, L, { past: true }) : null; // values as of the trade's week, never later
       for (const tr of trades) {
         let sides; try { sides = tradeSides(L, tr, valuer); } catch { continue; }
         for (const sd of Object.values(sides)) {
           if (!sd.ownerId) continue;
-          const val = a => a.fcThen ?? a.fc ?? 0, cls = a => a.pick ? 'picks' : (a.pos || '?');
+          // judged only by values from when the trade happened: skip it if any piece has none (never today's values)
+          if ([...sd.got, ...sd.gave].some(a => !(a.fcThen > 0))) continue;
+          const val = a => a.fcThen, cls = a => a.pick ? 'picks' : (a.pos || '?');
           const got = sd.got.reduce((x, a) => x + val(a), 0), gave = sd.gave.reduce((x, a) => x + val(a), 0);
           if (Math.max(got, gave) < 800 || !got || !gave) continue;
           const main = (arr, tot) => { const by = {}; for (const a of arr) by[cls(a)] = (by[cls(a)] || 0) + val(a); const [c, v] = Object.entries(by).sort((x, y) => y[1] - x[1])[0] || []; return v >= 0.6 * tot ? c : null; };
