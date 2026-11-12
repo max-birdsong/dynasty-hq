@@ -8,7 +8,13 @@ import { calcEdge, freshInjury } from './trade.js';
 
 // starting weights: an even offer on his calculator to an active owner ≈ 25-30%, +10% for him ≈ 45-50%,
 // -10% ≈ 10%, a dormant owner ≈ a quarter of that
-// Three things owners won't do whatever the calculators say (they explain most of your logged rejections):
+// Three things owners won't do whatever the calculators say (they explain most of your logged rejections). The weights
+// are measured on ~12,700 real accepted trades in your opponents' leagues this season (data/real-trades.json):
+//  - bottom-third teams took past-prime players as the bulk of a package in 5% of their trades, top-third teams in 38%
+//  - teams whose own 2027 1st projected top 4 traded it in 1.6% of their trades, others in 14.1%  (ratio ~1:9)
+//  - top-third teams took back only picks in 5.6% of trades, middle teams 14.7%, bottom teams 35.6%
+//  - and real trades are rarely even on paper: the side that "lost" on FantasyCalc gave up a median 18%, so the
+//    edge weight is softer than a calculator-fair world would suggest
 //  oldToRebuilder: a rebuilding team taking on players past their prime (share of what he gets, by value)
 //  starterForFuture: a contender giving up starters for picks / prospects mid-season (share of what he sends)
 //  ownTopPick: an owner giving up his own 1st when it projects top 4: he knows it's early; calculators price a generic 1st
@@ -16,7 +22,7 @@ import { calcEdge, freshInjury } from './trade.js';
 //  filler: throw-ins he'd likely cut (players worth under 5% of the deal): reads as dumping your bench on him
 //  newToHim: asking for a player he acquired in the last 90 days: owners are attached to what they just went and got
 //  noRoom: he gets more players than he sends while his roster is full: someone has to be cut
-export const PRIOR = { bias: -0.9, edge: 9, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.2, starterForFuture: -1.5, ownTopPick: -1.8, filler: -0.4, newToHim: -0.5, noRoom: -0.5, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
+export const PRIOR = { bias: -0.9, edge: 7, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.0, starterForFuture: -1.0, ownTopPick: -2.2, filler: -0.4, newToHim: -0.5, noRoom: -0.5, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
 const PAST_PRIME = { QB: 31, RB: 26, WR: 28, TE: 28 };
 const KEYS = Object.keys(PRIOR);
 const sig = x => 1 / (1 + Math.exp(-x));

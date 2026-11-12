@@ -8,6 +8,8 @@ import { curves, seasons, total } from '../equity.js';
 import { preferredCalc } from '../affinity.js';
 import { pAccept, reasons, learnedFrom } from '../accept.js';
 import { loadBuzz, buzzLine, takesFor } from '../buzz.js';
+let compsP = null;
+const loadComps = () => compsP || (compsP = fetch('data/comps.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null));
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
 
 const STATUSES = ['sent', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
@@ -191,7 +193,17 @@ function buzzBox(r) {
       const t = takesFor(B, a.id)[0];
       return h('div', {}, h('b', {}, a.name.split(' (')[0]), ` (${side}): ${line}. Latest: “${t.quote}” (${t.show}) `, h('a', { href: '#/buzz' }, 'all takes'));
     }).filter(Boolean);
-    if (rows.length) box.replaceChildren(h('b', {}, 'Podcast buzz'), ...rows);
+    if (rows.length) box.prepend(h('b', {}, 'Podcast buzz'), ...rows);
+  });
+  // what these players have actually been traded for lately, in your opponents' other leagues
+  loadComps().then(C => {
+    if (!C) return;
+    const nm = x => /^\d+$/.test(x) ? (M.players[x]?.full_name || x) : x;
+    const rows = [...r.give, ...r.get].filter(a => a.id && C.comps[a.id]?.length).map(a => {
+      const cs = C.comps[a.id].slice(0, 3);
+      return h('div', {}, h('b', {}, a.name.split(' (')[0]), ': ', cs.map(c => `${c.d.slice(5)}${c.sf ? '' : ' (1QB)'}: ${[a.name.split(' (')[0], ...c.w.map(nm)].join(' + ')} → ${c.f.map(nm).join(' + ')}`).join(' · '));
+    });
+    if (rows.length) box.append(h('b', { style: { display: 'block', marginTop: '6px' } }, 'Real trades lately (other leagues)'), ...rows);
   });
   return box;
 }
