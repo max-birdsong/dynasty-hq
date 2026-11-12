@@ -1,14 +1,19 @@
 // Chance a partner accepts an offer. Logistic model with sensible starting weights, then learned from your own
 // offer log (accepted vs rejected / ignored / withdrawn): Sleeper never shows rejected offers, so your log is the
 // only data that can teach it. Each logged offer stores the features below at the time you sent it.
-import { M } from './model.js';
+import { M, startersNow } from './model.js';
 import { state, rulesOf } from './state.js';
 import { behaviour, preferredCalc, stance } from './affinity.js';
 import { calcEdge, freshInjury } from './trade.js';
 
 // starting weights: an even offer on his calculator to an active owner ≈ 25-30%, +10% for him ≈ 45-50%,
 // -10% ≈ 10%, a dormant owner ≈ a quarter of that
-export const PRIOR = { bias: -0.9, edge: 9, goal: 0.6, fav: -0.5, unwanted: -0.6, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
+// Three things owners won't do whatever the calculators say (they explain most of your logged rejections):
+//  oldToRebuilder: a rebuilding team taking on players past their prime (share of what he gets, by value)
+//  starterForFuture: a contender giving up starters for picks / prospects mid-season (share of what he sends)
+//  ownTopPick: an owner giving up his own 1st when it projects top 4: he knows it's early; calculators price a generic 1st
+export const PRIOR = { bias: -0.9, edge: 9, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.2, starterForFuture: -1.5, ownTopPick: -1.8, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
+const PAST_PRIME = { QB: 31, RB: 26, WR: 28, TE: 28 };
 const KEYS = Object.keys(PRIOR);
 const sig = x => 1 / (1 + Math.exp(-x));
 
@@ -44,9 +49,26 @@ export function features(L, partner, r) {
     active: /active/i.test(lbl) ? 1 : 0,
     dormant: lbl === 'Dormant' ? 1 : 0,
     rejectedBefore: Math.min(2, prev),
+    ...direction(L, partner, r),
     calc: pc ? 1 : 0,
     inj: injAdj,
   };
+}
+
+function direction(L, partner, r) {
+  const val = a => Math.max(0, a.fc || 0), tot = xs => Math.max(1, xs.reduce((s, a) => s + val(a), 0));
+  const rebuilding = partner.mode === 'rebuild' || ((partner.playoff ?? 1) < 0.2 && partner.mode !== 'contend');
+  const old = r.give.filter(a => !a.pick && a.age && a.age >= (PAST_PRIME[a.pos] ?? 28));
+  const oldToRebuilder = rebuilding ? old.reduce((s, a) => s + val(a), 0) / tot(r.give) : 0;
+  let starterForFuture = 0;
+  if (partner.mode === 'contend') {
+    const st = new Set((startersNow(L, partner.players).lineup || []).map(x => String(x[1])));
+    const lost = r.get.filter(a => a.id && st.has(String(a.id)));
+    const backNow = r.give.filter(a => !a.pick && a.id).length;
+    if (lost.length && !backNow) starterForFuture = lost.reduce((s, a) => s + val(a), 0) / tot(r.get);
+  }
+  const ownTopPick = r.get.filter(a => a.pick && a.orig === partner.rid && a.key.split(':')[2] === '1' && ((a.futureSlot ?? a.slot ?? 99) <= 4)).length;
+  return { oldToRebuilder, starterForFuture, ownTopPick };
 }
 
 // weights: prior, pulled toward your logged outcomes once there are a few (MAP logistic regression, prior sd 1)
@@ -80,6 +102,9 @@ export function reasons(f) {
   if (f.edge) out.push([w.edge * f.edge, `${Math.abs(Math.round(f.edge * 100))}% ${f.edge >= 0 ? 'in his favour' : 'against him'} ${f.calc ? 'on his calculator' : 'across the calculators'}`]);
   if (f.goal) out.push([w.goal, 'meets a need of his']);
   if (f.fav) out.push([w.fav * f.fav, `asks for ${f.fav} player${f.fav > 1 ? 's' : ''} he's attached to`]);
+  if (f.oldToRebuilder > 0.2) out.push([w.oldToRebuilder * f.oldToRebuilder, `he's rebuilding and ${Math.round(f.oldToRebuilder * 100)}% of what he gets is past its prime`]);
+  if (f.starterForFuture > 0.2) out.push([w.starterForFuture * f.starterForFuture, `he's contending and would lose starters without getting any back`]);
+  if (f.ownTopPick) out.push([w.ownTopPick * f.ownTopPick, `asks for his own 1st that projects top 4: owners hold those tight`]);
   if (f.unwanted) out.push([w.unwanted * f.unwanted, `sends him ${f.unwanted > 1 ? 'players' : 'a player'} he got rid of before`]);
   if (f.inj) out.push([w.edge * f.inj, f.inj < 0 ? `includes a fresh injury the calculators haven't priced yet: he'll mark it down (${Math.round(f.inj * 100)}% included above)` : `he gets to send a freshly injured player (+${Math.round(f.inj * 100)}% included above)`]);
   if (f.dormant) out.push([w.dormant, 'he’s been inactive']);
