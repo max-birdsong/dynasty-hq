@@ -50,7 +50,7 @@ export function tierKey(line) {
   return null;
 }
 
-const ROW = /^\s*(\d{1,3})\s+(.+?)\s{2,}(QB|RB|WR|TE)\s+([A-Z]{2,3})?\s*(.*)$/;
+const ROW = /^\s*(\d{1,3})\s+(.+?)\s{2,}(QB|RB|WR|TE)(?:\s+([A-Z]{2,3})\b)?\s*(.*)$/;  // team can be blank (free agents)
 const MOVE = /(Up|Down) \d+ Tiers?|New Add|Returning/i;
 
 export function parseLines(lines) {
