@@ -164,7 +164,7 @@ async function buildLeague(lg) {
   const f = fmtOf(lg);
   const L = {
     id, lg, name: lg.name, nick: nick(id, lg.name), season: lg.season, fmt: f, fc: M.fc[f.key] || indexFc([]),
-    numTeams: ros.length, slots: startSlots(lg.roster_positions || []), scoring: lg.scoring_settings || {},
+    numTeams: ros.length, slots: startSlots(lg.roster_positions || []), rosterSize: (lg.roster_positions || []).filter(p => p !== 'IR').length, scoring: lg.scoring_settings || {},
     playoffStart: lg.settings?.playoff_week_start || 15, playoffTeams: lg.settings?.playoff_teams || 6,
     median: lg.settings?.league_average_match === 1, draftRounds: lg.settings?.draft_rounds || 4,
     draftOrder: settings().draftOrder?.[id] || 'maxpf',

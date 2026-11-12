@@ -12,7 +12,11 @@ import { calcEdge, freshInjury } from './trade.js';
 //  oldToRebuilder: a rebuilding team taking on players past their prime (share of what he gets, by value)
 //  starterForFuture: a contender giving up starters for picks / prospects mid-season (share of what he sends)
 //  ownTopPick: an owner giving up his own 1st when it projects top 4: he knows it's early; calculators price a generic 1st
-export const PRIOR = { bias: -0.9, edge: 9, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.2, starterForFuture: -1.5, ownTopPick: -1.8, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
+// And three irritants managers name again and again (r/DynastyFF, dynasty writers on trade etiquette):
+//  filler: throw-ins he'd likely cut (players worth under 5% of the deal): reads as dumping your bench on him
+//  newToHim: asking for a player he acquired in the last 90 days: owners are attached to what they just went and got
+//  noRoom: he gets more players than he sends while his roster is full: someone has to be cut
+export const PRIOR = { bias: -0.9, edge: 9, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.2, starterForFuture: -1.5, ownTopPick: -1.8, filler: -0.4, newToHim: -0.5, noRoom: -0.5, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
 const PAST_PRIME = { QB: 31, RB: 26, WR: 28, TE: 28 };
 const KEYS = Object.keys(PRIOR);
 const sig = x => 1 / (1 + Math.exp(-x));
@@ -45,6 +49,7 @@ export function features(L, partner, r) {
     fav: r.get.filter(a => a.id && (stance(partner.ownerId, a.id, L.id)?.likes || 0) >= 2).length,
     // players he'd receive that he has traded away or cut before, and players he'd receive who are out injured
     unwanted: r.give.filter(a => a.id && (stance(partner.ownerId, a.id, L.id)?.likes || 0) <= -1).length,
+    ...irritants(L, partner, r),
     pieces: r.give.length + r.get.length,
     active: /active/i.test(lbl) ? 1 : 0,
     dormant: lbl === 'Dormant' ? 1 : 0,
@@ -53,6 +58,17 @@ export function features(L, partner, r) {
     calc: pc ? 1 : 0,
     inj: injAdj,
   };
+}
+
+function irritants(L, partner, r) {
+  const total = Math.max(1, ...[r.give, r.get].map(xs => xs.reduce((s, a) => s + (a.fc || 0), 0)));
+  const filler = r.give.filter(a => !a.pick && a.id && (a.fc || 0) < 0.05 * total).length;
+  const recent = M.ownersGlobal?.[partner.ownerId]?.buy || {};
+  const newToHim = r.get.filter(a => a.id && recent[a.id]).length;
+  const inP = r.give.filter(a => !a.pick).length, outP = r.get.filter(a => !a.pick).length;
+  const onRoster = (partner.players?.length || 0) - (partner.reserve?.length || 0) - (partner.taxi?.length || 0), full = L.rosterSize ? onRoster >= L.rosterSize : false;
+  const noRoom = full && inP > outP ? inP - outP : 0;
+  return { filler, newToHim, noRoom };
 }
 
 function direction(L, partner, r) {
@@ -74,14 +90,14 @@ function direction(L, partner, r) {
 // weights: prior, pulled toward your logged outcomes once there are a few (MAP logistic regression, prior sd 1)
 let cache = null;
 export function weights() {
-  const data = state().trades.filter(t => t.features && ['accepted', 'rejected', 'ignored', 'withdrawn'].includes(t.status));
+  const data = state().trades.filter(t => t.features && ['accepted', 'rejected', 'ignored', 'withdrawn', 'countered'].includes(t.status));
   const key = data.map(t => t.id + t.status).join();
   if (cache?.key === key) return cache.w;
   const w = { ...PRIOR };
   if (data.length >= 5) {
     for (let it = 0; it < 300; it++) {
       const g = Object.fromEntries(KEYS.map(k => [k, -(w[k] - PRIOR[k])])); // prior pull
-      for (const t of data) { const y = t.status === 'accepted' ? 1 : 0, p = sig(KEYS.reduce((s, k) => s + w[k] * (t.features[k] || 0), 0)); for (const k of KEYS) g[k] += (y - p) * (t.features[k] || 0); }
+      for (const t of data) { const y = t.status === 'accepted' ? 1 : t.status === 'countered' ? 0.5 : 0, p = sig(KEYS.reduce((s, k) => s + w[k] * (t.features[k] || 0), 0)); for (const k of KEYS) g[k] += (y - p) * (t.features[k] || 0); }
       for (const k of KEYS) w[k] += 0.05 * g[k];
     }
   }
@@ -105,6 +121,9 @@ export function reasons(f) {
   if (f.oldToRebuilder > 0.2) out.push([w.oldToRebuilder * f.oldToRebuilder, `he's rebuilding and ${Math.round(f.oldToRebuilder * 100)}% of what he gets is past its prime`]);
   if (f.starterForFuture > 0.2) out.push([w.starterForFuture * f.starterForFuture, `he's contending and would lose starters without getting any back`]);
   if (f.ownTopPick) out.push([w.ownTopPick * f.ownTopPick, `asks for his own 1st that projects top 4: owners hold those tight`]);
+  if (f.filler) out.push([w.filler * f.filler, `${f.filler} throw-in${f.filler > 1 ? 's' : ''} he'd likely cut: reads as dumping your bench`]);
+  if (f.newToHim) out.push([w.newToHim * f.newToHim, `asks for ${f.newToHim > 1 ? 'players' : 'a player'} he only just acquired`]);
+  if (f.noRoom) out.push([w.noRoom * f.noRoom, `his roster is full: he'd have to cut ${f.noRoom} to take this`]);
   if (f.unwanted) out.push([w.unwanted * f.unwanted, `sends him ${f.unwanted > 1 ? 'players' : 'a player'} he got rid of before`]);
   if (f.inj) out.push([w.edge * f.inj, f.inj < 0 ? `includes a fresh injury the calculators haven't priced yet: he'll mark it down (${Math.round(f.inj * 100)}% included above)` : `he gets to send a freshly injured player (+${Math.round(f.inj * 100)}% included above)`]);
   if (f.dormant) out.push([w.dormant, 'he’s been inactive']);
