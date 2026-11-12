@@ -61,6 +61,42 @@ async function fcFor(l) {
   return fcCache[k];
 }
 
+// Real trades: every completed two-team trade in these leagues this season, with what each side gave and got, the
+// values at the time, and where each team stood that week. This is what people actually accept (and so, by omission,
+// what they won't): data/real-trades.json, for learning acceptance and for "what has he actually been traded for".
+const REAL = [];
+function standings(MW, uptoWeek) {
+  const rec = {}, pf = {};
+  for (let w = 1; w < uptoWeek; w++) {
+    const ms = MW[w] || [], by = {};
+    for (const m of ms) { pf[m.roster_id] = (pf[m.roster_id] || 0) + (m.points || 0); (by[m.matchup_id] ||= []).push(m); }
+    for (const pair of Object.values(by)) if (pair.length === 2 && (pair[0].points || pair[1].points)) {
+      const [a, b] = pair, r = x => (rec[x.roster_id] ||= [0, 0]);
+      if (a.points > b.points) { r(a)[0]++; r(b)[1]++; } else if (b.points > a.points) { r(b)[0]++; r(a)[1]++; }
+    }
+  }
+  return { rec, pf };
+}
+function realTrade(lid, l, L, val, MW, t, when, w) {
+  const [ra, rb] = t.roster_ids.map(Number), n = l.total_rosters || 12;
+  const { rec, pf } = standings(MW, w);
+  const order = Object.keys(pf).map(Number).sort((x, y) => { const wx = (rec[x] || [0, 0]), wy = (rec[y] || [0, 0]); return (wx[0] - wx[1]) - (wy[0] - wy[1]) || pf[x] - pf[y]; }); // worst first
+  const side = rid => {
+    const got = [], gave = [];
+    for (const [id, r] of Object.entries(t.adds || {})) if (+r === rid) got.push({ id, pos: pos(id), age: players[id]?.age || null, v: Math.round(val({ id }, when)) });
+    for (const [id, r] of Object.entries(t.drops || {})) if (+r === rid && !(t.adds || {})[id]) gave.push({ id, pos: pos(id), age: players[id]?.age || null, v: Math.round(val({ id }, when)) });
+    for (const d of t.draft_picks || []) {
+      const a = { pick: 1, s: +d.season, r: d.round, own: d.roster_id === (d.owner_id === rid ? d.previous_owner_id : rid) ? 1 : 0, orank: order.indexOf(d.roster_id) + 1, v: Math.round(val({ pick: true, season: d.season, round: d.round }, when)) };
+      if (d.owner_id === rid) got.push({ ...a, own: d.roster_id === d.previous_owner_id ? 1 : 0 });
+      if (d.previous_owner_id === rid) gave.push({ ...a, own: d.roster_id === rid ? 1 : 0 });
+    }
+    return { rec: rec[rid] || [0, 0], rank: order.indexOf(rid) + 1, got, gave };
+  };
+  const A = side(ra), B = side(rb);
+  if (!A.got.length || !B.got.length) return;
+  REAL.push({ lid, d: new Date(when).toISOString().slice(0, 10), w, n, sf: L.fmt.numQbs === 2 ? 1 : 0, a: A, b: B });
+}
+
 // 3. rosters + transactions in each league
 const O = {};
 const slot = o => O[o] || (O[o] = { own: {}, buy: {}, sell: {}, tend: {}, act: { last: 0, trades: 0, waivers: 0 }, when: { h: Array(24).fill(0), d: Array(7).fill(0) }, lineup: { weeks: 0, holes: 0 }, panic: { sold: 0, panic: 0 }, calc: { ktc: [], fc: [], dp: [] }, hist: {} });
@@ -81,8 +117,9 @@ await pool([...leagueInfo.keys()], 8, async lid => {
   };
   const sf = L.fmt.numQbs === 2;
   // lineup engagement: completed weeks with an empty or zero-point starter
+  const MW = {};
   for (let w = 1; w < week; w++) {
-    for (const m of await get(`${SL}/league/${lid}/matchups/${w}`) || []) {
+    for (const m of (MW[w] = await get(`${SL}/league/${lid}/matchups/${w}`) || [])) {
       const o = ridOwner.get(m.roster_id); if (!who.has(o)) continue;
       const hole = (m.starters || []).some(id => id === '0' || id === 0 || id == null); // truly empty slots only
       slot(o).lineup.weeks++; if (hole) slot(o).lineup.holes++;
@@ -108,6 +145,7 @@ await pool([...leagueInfo.keys()], 8, async lid => {
         for (const [p, rid] of Object.entries(t.drops || {})) { const o = ridOwner.get(+rid); if (who.has(o) && t.type === 'trade') slot(o).sell[p] = (slot(o).sell[p] || 0) + 1; }
       }
       if (t.type !== 'trade') continue;
+      if ((t.roster_ids || []).length === 2) realTrade(lid, l, L, val, MW, t, when, w);
       // tendencies: only the side that conceded value reveals a preference
       for (const rid of t.roster_ids || []) {
         const o = ridOwner.get(+rid); if (!who.has(o)) continue;
@@ -164,5 +202,9 @@ for (const [o, d] of Object.entries(O)) {
     hist: Object.fromEntries(Object.entries(d.hist).filter(([p, e]) => (d.own[p] || 0) >= 2 || e.t || e.x).slice(0, 150)) };
 }
 fs.mkdirSync('data', { recursive: true });
+// one copy of each trade (a league can be scanned via several owners: dedupe on content)
+const seen = new Set(), real = REAL.filter(x => { const k = x.lid + x.d + JSON.stringify(x.a.got) + JSON.stringify(x.b.got); if (seen.has(k)) return false; seen.add(k); return true; });
+fs.writeFileSync('data/real-trades.json', JSON.stringify({ updated: new Date().toISOString(), season, trades: real }));
+console.log(`${real.length} real trades saved`);
 fs.writeFileSync('data/owners.json', JSON.stringify({ updated: new Date().toISOString(), season, owners: out }));
 console.log(`owners.json: ${Object.keys(out).length} owners, ${calls} API calls`);
