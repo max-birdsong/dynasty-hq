@@ -56,7 +56,7 @@ async function fcFor(l) {
     const byId = new Map(), picks = new Map();
     for (const x of arr) { if (x.player.position === 'PICK') picks.set(x.player.name, x.value); else if (x.player.sleeperId) byId.set(String(x.player.sleeperId), { value: x.value }); }
     const L = { fmt: { numQbs: sf ? 2 : 1 }, fc: { byId, picks } };
-    return { L, valuer: dp ? makeValuer(dp, L) : null };
+    return { L, valuer: dp ? makeValuer(dp, L, { past: true }) : null };
   })();
   return fcCache[k];
 }
@@ -94,7 +94,8 @@ function realTrade(lid, l, L, val, MW, t, when, w) {
   };
   const A = side(ra), B = side(rb);
   if (!A.got.length || !B.got.length) return;
-  REAL.push({ lid, d: new Date(when).toISOString().slice(0, 10), w, n, sf: L.fmt.numQbs === 2 ? 1 : 0, a: A, b: B });
+  const tv = [...A.got, ...B.got].every(a => a.v > 0) ? 1 : 0; // every asset valued as of that week
+  REAL.push({ tv, lid, d: new Date(when).toISOString().slice(0, 10), w, n, sf: L.fmt.numQbs === 2 ? 1 : 0, a: A, b: B });
 }
 
 // 3. rosters + transactions in each league
@@ -111,9 +112,11 @@ await pool([...leagueInfo.keys()], 8, async lid => {
   const ridOwner = new Map(ros.map(r => [r.roster_id, r.owner_id]));
   for (const r of ros) if (who.has(r.owner_id)) for (const p of r.players || []) slot(r.owner_id).own[p] = (slot(r.owner_id).own[p] || 0) + 1;
   const { L, valuer } = await fcFor(l);
+  // values as they were when the trade happened (DynastyProcess that week or just before); 0 when unknown: never
+  // today's values, which would judge a trade by what happened after it
   const val = (a, t) => {
-    if (a.pick) return (valuer && valuer.pick(+a.season, a.round, t)) || L.fc.picks.get(`${a.season} ${ORD[a.round]}`) || 0;
-    return (valuer && valuer.player(a.id, t)) || L.fc.byId.get(a.id)?.value || 0;
+    if (!valuer) return 0;
+    return a.pick ? valuer.pick(+a.season, a.round, t) || 0 : valuer.player(a.id, t) || 0;
   };
   const sf = L.fmt.numQbs === 2;
   // lineup engagement: completed weeks with an empty or zero-point starter
@@ -152,7 +155,7 @@ await pool([...leagueInfo.keys()], 8, async lid => {
         const got = [...Object.entries(t.adds || {}).filter(([, r]) => +r === +rid).map(([id]) => ({ id })), ...(t.draft_picks || []).filter(d => d.owner_id === +rid).map(d => ({ pick: true, season: d.season, round: d.round }))];
         const gave = [...Object.entries(t.drops || {}).filter(([, r]) => +r === +rid).map(([id]) => ({ id })), ...(t.draft_picks || []).filter(d => d.previous_owner_id === +rid).map(d => ({ pick: true, season: d.season, round: d.round }))];
         const G = got.reduce((s, a) => s + val(a, when), 0), V = gave.reduce((s, a) => s + val(a, when), 0);
-        if (Math.max(G, V) < 800 || !G || !V) continue;
+        if (Math.max(G, V) < 800 || !G || !V || [...got, ...gave].some(a => !val(a, when))) continue; // only trades fully valued at the time
         const main = (arr, tot) => { const by = {}; for (const a of arr) by[cls(a)] = (by[cls(a)] || 0) + val(a, when); const [c, v] = Object.entries(by).sort((x, y) => y[1] - x[1])[0] || []; return v >= 0.6 * tot ? c : null; };
         const cin = main(got, G), cout = main(gave, V), conceded = G < V * 0.95;
         // panic selling: players he traded away after their value fell 20%+ in the three weeks before
@@ -160,8 +163,9 @@ await pool([...leagueInfo.keys()], 8, async lid => {
           const before = valuer.player(a.id, when - 21 * 864e5), at = valuer.player(a.id, when);
           if (before >= 500) { slot(o).panic.sold++; if (at < before * 0.8) slot(o).panic.panic++; }
         }
-        // which calculator his recent trades look fair on (today's values, so recent trades only)
-        if (Date.now() - when < 45 * 864e5) for (const k of ['ktc', 'fc', 'dp']) {
+        // which calculator his recent trades look fair on: we only have today's calculator values, so only trades from
+        // the last 10 days count (older ones would be judged by values that moved since)
+        if (Date.now() - when < 10 * 864e5) for (const k of ['ktc', 'fc', 'dp']) {
           const c = calcs[k]; if (!c) continue;
           const v = a => a.pick ? (c.picks[sf ? 'sf' : 'one'][`${a.season} Mid ${ORD[a.round]}`] || 0) : (c[sf ? 'sf' : 'one'][a.id] || 0);
           const g2 = got.reduce((x, a) => x + v(a), 0), v2 = gave.reduce((x, a) => x + v(a), 0);

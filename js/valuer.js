@@ -3,7 +3,9 @@
 // L needs: { fmt: { numQbs }, fc: { byId: Map(id -> {value}), picks: Map(name -> value) } }
 const ORD = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
 
-export function makeValuer(dp, L) {
+// opts.past: only use DynastyProcess values from that week or the weeks before it (never later ones): for judging a
+// trade by what was known when it was made
+export function makeValuer(dp, L, opts = {}) {
   if (!dp) return null;
   const fmt = L.fmt.numQbs === 2 ? 'sf' : 'one';
   const P = dp[fmt], K = dp.picks[fmt];
@@ -25,12 +27,14 @@ export function makeValuer(dp, L) {
     const q = lo / arr.length; // share of assets worth more
     return today[Math.min(today.length - 1, Math.floor(q * today.length))];
   };
+  const first = dp.dates[0];
   const idx = ms => { const d = new Date(ms).toISOString().slice(0, 10); let i = 0; for (let k = 0; k < dp.dates.length; k++) if (dp.dates[k] <= d) i = k; return i; };
-  const near = (arr, i) => { if (!arr) return 0; for (let k = 0; k <= 3; k++) { if (arr[i - k] > 0) return arr[i - k]; if (arr[i + k] > 0) return arr[i + k]; } return 0; };
+  const near = (arr, i) => { if (!arr) return 0; for (let k = 0; k <= 3; k++) { if (arr[i - k] > 0) return arr[i - k]; if (!opts.past && arr[i + k] > 0) return arr[i + k]; } return 0; };
   return {
     date: ms => dp.dates[idx(ms)],
-    player(id, ms) { const i = idx(ms); const v = near(P[id], i); return v ? toFc(v, i) : 0; },
+    player(id, ms) { if (opts.past && new Date(ms).toISOString().slice(0, 10) < first) return 0; const i = idx(ms); const v = near(P[id], i); return v ? toFc(v, i) : 0; },
     pick(season, round, ms) {
+      if (opts.past && new Date(ms).toISOString().slice(0, 10) < first) return 0;
       const i = idx(ms), o = ORD[round] || round + 'th';
       let v = near(K[`${season} ${o}`], i) || near(K[`${season} Mid ${o}`], i);
       if (!v) { // that draft was the upcoming class: average its individual slots
