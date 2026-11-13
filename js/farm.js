@@ -45,7 +45,7 @@ let _btp = null;
 function byTeamPos() { if (!_btp || _btp.src !== M.players) { const m = new Map(); for (const p of Object.values(M.players)) { if (!p?.team || !p.active) continue; const k = p.team + '|' + p.position; (m.get(k) || m.set(k, []).get(k)).push(p); } _btp = m; _btp.src = M.players; } return _btp; }
 
 // teams that would pay for this player, and the pick to ask for (they must come out ahead on FantasyCalc)
-export function buyers(L, id, price) {
+export function buyers(L, id, price, round) {
   const p = M.players[id] || {}, pos = p.position, v = price || fcv(L, id);
   if (!v) return [];
   teamPlan(L); // fills L.posNeeds
@@ -59,7 +59,10 @@ export function buyers(L, id, price) {
     if (!(hole || hurt) || !contending) continue;
     // the best pick of theirs at or just under what he's going for (real trades now, else FantasyCalc)
     const picks = t.picks.filter(k => +k.split(':')[2] >= 2).map(k => pk(L, k)).filter(a => a.fc && a.fc <= v * (price ? 1.05 : 0.97)).sort((a, b) => b.fc - a.fc);
-    const ask = picks[0];
+    // with a real price in hand, ask for exactly that: the round he goes for, the nearest year (no 2029 3rds standing
+    // in for a 2027 4th)
+    const byRound = round ? t.picks.filter(k => +k.split(':')[2] === round).map(k => pk(L, k)).filter(a => a.fc).sort((a, b) => +a.key.split(':')[1] - +b.key.split(':')[1]) : [];
+    const ask = byRound[0] || picks[0];
     if (!ask) continue;
     out.push({ t, ask, why: [hurt ? `${pos} starter hurt` : null, hole ? `weak at ${pos}` : null, `${Math.round((t.playoff || 0) * 100)}% playoffs`].filter(Boolean).join(' · '), score: (t.playoff || 0) + (hurt ? 0.5 : 0) + ask.fc / 10000 });
   }
@@ -151,7 +154,7 @@ export async function realPrice(L, pid) {
   const ny = +L.season + 1, rds = [1, 2, 3, 4].map(r => [r, L.fc.picks.get(`${ny} ${['1st', '2nd', '3rd', '4th'][r - 1]}`) || 0]).filter(x => x[1] > 0);
   const near = rds.length ? rds.reduce((b, x) => Math.abs(Math.log(x[1] / price)) < Math.abs(Math.log(b[1] / price)) ? x : b) : null;
   const nickname = near && price >= floor ? `${['1st', '2nd', '3rd', '4th'][near[0] - 1]} rounder` : null;
-  return { n: T.length, n3: last3.length, days: windowDays(), price, label: pickLabel(L, price), trend, hot, action, why, common, recent: T.slice(0, 4), worth: price >= floor, nickname };
+  return { round: near && price >= floor ? near[0] : null, n: T.length, n3: last3.length, days: windowDays(), price, label: pickLabel(L, price), trend, hot, action, why, common, recent: T.slice(0, 4), worth: price >= floor, nickname };
 }
 
 // ---------- consolidation: several small picks into one bigger pick ----------

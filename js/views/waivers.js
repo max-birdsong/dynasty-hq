@@ -149,7 +149,7 @@ async function harvest(c) {
   live.sort((a, b) => (order[a.p?.action] ?? 3) - (order[b.p?.action] ?? 3) || (b.p?.price || b.r.now) - (a.p?.price || a.r.now));
   // sell now = a real price, a moving or busy market, and a contender in that league with a reason to pay
   // asks are priced at his real-trade price: if he goes for a 4th, ask for a 4th
-  for (const x of live) x.bs = x.p?.worth ? buyers(x.L, x.r.pid, x.p.price) : [];
+  for (const x of live) x.bs = x.p?.worth ? buyers(x.L, x.r.pid, x.p.price, x.p.round) : [];
   const sell = live.filter(x => x.p?.action === 'sell' && x.bs.length), rest = live.filter(x => !(x.p?.action === 'sell' && x.bs.length));
   for (const x of rest) if (x.p?.action === 'sell') x.p = { ...x.p, why: x.p.why.split(':')[0] + ': but no contender here needs him; offer him in the league chat' };
   const priceTxt = p => p?.n ? `≈ ${p.label}` : `no real trades in ${p?.days || 10} days: nobody is buying him`;
