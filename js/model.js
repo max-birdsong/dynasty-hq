@@ -95,7 +95,7 @@ function indexFc(arr) {
   for (const x of arr || []) {
     const p = x.player || {};
     if (p.position === 'PICK') { picks.set(p.name, x.value); continue; }
-    const rec = { value: x.value, name: p.name, pos: p.position, age: p.maybeAge, team: p.maybeTeam, trend: x.trend30Day, rank: x.overallRank, redraft: x.redraftValue };
+    const rec = { fcId: p.id, value: x.value, name: p.name, pos: p.position, age: p.maybeAge, team: p.maybeTeam, trend: x.trend30Day, rank: x.overallRank, redraft: x.redraftValue };
     if (p.sleeperId) byId.set(String(p.sleeperId), rec);
     byName.set(normName(p.name) + '|' + p.position, p.sleeperId ? String(p.sleeperId) : null);
   }

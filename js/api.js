@@ -26,6 +26,12 @@ export function fcValues(numTeams = 12, numQbs = 2, ppr = 1) {
   return cachedJson(url, 6 * HOUR);
 }
 
+// Real trades FantasyCalc has seen for one player this year (its whole trade database, all leagues): each with the
+// date, what the other side gave, and his implied value in that trade (as of that day)
+export function fcTrades(fcId, numTeams = 12, numQbs = 2, ppr = 1) {
+  return cachedJson(`https://api.fantasycalc.com/trades/implied/${fcId}?isDynasty=true&numQbs=${numQbs}&numTeams=${numTeams}&ppr=${ppr}`, 12 * HOUR);
+}
+
 // Weekly projections from Sleeper (undocumented endpoint). Returns null if blocked.
 export async function weekProjections(season, week, positions, maxAge = 6 * HOUR) {
   const key = `proj-${season}-${week}-${positions.join('')}`;

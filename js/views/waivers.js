@@ -2,7 +2,7 @@
 import { M, startersNow } from '../model.js';
 import * as api from '../api.js';
 import { scanLeague, indexTeams } from '../waiverscan.js';
-import { ledger, consolidations, stash, faabModel, audit } from '../farm.js';
+import { ledger, consolidations, stash, faabModel, audit, realPrice } from '../farm.js';
 import { calculator } from './trades.js';
 import { h, f1, sleep, fmt } from '../util.js';
 import { settings, save } from '../state.js';
@@ -131,6 +131,17 @@ async function stashTab(c) {
 }
 
 // ---------- Harvest ----------
+// what people actually paid for him lately, across FantasyCalc's whole trade database (fills in when loaded)
+function priceLine(L, pid) {
+  const el = h('div', { class: 'small', style: { marginTop: '4px' } });
+  realPrice(L, pid).then(p => {
+    if (!p) return;
+    if (!p.n) { el.append(h('span', { class: 'muted' }, 'No real trades for him in the last 30 days (FantasyCalc).')); return; }
+    const ex = (p.alone.length ? p.alone : p.recent).slice(0, 4).map(x => `${x.date.slice(0, 5)}: ${p.alone.length ? '' : x.side1 + ' → '}${x.side2}`);
+    el.append(h('span', { class: 'muted' }, `💰 Real trades (last 30 days, ${p.n}): `), h('b', {}, p.label || ''), h('span', { class: 'muted' }, p.alone.length ? ' · alone he went for ' : ' · e.g. '), ex.join(' · '));
+  });
+  return el;
+}
 async function harvest(c) {
   const box = h('div');
   let total = { adds: 0, sold: 0, got: 0, held: 0 };
@@ -150,6 +161,7 @@ async function harvest(c) {
           h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` added ${new Date(r.added).toLocaleDateString([], { month: 'short', day: 'numeric' })}${r.bid ? ` for $${r.bid}` : ''}`)),
           h('div', { class: 'small' }, r.then ? `${f1(L, r.then, false)} → ` : '', h('b', {}, f1(L, r.now, false)))),
         r.signal ? h('div', { class: 'small ' + (r.signal.kind === 'spike' ? 'pos' : 'neg'), style: { marginTop: '4px' } }, (r.signal.kind === 'spike' ? '📈 Sell: ' : '📉 ') + r.signal.why) : '',
+        priceLine(L, r.pid),
         r.buyers?.length ? h('div', { class: 'small', style: { marginTop: '4px' } }, h('span', { class: 'muted' }, 'Buyers: '),
           r.buyers.map(b => h('a', { href: 'javascript:void 0', class: 'pill', style: { marginRight: '6px', display: 'inline-block' }, title: b.why, onclick: () => openCalc(L, b.t.rid, ['p:' + r.pid], [b.ask.key]) },
             `${b.t.owner}: ask their ${b.ask.short || b.ask.name}`, h('span', { class: 'muted' }, ` · ${b.why}`)))) : (r.signal?.kind === 'spike' ? h('div', { class: 'small muted' }, 'No contender with a need right now.') : ''))),

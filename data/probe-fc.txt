@@ -1,7 +1,0 @@
-== Kyle Monangai keys ['historicalValues', 'impliedValues']; historical 317
-implied: 1000 items; first: [{"id": 12711, "date": "01/01/2026", "value": 2669, "side1": "Kyle Monangai", "side2": "2028 2nd, 2028 2nd", "isDynasty": true, "numQbs": 2}, {"id": 12711, "date": "01/02/2026", "value": 2860, "side1": "Kyle Monangai", "side2": "Alec Pierce, 2027 3rd", "isDynasty": true, "numQbs": 2}, {"id": 12711, "date": "01/03/2026", "value": 1477, "side1": "Kyle Monangai, Christian Watson", "side2": "2027 1st", "isDynasty": true, "numQbs": 2}]
-== Tyler Allgeier keys ['historicalValues', 'impliedValues']; historical 317
-implied: 1000 items; first: [{"id": 6408, "date": "01/01/2026", "value": 1544, "side1": "Tyler Allgeier", "side2": "Jauan Jennings", "isDynasty": true, "numQbs": 2}, {"id": 6408, "date": "01/01/2026", "value": 1359, "side1": "Tyler Allgeier", "side2": "Romeo Doubs", "isDynasty": true, "numQbs": 2}, {"id": 6408, "date": "01/02/2026", "value": 1050, "side1": "Tyler Allgeier", "side2": "2026 3rd", "isDynasty": true, "numQbs": 2}]
-== Bam Knight keys ['error']; historical 0
-implied: 0 items; first: []
-feed: 50 trades from 2026-11-13T05:29:50.055Z to 2026-11-13T07:24:38.029Z

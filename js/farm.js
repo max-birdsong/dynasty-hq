@@ -94,6 +94,31 @@ export async function ledger(L) {
   return rows.sort((a, b) => (b.signal?.kind === 'spike') - (a.signal?.kind === 'spike') || (b.now - a.now));
 }
 
+// ---------- what people actually pay for him: FantasyCalc's real trades, last 30 days ----------
+// Uses only trades from the last 30 days and values as of each trade's day (FantasyCalc's implied value then), so a
+// player's breakout or injury since then doesn't leak in. "Alone" = he was the only piece on his side.
+export async function realPrice(L, pid, days = 30) {
+  const rec = L.fc.byId.get(String(pid));
+  if (!rec?.fcId) return null;
+  const d = await api.fcTrades(rec.fcId, L.fmt.numTeams, L.fmt.numQbs, L.fmt.ppr).catch(() => null);
+  const cut = Date.now() - days * 864e5;
+  const day = s => { const [m, dd, y] = s.split('/'); return Date.UTC(+y, +m - 1, +dd); };
+  const recent = (d?.impliedValues || []).map(x => ({ ...x, t: day(x.date) })).filter(x => x.t >= cut).sort((a, b) => b.t - a.t);
+  if (!recent.length) return { n: 0 };
+  const alone = recent.filter(x => !x.side1.includes(','));
+  const vals = recent.map(x => x.value).sort((a, b) => a - b), med = vals[Math.floor(vals.length / 2)];
+  // the typical price in picks: nearest of next year's 1st-4th by FantasyCalc's own pick values today
+  const ny = +L.season + 1, rounds = ['1st', '2nd', '3rd', '4th'].map(r => [`${ny} ${r}`, L.fc.picks.get(`${ny} ${r}`) || 0]).filter(x => x[1] > 0);
+  let lbl = '';
+  for (let i = 0; i < rounds.length; i++) {
+    const [k, v] = rounds[i], nx = rounds[i + 1];
+    if (med >= v) { lbl = i === 0 && med > v * 1.15 ? `more than a ${k}` : `about a ${k}`; break; }
+    if (nx && med >= nx[1]) { lbl = med - nx[1] < (v - nx[1]) / 3 ? `about a ${nx[0]}` : med > v - (v - nx[1]) / 3 ? `about a ${k}` : `between a ${k} and a ${nx[0].split(' ')[1]}`; break; }
+    if (!nx) lbl = `less than a ${k}`;
+  }
+  return { n: recent.length, alone: alone.slice(0, 6), recent: recent.slice(0, 6), median: med, label: lbl };
+}
+
 // ---------- consolidation: several small picks into one bigger pick ----------
 export async function consolidations(L) {
   const ny = +L.season + 1;
