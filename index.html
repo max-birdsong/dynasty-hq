@@ -26,6 +26,19 @@
   <button id="refresh" class="btn ghost small" title="Reload all data">↻</button>
 </header>
 <main id="app"><div class="loading" id="loading"><div class="spinner"></div><div id="progress">Loading…</div></div></main>
-<script type="module" src="js/main.js"></script>
+<script type="module">
+// Revalidate every module before loading so a fresh deploy is never shadowed by the browser cache.
+const seen = new Set();
+async function walk(url) {
+  if (seen.has(url)) return; seen.add(url);
+  try {
+    const src = await (await fetch(url, { cache: 'no-cache' })).text();
+    const deps = [...src.matchAll(/(?:from\s*|import\s*\(\s*)['"](\.{1,2}\/[^'"]+\.js)['"]/g)].map(m => new URL(m[1], url).href);
+    await Promise.all(deps.map(walk));
+  } catch {}
+}
+await walk(new URL('js/main.js', location.href).href);
+import('./js/main.js');
+</script>
 </body>
 </html>
