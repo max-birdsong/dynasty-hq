@@ -147,10 +147,12 @@ async function harvest(c) {
   await pool(live, 6, async x => { x.p = await realPrice(x.L, x.r.pid).catch(() => null); });
   const order = { sell: 0, steady: 1, hold: 2 };
   live.sort((a, b) => (order[a.p?.action] ?? 3) - (order[b.p?.action] ?? 3) || (b.p?.price || b.r.now) - (a.p?.price || a.r.now));
-  const sell = live.filter(x => x.p?.action === 'sell'), rest = live.filter(x => x.p?.action !== 'sell');
+  // sell now = a real price, a moving or busy market, and a contender in that league with a reason to pay
+  for (const x of live) x.bs = x.p?.action === 'sell' ? buyers(x.L, x.r.pid, x.p.price) : [];
+  const sell = live.filter(x => x.p?.action === 'sell' && x.bs.length), rest = live.filter(x => !(x.p?.action === 'sell' && x.bs.length));
+  for (const x of rest) if (x.p?.action === 'sell') x.p = { ...x.p, why: x.p.why.split(':')[0] + ': but no contender here needs him; offer him in the league chat' };
   const priceTxt = p => p?.n ? `≈ ${p.label}` : 'no real trades in 3 weeks';
-  const card = ({ L, r, p }) => {
-    const bs = buyers(L, r.pid, p?.price);
+  const card = ({ L, r, p, bs }) => {
     return h('div', { class: 'panel', style: { marginBottom: '8px' } },
       h('div', { class: 'row spread' },
         h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` · ${L.nick} · added ${new Date(r.added).toLocaleDateString([], { month: 'short', day: 'numeric' })}${r.bid ? ` for $${r.bid}` : ''}`)),

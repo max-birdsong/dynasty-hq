@@ -136,13 +136,15 @@ export async function realPrice(L, pid) {
   const alone = T.filter(x => !x.side1.includes(',') && age(x) <= 5.5);
   const counts = new Map(); for (const x of alone) counts.set(x.side2, (counts.get(x.side2) || 0) + 1);
   const common = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
-  // what to do
+  // what to do. Only players who fetch something real (about a 4th or more) are worth the trouble of a trade
+  const floor = 0.8 * (L.fc.picks.get(`${+L.season + 1} 4th`) || 500);
   let action, why;
   const hot = perDay0 != null && last3.length >= 10 && perDay3 >= 2 * Math.max(0.5, perDay0);
   if (trend != null && trend >= 0.15) { action = 'sell'; why = `price up ${Math.round(trend * 100)}% in 3 days${hot ? `, ${last3.length} trades (hot)` : ''}: sell into it, waiver spikes fade`; }
   else if (trend != null && trend <= -0.15) { action = 'sell'; why = `price down ${Math.round(-trend * 100)}% in 3 days: the market is cooling, sell before it drops further`; }
   else if (hot) { action = 'sell'; why = `${last3.length} trades in 3 days, ${Math.round(perDay3 / Math.max(0.5, perDay0))}x the usual pace: buyers are active now`; }
   else if (!last3.length) { action = 'hold'; why = 'no trades in the last 3 days: quiet market'; }
+  if (price < floor) { action = 'hold'; why = `goes for less than a 4th${last3.length ? ` (${last3.length} trades in 3 days)` : ''}: keep as depth or cut when you need the spot`; }
   else { action = 'steady'; why = `steady (${last3.length} trades in 3 days)`; }
   return { n: T.length, n3: last3.length, price, label: pickLabel(L, price), trend, hot, action, why, common, recent: T.slice(0, 4) };
 }
