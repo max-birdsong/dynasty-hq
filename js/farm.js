@@ -45,8 +45,8 @@ let _btp = null;
 function byTeamPos() { if (!_btp || _btp.src !== M.players) { const m = new Map(); for (const p of Object.values(M.players)) { if (!p?.team || !p.active) continue; const k = p.team + '|' + p.position; (m.get(k) || m.set(k, []).get(k)).push(p); } _btp = m; _btp.src = M.players; } return _btp; }
 
 // teams that would pay for this player, and the pick to ask for (they must come out ahead on FantasyCalc)
-export function buyers(L, id) {
-  const p = M.players[id] || {}, pos = p.position, v = fcv(L, id);
+export function buyers(L, id, price) {
+  const p = M.players[id] || {}, pos = p.position, v = price || fcv(L, id);
   if (!v) return [];
   teamPlan(L); // fills L.posNeeds
   const out = [];
@@ -57,8 +57,8 @@ export function buyers(L, id) {
     const hole = L.posNeeds?.[t.rid]?.holes?.includes(pos);
     const contending = t.mode === 'contend' || (t.playoff ?? 0) >= 0.35;
     if (!(hole || hurt) || !contending) continue;
-    // the best pick of theirs that keeps them ahead on FantasyCalc (3% premium)
-    const picks = t.picks.filter(k => +k.split(':')[2] >= 2).map(k => pk(L, k)).filter(a => a.fc && a.fc <= v * 0.97).sort((a, b) => b.fc - a.fc);
+    // the best pick of theirs at or just under what he's going for (real trades now, else FantasyCalc)
+    const picks = t.picks.filter(k => +k.split(':')[2] >= 2).map(k => pk(L, k)).filter(a => a.fc && a.fc <= v * (price ? 1.05 : 0.97)).sort((a, b) => b.fc - a.fc);
     const ask = picks[0];
     if (!ask) continue;
     out.push({ t, ask, why: [hurt ? `${pos} starter hurt` : null, hole ? `weak at ${pos}` : null, `${Math.round((t.playoff || 0) * 100)}% playoffs`].filter(Boolean).join(' · '), score: (t.playoff || 0) + (hurt ? 0.5 : 0) + ask.fc / 10000 });
@@ -94,30 +94,53 @@ export async function ledger(L) {
   return rows.sort((a, b) => (b.signal?.kind === 'spike') - (a.signal?.kind === 'spike') || (b.now - a.now));
 }
 
-// ---------- what people actually pay for him: FantasyCalc's real trades, last 30 days ----------
-// Uses only trades from the last 30 days and values as of each trade's day (FantasyCalc's implied value then), so a
-// player's breakout or injury since then doesn't leak in. "Alone" = he was the only piece on his side.
-export async function realPrice(L, pid, days = 30) {
+// ---------- what people actually pay for him right now: FantasyCalc's real trades ----------
+// Waiver value moves in days, so the last few days count most: each trade is weighted by how recent it is (half-life
+// 2 days, nothing older than 3 weeks), always at his value as of that trade's day (no hindsight). Compares the last
+// 3 days with the 2 weeks before for the trend, and counts trades per day for the buzz. "Alone" = only piece on his side.
+const HALF_LIFE = 2, WINDOW = 21;
+const DAYMS = 864e5;
+function pickLabel(L, v) {
+  const ny = +L.season + 1, rounds = ['1st', '2nd', '3rd', '4th'].map(r => [`${ny} ${r}`, L.fc.picks.get(`${ny} ${r}`) || 0]).filter(x => x[1] > 0);
+  for (let i = 0; i < rounds.length; i++) {
+    const [k, pv] = rounds[i], nx = rounds[i + 1];
+    if (v >= pv) return i === 0 && v > pv * 1.15 ? `more than a ${k}` : `a ${k}`;
+    if (nx && v >= nx[1]) { const span = pv - nx[1]; return v - nx[1] < span / 3 ? `a ${nx[0]}` : v > pv - span / 3 ? `a ${k}` : `between a ${k} and a ${nx[0].split(' ')[1]}`; }
+  }
+  return rounds.length ? `less than a ${rounds[rounds.length - 1][0]}` : '';
+}
+export async function realPrice(L, pid) {
   const rec = L.fc.byId.get(String(pid));
   if (!rec?.fcId) return null;
   const d = await api.fcTrades(rec.fcId, L.fmt.numTeams, L.fmt.numQbs, L.fmt.ppr).catch(() => null);
-  const cut = Date.now() - days * 864e5;
+  const now = Date.now(), cut = now - WINDOW * DAYMS;
   const day = s => { const [m, dd, y] = s.split('/'); return Date.UTC(+y, +m - 1, +dd); };
   const clean = s => String(s || '').replace(/<br\s*\/?>/gi, ' ').replace(/\s+/g, ' ').trim();
-  const recent = (d?.impliedValues || []).map(x => ({ ...x, side1: clean(x.side1), side2: clean(x.side2), t: day(x.date) })).filter(x => x.t >= cut).sort((a, b) => b.t - a.t);
-  if (!recent.length) return { n: 0 };
-  const alone = recent.filter(x => !x.side1.includes(','));
-  const vals = recent.map(x => x.value).sort((a, b) => a - b), med = vals[Math.floor(vals.length / 2)];
-  // the typical price in picks: nearest of next year's 1st-4th by FantasyCalc's own pick values today
-  const ny = +L.season + 1, rounds = ['1st', '2nd', '3rd', '4th'].map(r => [`${ny} ${r}`, L.fc.picks.get(`${ny} ${r}`) || 0]).filter(x => x[1] > 0);
-  let lbl = '';
-  for (let i = 0; i < rounds.length; i++) {
-    const [k, v] = rounds[i], nx = rounds[i + 1];
-    if (med >= v) { lbl = i === 0 && med > v * 1.15 ? `more than a ${k}` : `about a ${k}`; break; }
-    if (nx && med >= nx[1]) { lbl = med - nx[1] < (v - nx[1]) / 3 ? `about a ${nx[0]}` : med > v - (v - nx[1]) / 3 ? `about a ${k}` : `between a ${k} and a ${nx[0].split(' ')[1]}`; break; }
-    if (!nx) lbl = `less than a ${k}`;
-  }
-  return { n: recent.length, alone: alone.slice(0, 6), recent: recent.slice(0, 6), median: med, label: lbl };
+  const T = (d?.impliedValues || []).map(x => ({ ...x, side1: clean(x.side1), side2: clean(x.side2), t: day(x.date) })).filter(x => x.t >= cut && x.value > 0).sort((a, b) => b.t - a.t);
+  if (!T.length) return { n: 0 };
+  const age = x => Math.max(0, (now - x.t) / DAYMS);
+  // recency-weighted median
+  const ws = T.map(x => [x.value, Math.pow(0.5, age(x) / HALF_LIFE)]).sort((a, b) => a[0] - b[0]);
+  const W = ws.reduce((s, x) => s + x[1], 0); let acc = 0, price = ws[ws.length - 1][0];
+  for (const [v, w] of ws) { acc += w; if (acc >= W / 2) { price = v; break; } }
+  const med = xs => { const v = xs.map(x => x.value).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
+  const last3 = T.filter(x => age(x) <= 3.5), before = T.filter(x => age(x) > 3.5 && age(x) <= 17.5);
+  const m3 = med(last3), m0 = med(before);
+  const trend = m3 && m0 ? m3 / m0 - 1 : null;
+  const perDay3 = last3.length / 3.5, perDay0 = before.length / 14;
+  // what he fetched alone in the last 5 days: the most common packages
+  const alone = T.filter(x => !x.side1.includes(',') && age(x) <= 5.5);
+  const counts = new Map(); for (const x of alone) counts.set(x.side2, (counts.get(x.side2) || 0) + 1);
+  const common = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  // what to do
+  let action, why;
+  const hot = perDay3 >= 1.5 * Math.max(0.3, perDay0);
+  if (trend != null && trend >= 0.15) { action = 'sell'; why = `price up ${Math.round(trend * 100)}% in 3 days${hot ? `, ${last3.length} trades (hot)` : ''}: sell into it, waiver spikes fade`; }
+  else if (trend != null && trend <= -0.15) { action = 'sell'; why = `price down ${Math.round(-trend * 100)}% in 3 days: the market is cooling, sell before it drops further`; }
+  else if (hot) { action = 'sell'; why = `${last3.length} trades in 3 days: buyers are active now`; }
+  else if (!last3.length) { action = 'hold'; why = 'no trades in the last 3 days: quiet market'; }
+  else { action = 'steady'; why = `steady (${last3.length} trades in 3 days)`; }
+  return { n: T.length, n3: last3.length, price, label: pickLabel(L, price), trend, hot, action, why, common, recent: T.slice(0, 4) };
 }
 
 // ---------- consolidation: several small picks into one bigger pick ----------

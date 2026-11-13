@@ -2,9 +2,9 @@
 import { M, startersNow } from '../model.js';
 import * as api from '../api.js';
 import { scanLeague, indexTeams } from '../waiverscan.js';
-import { ledger, consolidations, stash, faabModel, audit, realPrice } from '../farm.js';
+import { ledger, consolidations, stash, faabModel, audit, realPrice, buyers } from '../farm.js';
 import { calculator } from './trades.js';
-import { h, f1, sleep, fmt } from '../util.js';
+import { h, f1, sleep, fmt, pool } from '../util.js';
 import { settings, save } from '../state.js';
 import { posB, empty, modeTag } from '../components.js';
 
@@ -131,46 +131,45 @@ async function stashTab(c) {
 }
 
 // ---------- Harvest ----------
-// what people actually paid for him lately, across FantasyCalc's whole trade database (fills in when loaded)
-function priceLine(L, pid) {
-  const el = h('div', { class: 'small', style: { marginTop: '4px' } });
-  realPrice(L, pid).then(p => {
-    if (!p) return;
-    if (!p.n) { el.append(h('span', { class: 'muted' }, 'No real trades for him in the last 30 days (FantasyCalc).')); return; }
-    const ex = (p.alone.length ? p.alone : p.recent).slice(0, 4).map(x => `${x.date.slice(0, 5)}: ${p.alone.length ? '' : x.side1 + ' → '}${x.side2}`);
-    el.append(h('span', { class: 'muted' }, `💰 Real trades (last 30 days, ${p.n}): `), h('b', {}, p.label || ''), h('span', { class: 'muted' }, p.alone.length ? ' · alone he went for ' : ' · e.g. '), ex.join(' · '));
-  });
-  return el;
-}
 async function harvest(c) {
   const box = h('div');
   let total = { adds: 0, sold: 0, got: 0, held: 0 };
-  const sections = [];
+  const live = [], soldAll = [];
   for (const L of c.mine) {
     const rows = await ledger(L).catch(e => { console.error(e); return []; });
-    if (!rows.length) continue;
     total.adds += rows.length; total.sold += rows.filter(r => r.status === 'sold').length;
-    total.got += rows.filter(r => r.status === 'sold').reduce((s, r) => s + (r.gotFc || 0) / (L.fc.picks.get(`${+L.season + 1} 1st`) || 3000), 0);
-    total.held += rows.filter(r => r.status === 'rostered').reduce((s, r) => s + r.now / (L.fc.picks.get(`${+L.season + 1} 1st`) || 3000), 0);
-    const live = rows.filter(r => r.status === 'rostered' && (r.signal || r.now > 0));
-    const sold = rows.filter(r => r.status === 'sold');
-    if (!live.length && !sold.length) continue;
-    sections.push(h('div', { class: 'panel' }, h('h2', {}, L.nick),
-      live.map(r => h('div', { style: { borderTop: '1px solid var(--line)', padding: '8px 0' } },
-        h('div', { class: 'row spread' },
-          h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` added ${new Date(r.added).toLocaleDateString([], { month: 'short', day: 'numeric' })}${r.bid ? ` for $${r.bid}` : ''}`)),
-          h('div', { class: 'small' }, r.then ? `${f1(L, r.then, false)} → ` : '', h('b', {}, f1(L, r.now, false)))),
-        r.signal ? h('div', { class: 'small ' + (r.signal.kind === 'spike' ? 'pos' : 'neg'), style: { marginTop: '4px' } }, (r.signal.kind === 'spike' ? '📈 Sell: ' : '📉 ') + r.signal.why) : '',
-        priceLine(L, r.pid),
-        r.buyers?.length ? h('div', { class: 'small', style: { marginTop: '4px' } }, h('span', { class: 'muted' }, 'Buyers: '),
-          r.buyers.map(b => h('a', { href: 'javascript:void 0', class: 'pill', style: { marginRight: '6px', display: 'inline-block' }, title: b.why, onclick: () => openCalc(L, b.t.rid, ['p:' + r.pid], [b.ask.key]) },
-            `${b.t.owner}: ask their ${b.ask.short || b.ask.name}`, h('span', { class: 'muted' }, ` · ${b.why}`)))) : (r.signal?.kind === 'spike' ? h('div', { class: 'small muted' }, 'No contender with a need right now.') : ''))),
-      sold.length ? h('div', { class: 'small muted', style: { borderTop: '1px solid var(--line)', paddingTop: '6px' } }, 'Harvested: ', sold.map(r => `${r.name} → ${r.got.join(' + ')}`).join(' · ')) : ''));
+    const first = L.fc.picks.get(`${+L.season + 1} 1st`) || 3000;
+    total.got += rows.filter(r => r.status === 'sold').reduce((s, r) => s + (r.gotFc || 0) / first, 0);
+    total.held += rows.filter(r => r.status === 'rostered').reduce((s, r) => s + r.now / first, 0);
+    for (const r of rows) { if (r.status === 'rostered' && r.now > 0) live.push({ L, r }); if (r.status === 'sold') soldAll.push({ L, r }); }
   }
+  // real prices, weighted to the last few days, for everything you could sell
+  await pool(live, 6, async x => { x.p = await realPrice(x.L, x.r.pid).catch(() => null); });
+  const order = { sell: 0, steady: 1, hold: 2 };
+  live.sort((a, b) => (order[a.p?.action] ?? 3) - (order[b.p?.action] ?? 3) || (b.p?.price || b.r.now) - (a.p?.price || a.r.now));
+  const sell = live.filter(x => x.p?.action === 'sell'), rest = live.filter(x => x.p?.action !== 'sell');
+  const priceTxt = p => p?.n ? `≈ ${p.label}` : 'no real trades in 3 weeks';
+  const card = ({ L, r, p }) => {
+    const bs = buyers(L, r.pid, p?.price);
+    return h('div', { class: 'panel', style: { marginBottom: '8px' } },
+      h('div', { class: 'row spread' },
+        h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` · ${L.nick} · added ${new Date(r.added).toLocaleDateString([], { month: 'short', day: 'numeric' })}${r.bid ? ` for $${r.bid}` : ''}`)),
+        h('div', {}, h('b', {}, priceTxt(p)))),
+      p?.why ? h('div', { class: 'small pos', style: { marginTop: '4px' } }, '📈 ', p.why) : '',
+      p?.common?.length ? h('div', { class: 'small', style: { marginTop: '4px' } }, h('span', { class: 'muted' }, 'Last 5 days, alone he went for: '), p.common.map(([k, n]) => `${k}${n > 1 ? ` (×${n})` : ''}`).join(' · ')) : '',
+      bs.length ? h('div', { class: 'small', style: { marginTop: '6px' } }, h('span', { class: 'muted' }, 'Ask: '),
+        bs.map(b => h('a', { href: 'javascript:void 0', class: 'pill', style: { marginRight: '6px', display: 'inline-block' }, title: b.why, onclick: () => openCalc(L, b.t.rid, ['p:' + r.pid], [b.ask.key]) },
+          `${b.t.owner}'s ${b.ask.short || b.ask.name}`, h('span', { class: 'muted' }, ` · ${b.why}`))))
+        : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No contender in this league with a need at his position right now: shop him in the league chat or wait for an injury.'));
+  };
   box.append(h('div', { class: 'kpis', style: { marginBottom: '12px' } },
-    kpi(total.adds, 'players added this season'), kpi(total.sold, 'sold'), kpi(fmt(total.got, 2) + ' 1sts', 'harvested (value today)'), kpi(fmt(total.held, 2) + ' 1sts', 'still on your rosters')));
-  box.append(...(sections.length ? sections : [empty('Nothing farmed yet this season.')]));
-  box.append(h('p', { class: 'muted small' }, 'Value then = market at the week you added him (DynastyProcess history, FantasyCalc scale); now = FantasyCalc. Buyers are contenders with a hole or an injured starter at his position; the ask is their best 2nd–4th that still leaves them ahead on FantasyCalc. Click a buyer to open the trade in the calculator.'));
+    kpi(sell.length, 'to sell now'), kpi(total.sold, 'sold this season'), kpi(fmt(total.got, 2) + ' 1sts', 'harvested (value today)'), kpi(fmt(total.held, 2) + ' 1sts', 'still on your rosters')));
+  box.append(h('h2', {}, 'Sell now'), ...(sell.length ? sell.map(card) : [empty('Nothing hot right now: no pickup of yours has a rising or busy market this week.')]));
+  if (rest.length) box.append(h('h2', { style: { marginTop: '16px' } }, 'Holding'),
+    h('div', { class: 'panel' }, ...rest.map(({ L, r, p }) => h('div', { class: 'row spread small', style: { padding: '4px 0', borderTop: '1px solid var(--line)' } },
+      h('div', {}, posB(r.pos), ' ', h('b', {}, r.name), h('span', { class: 'muted' }, ` · ${L.nick}`)), h('div', {}, priceTxt(p), p?.why ? h('span', { class: 'muted' }, ` · ${p.why}`) : '')))));
+  if (soldAll.length) box.append(h('p', { class: 'small muted', style: { marginTop: '12px' } }, 'Harvested: ', soldAll.map(({ L, r }) => `${r.name} → ${r.got.join(' + ')} (${L.nick})`).join(' · ')));
+  box.append(h('p', { class: 'muted small' }, 'Prices come from real trades in FantasyCalc\'s database (all leagues, your league\'s format), each at his value that day, weighted heavily to the last few days (half-life 2 days, nothing older than 3 weeks). "Sell now" = his price moved 15%+ in the last 3 days or trading is busy. The ask is a contender\'s best 2nd–4th at or just under his real price; click it to open the trade in the calculator.'));
   return box;
 }
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
