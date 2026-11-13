@@ -98,7 +98,9 @@ export async function ledger(L) {
 // Waiver value moves in days, so the last few days count most: each trade is weighted by how recent it is (half-life
 // 2 days, nothing older than 3 weeks), always at his value as of that trade's day (no hindsight). Compares the last
 // 3 days with the 2 weeks before for the trend, and counts trades per day for the buzz. "Alone" = only piece on his side.
-const HALF_LIFE = 2, WINDOW = 21;
+const HALF_LIFE = 2;
+// in season a player's market is days old at most: only the last 10 days count (3 weeks in the offseason)
+const windowDays = () => { const m = new Date().getMonth(); return (m >= 8 || m <= 0) ? 10 : 21; };
 const DAYMS = 864e5;
 function pickLabel(L, v) {
   const ny = +L.season + 1, rounds = ['1st', '2nd', '3rd', '4th'].map(r => [`${ny} ${r}`, L.fc.picks.get(`${ny} ${r}`) || 0]).filter(x => x[1] > 0);
@@ -113,11 +115,11 @@ export async function realPrice(L, pid) {
   const rec = L.fc.byId.get(String(pid));
   if (!rec?.fcId) return null;
   const d = await api.fcTrades(rec.fcId, L.fmt.numTeams, L.fmt.numQbs, L.fmt.ppr).catch(() => null);
-  const now = Date.now(), cut = now - WINDOW * DAYMS;
+  const now = Date.now(), cut = now - windowDays() * DAYMS;
   const day = s => { const [m, dd, y] = s.split('/'); return Date.UTC(+y, +m - 1, +dd); };
   const clean = s => String(s || '').replace(/<br\s*\/?>/gi, ' ').replace(/\s+/g, ' ').trim();
   const T = (d?.impliedValues || []).map(x => ({ ...x, side1: clean(x.side1), side2: clean(x.side2), t: day(x.date) })).filter(x => x.t >= cut && x.value > 0).sort((a, b) => b.t - a.t);
-  if (!T.length) return { n: 0 };
+  if (!T.length) return { n: 0, days: windowDays() };
   const age = x => Math.max(0, (now - x.t) / DAYMS);
   // recency-weighted median
   const ws = T.map(x => [x.value, Math.pow(0.5, age(x) / HALF_LIFE)]).sort((a, b) => a[0] - b[0]);
@@ -146,7 +148,10 @@ export async function realPrice(L, pid) {
   else if (!last3.length) { action = 'hold'; why = 'no trades in the last 3 days: quiet market'; }
   if (price < floor) { action = 'hold'; why = `goes for less than a 4th${last3.length ? ` (${last3.length} trades in 3 days)` : ''}: keep as depth or cut when you need the spot`; }
   else { action = 'steady'; why = `steady (${last3.length} trades in 3 days)`; }
-  return { n: T.length, n3: last3.length, price, label: pickLabel(L, price), trend, hot, action, why, common, recent: T.slice(0, 4) };
+  const ny = +L.season + 1, rds = [1, 2, 3, 4].map(r => [r, L.fc.picks.get(`${ny} ${['1st', '2nd', '3rd', '4th'][r - 1]}`) || 0]).filter(x => x[1] > 0);
+  const near = rds.length ? rds.reduce((b, x) => Math.abs(Math.log(x[1] / price)) < Math.abs(Math.log(b[1] / price)) ? x : b) : null;
+  const nickname = near && price >= floor ? `${['1st', '2nd', '3rd', '4th'][near[0] - 1]} rounder` : null;
+  return { n: T.length, n3: last3.length, days: windowDays(), price, label: pickLabel(L, price), trend, hot, action, why, common, recent: T.slice(0, 4), worth: price >= floor, nickname };
 }
 
 // ---------- consolidation: several small picks into one bigger pick ----------

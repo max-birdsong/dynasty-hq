@@ -4,7 +4,7 @@ import * as api from '../api.js';
 import { scanLeague, indexTeams } from '../waiverscan.js';
 import { ledger, consolidations, stash, faabModel, audit, realPrice, buyers } from '../farm.js';
 import { calculator } from './trades.js';
-import { h, f1, sleep, fmt, pool } from '../util.js';
+import { h, f1, sleep, fmt, pool, toast } from '../util.js';
 import { settings, save } from '../state.js';
 import { posB, empty, modeTag } from '../components.js';
 
@@ -148,10 +148,13 @@ async function harvest(c) {
   const order = { sell: 0, steady: 1, hold: 2 };
   live.sort((a, b) => (order[a.p?.action] ?? 3) - (order[b.p?.action] ?? 3) || (b.p?.price || b.r.now) - (a.p?.price || a.r.now));
   // sell now = a real price, a moving or busy market, and a contender in that league with a reason to pay
-  for (const x of live) x.bs = x.p?.action === 'sell' ? buyers(x.L, x.r.pid, x.p.price) : [];
+  // asks are priced at his real-trade price: if he goes for a 4th, ask for a 4th
+  for (const x of live) x.bs = x.p?.worth ? buyers(x.L, x.r.pid, x.p.price) : [];
   const sell = live.filter(x => x.p?.action === 'sell' && x.bs.length), rest = live.filter(x => !(x.p?.action === 'sell' && x.bs.length));
   for (const x of rest) if (x.p?.action === 'sell') x.p = { ...x.p, why: x.p.why.split(':')[0] + ': but no contender here needs him; offer him in the league chat' };
-  const priceTxt = p => p?.n ? `≈ ${p.label}` : 'no real trades in 3 weeks';
+  const priceTxt = p => p?.n ? `≈ ${p.label}` : `no real trades in ${p?.days || 10} days: nobody is buying him`;
+  const nick = p => p?.nickname ? h('span', { class: 'pill', title: 'Set this as his nickname in Sleeper so league mates see the price', style: { marginLeft: '6px', cursor: 'pointer' }, onclick: () => navigator.clipboard?.writeText(p.nickname).then(() => toast('Copied: paste it as his nickname in Sleeper')) }, `🏷 "${p.nickname}"`) : '';
+  const asks = (L, r, bs) => bs.map(b => h('a', { href: 'javascript:void 0', class: 'pill', style: { marginRight: '6px', display: 'inline-block' }, title: b.why, onclick: () => openCalc(L, b.t.rid, ['p:' + r.pid], [b.ask.key]) }, `${b.t.owner}'s ${b.ask.short || b.ask.name}`, h('span', { class: 'muted' }, ` · ${b.why}`)));
   const card = ({ L, r, p, bs }) => {
     return h('div', { class: 'panel', style: { marginBottom: '8px' } },
       h('div', { class: 'row spread' },
@@ -171,17 +174,18 @@ async function harvest(c) {
   const groupCard = xs => {
     const { r, p } = xs[0];
     return h('div', { class: 'panel', style: { marginBottom: '8px' } },
-      h('div', { class: 'row spread' }, h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` · yours in ${xs.length} league${xs.length > 1 ? 's' : ''}`)), h('b', {}, priceTxt(p))),
+      h('div', { class: 'row spread' }, h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` · yours in ${xs.length} league${xs.length > 1 ? 's' : ''}`)), h('div', {}, h('b', {}, priceTxt(p)), nick(p))),
       h('div', { class: 'small pos', style: { marginTop: '4px' } }, '📈 ', p.why),
       p.common?.length ? h('div', { class: 'small', style: { marginTop: '4px' } }, h('span', { class: 'muted' }, 'Last 5 days, alone he went for: '), p.common.map(([k, n]) => `${k}${n > 1 ? ` (×${n})` : ''}`).join(' · ')) : '',
       ...xs.map(({ L, bs }) => h('div', { class: 'small', style: { marginTop: '6px' } }, h('b', {}, L.nick + ': '), h('span', { class: 'muted' }, 'ask '),
-        bs.map(b => h('a', { href: 'javascript:void 0', class: 'pill', style: { marginRight: '6px', display: 'inline-block' }, title: b.why, onclick: () => openCalc(L, b.t.rid, ['p:' + r.pid], [b.ask.key]) },
-          `${b.t.owner}'s ${b.ask.short || b.ask.name}`, h('span', { class: 'muted' }, ` · ${b.why}`))))));
+        asks(L, r, bs))));
   };
   box.append(h('h2', {}, 'Sell now'), ...(groups.size ? [...groups.values()].map(groupCard) : [empty('Nothing to sell right now: none of your pickups that fetch a 4th or more has a moving market and a buyer this week.')]));
   if (rest.length) box.append(h('h2', { style: { marginTop: '16px' } }, 'Holding'),
-    h('div', { class: 'panel' }, ...rest.map(({ L, r, p }) => h('div', { class: 'row spread small', style: { padding: '4px 0', borderTop: '1px solid var(--line)' } },
-      h('div', {}, posB(r.pos), ' ', h('b', {}, r.name), h('span', { class: 'muted' }, ` · ${L.nick}`)), h('div', {}, priceTxt(p), p?.why ? h('span', { class: 'muted' }, ` · ${p.why}`) : '')))));
+    h('div', { class: 'panel' }, ...rest.map(({ L, r, p, bs }) => h('div', { class: 'small', style: { padding: '5px 0', borderTop: '1px solid var(--line)' } },
+      h('div', { class: 'row spread' }, h('div', {}, posB(r.pos), ' ', h('b', {}, r.name), h('span', { class: 'muted' }, ` · ${L.nick}`)), h('div', {}, priceTxt(p), nick(p))),
+      p?.why ? h('div', { class: 'muted' }, p.why) : '',
+      bs?.length ? h('div', {}, h('span', { class: 'muted' }, 'If you want to move him, ask: '), asks(L, r, bs)) : ''))));
   if (soldAll.length) box.append(h('p', { class: 'small muted', style: { marginTop: '12px' } }, 'Harvested: ', soldAll.map(({ L, r }) => `${r.name} → ${r.got.join(' + ')} (${L.nick})`).join(' · ')));
   box.append(h('p', { class: 'muted small' }, 'Prices come from real trades in FantasyCalc\'s database (all leagues, your league\'s format), each at his value that day, weighted heavily to the last few days (half-life 2 days, nothing older than 3 weeks). "Sell now" = his price moved 15%+ in the last 3 days or trading is busy. The ask is a contender\'s best 2nd–4th at or just under his real price; click it to open the trade in the calculator.'));
   return box;
