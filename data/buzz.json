@@ -221,6 +221,22 @@
 "takes": 0,
 "raw": 0,
 "v": 3
+},
+"cd757704-deab-11f1-b3bb-0b0c153dba4e": {
+"show": "Dynasty Nerds",
+"title": "The Dating Game & Win-Now Trade Targets | Dynasty Fantasy Football Podcast Ep. 946",
+"date": "2026-11-12T15:17:00+00:00",
+"takes": 4,
+"raw": 6,
+"v": 3
+},
+"99f6ac8f-1ee7-4656-a653-bc75d61ac614": {
+"show": "Under The Helmet",
+"title": "20 Critical Players for End-of-Week Status and Practice Reports: Week 10",
+"date": "2026-11-13T08:36:00+00:00",
+"takes": 0,
+"raw": 2,
+"v": 3
 }
 },
 "takes": [
@@ -991,27 +1007,83 @@
 "audio": "https://pscrb.fm/rss/p/mgln.ai/e/1385/injector.simplecastaudio.com/f9bf8f69-2f80-4e8c-b894-36a913357b20/episodes/5f08c86c-92be-42c7-9241-ddacf40c7d1e/audio/128/default.mp3?aid=rss_feed&awCollectionId=f9bf8f69-2f80-4e8c-b894-36a913357b20&awEpisodeId=5f08c86c-92be-42c7-9241-ddacf40c7d1e&feed=iZeauK7Q",
 "link": "https://bleav.com/shows/dynasty-fantasy-football-under-the-helmet/?post_type=gp_podcast_episode&p=1000",
 "guid": "ec2e45e5-7cd8-4a0f-b427-adafd2ebb87d"
+},
+{
+"pid": "5850",
+"player": "Josh Jacobs",
+"stance": "buy",
+"quote": "So a guy like Josh Jacobs can probably be had for late 27 second and get it done.",
+"t": 716,
+"price": "a late 2nd",
+"price_dir": "pay",
+"speaker": "Rich",
+"show": "Dynasty Nerds",
+"episode": "The Dating Game & Win-Now Trade Targets | Dynasty Fantasy Football Podcast Ep. 946",
+"date": "2026-11-12T15:17:00+00:00",
+"audio": "https://pdst.fm/e/chrt.fm/track/GB12G2/traffic.megaphone.fm/DMALLC3567905511.mp3",
+"link": "",
+"guid": "cd757704-deab-11f1-b3bb-0b0c153dba4e"
+},
+{
+"pid": "5967",
+"player": "Tony Pollard",
+"stance": "buy",
+"quote": "going out and getting a guy like Tony Pollard for this year makes a lot of sense if you're a contender.",
+"t": 956,
+"price": null,
+"price_dir": null,
+"speaker": null,
+"show": "Dynasty Nerds",
+"episode": "The Dating Game & Win-Now Trade Targets | Dynasty Fantasy Football Podcast Ep. 946",
+"date": "2026-11-12T15:17:00+00:00",
+"audio": "https://pdst.fm/e/chrt.fm/track/GB12G2/traffic.megaphone.fm/DMALLC3567905511.mp3",
+"link": "",
+"guid": "cd757704-deab-11f1-b3bb-0b0c153dba4e"
+},
+{
+"pid": "8138",
+"player": "James Cook",
+"stance": "buy",
+"quote": "DeAndre Swift and James Cook are the two guys that I want to go after.",
+"t": 1195,
+"price": null,
+"price_dir": null,
+"speaker": "Rich",
+"show": "Dynasty Nerds",
+"episode": "The Dating Game & Win-Now Trade Targets | Dynasty Fantasy Football Podcast Ep. 946",
+"date": "2026-11-12T15:17:00+00:00",
+"audio": "https://pdst.fm/e/chrt.fm/track/GB12G2/traffic.megaphone.fm/DMALLC3567905511.mp3",
+"link": "",
+"guid": "cd757704-deab-11f1-b3bb-0b0c153dba4e"
+},
+{
+"pid": "6790",
+"player": "DeAndre Swift",
+"stance": "buy",
+"quote": "Those are kind of guys I'm going after.",
+"t": 1367,
+"price": null,
+"price_dir": null,
+"speaker": "Rich",
+"show": "Dynasty Nerds",
+"episode": "The Dating Game & Win-Now Trade Targets | Dynasty Fantasy Football Podcast Ep. 946",
+"date": "2026-11-12T15:17:00+00:00",
+"audio": "https://pdst.fm/e/chrt.fm/track/GB12G2/traffic.megaphone.fm/DMALLC3567905511.mp3",
+"link": "",
+"guid": "cd757704-deab-11f1-b3bb-0b0c153dba4e"
 }
 ],
-"updated": "2026-11-12T12:42:53.421665+00:00",
+"updated": "2026-11-13T12:12:32.422276+00:00",
 "log": [
-"run 2026-11-12T12:42 model claude-haiku-5-5",
+"run 2026-11-13T12:12 model claude-haiku-5-5",
 "Fantasy Footballers Dynasty: 188 episodes in feed",
 "FantasyPros Dynasty: 419 episodes in feed",
-"FantasyPros Dynasty | Dynasty Trade Deadline: 10 Players to BUY NOW + Trades to Wi: 57 MB, 765 segments in 179s",
-"  -> 4 takes kept of 5",
-"Dynasty Nerds: 970 episodes in feed",
-"Dynasty Nerds | Rebuilding Trade Targets | Dynasty Fantasy Football Podcast : 133 MB, 1005 segments in 164s",
-"  -> 8 takes kept of 13",
-"Dynasty Nerds | Huge Risers in Dynasty This Week! | Dynasty Fantasy Football: 148 MB, 710 segments in 158s",
-"  -> 0 takes kept of 12",
+"Dynasty Nerds: 971 episodes in feed",
+"Dynasty Nerds | The Dating Game & Win-Now Trade Targets | Dynasty Fantasy Fo: 138 MB, 1745 segments in 193s",
+"  -> 4 takes kept of 6",
 "Fantasy Football Today Dynasty: 260 episodes in feed",
 "Under The Helmet: 600 episodes in feed",
-"Under The Helmet | 1.01 Watch in Indianapolis, Must Win for Seattle, Quarterbac: 26 MB, 646 segments in 74s",
-"  -> 0 takes kept of 2",
-"Under The Helmet | 4 Dynasty Running Backs to Buy (Contending and Non-Contendin: 20 MB, 521 segments in 60s",
-"  -> 3 takes kept of 4",
-"Under The Helmet | Baker Mayfield, Joe Burrow, Chargers, Jets: The Best of X: 29 MB, 292 segments in 77s",
-"  -> 0 takes kept of 0"
+"Under The Helmet | 20 Critical Players for End-of-Week Status and Practice Repo: 19 MB, 191 segments in 52s",
+"  -> 0 takes kept of 2"
 ]
 }
