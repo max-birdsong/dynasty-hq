@@ -205,7 +205,7 @@ async function readRemote() {
 }
 
 export async function pull() {
-  if (!syncReady()) { syncStatus('off'); return false; }
+  if (!syncReady()) return pullReadOnly();
   if (!navigator.onLine) { syncStatus('offline'); return false; }
   try {
     syncStatus('syncing');
@@ -220,6 +220,22 @@ export async function pull() {
     syncStatus(e.status === 401 || e.status === 403 ? 'error' : 'offline', e.message);
     return false;
   }
+}
+
+// No token on this device: the repo is public, so still load your data (rankings, trade log, filters) read-only.
+// Changes made here stay on this device until you add the token in Settings.
+async function pullReadOnly() {
+  const { repo, branch } = S.settings.github;
+  if (!repo || !navigator.onLine) { syncStatus('off'); return false; }
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/${repo}/${branch || 'data'}/${FILE}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) { syncStatus('off'); return false; }
+    const remote = await r.json();
+    sync.changed = (remote.updatedAt || 0) > (S.updatedAt || 0);
+    adopt(merge(S, remote));
+    syncStatus('readonly');
+    return true;
+  } catch { syncStatus('off'); return false; }
 }
 
 export function schedulePush(delay = 2000) {

@@ -36,7 +36,7 @@ async function boot(force = false) {
     const setup = location.hash.match(/^#\/settings\/setup\/(.+)$/);
     if (setup) { try { applySetup(decodeURIComponent(setup[1])); toast('This device is now connected'); } catch { toast('That setup link is broken', 'err'); } history.replaceState(null, '', location.pathname + '#/'); }
     startAutoSync();
-    if (syncReady()) { prog('Syncing from GitHub'); await pull(); }
+    prog(syncReady() ? 'Syncing from GitHub' : 'Loading your saved data'); await pull(); // read-only from the public repo when this device has no token
     await loadAll(prog);
     if (M.errors.length) console.warn(M.errors);
     route();
@@ -54,7 +54,7 @@ async function boot(force = false) {
 window.addEventListener('hashchange', route);
 
 // sync indicator + re-render when another device changed something
-const LABEL = { off: ['Not syncing', 'off'], synced: ['Synced', 'ok'], pending: ['Saving…', 'pend'], syncing: ['Syncing…', 'pend'], offline: ['Offline, will retry', 'warn'], error: ['Sync error', 'err'] };
+const LABEL = { readonly: ['Read-only: add your token in Settings to save', 'warn'], off: ['Not syncing', 'off'], synced: ['Synced', 'ok'], pending: ['Saving…', 'pend'], syncing: ['Syncing…', 'pend'], offline: ['Offline, will retry', 'warn'], error: ['Sync error', 'err'] };
 onSync(s => {
   const el = $('#sync'); if (!el) return;
   const [txt, c] = LABEL[s.status] || [s.status, ''];
