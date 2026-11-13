@@ -103,7 +103,8 @@ export async function realPrice(L, pid, days = 30) {
   const d = await api.fcTrades(rec.fcId, L.fmt.numTeams, L.fmt.numQbs, L.fmt.ppr).catch(() => null);
   const cut = Date.now() - days * 864e5;
   const day = s => { const [m, dd, y] = s.split('/'); return Date.UTC(+y, +m - 1, +dd); };
-  const recent = (d?.impliedValues || []).map(x => ({ ...x, t: day(x.date) })).filter(x => x.t >= cut).sort((a, b) => b.t - a.t);
+  const clean = s => String(s || '').replace(/<br\s*\/?>/gi, ' ').replace(/\s+/g, ' ').trim();
+  const recent = (d?.impliedValues || []).map(x => ({ ...x, side1: clean(x.side1), side2: clean(x.side2), t: day(x.date) })).filter(x => x.t >= cut).sort((a, b) => b.t - a.t);
   if (!recent.length) return { n: 0 };
   const alone = recent.filter(x => !x.side1.includes(','));
   const vals = recent.map(x => x.value).sort((a, b) => a - b), med = vals[Math.floor(vals.length / 2)];
