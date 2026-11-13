@@ -124,20 +124,24 @@ export async function realPrice(L, pid) {
   const W = ws.reduce((s, x) => s + x[1], 0); let acc = 0, price = ws[ws.length - 1][0];
   for (const [v, w] of ws) { acc += w; if (acc >= W / 2) { price = v; break; } }
   const med = xs => { const v = xs.map(x => x.value).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
+  // FantasyCalc returns at most 1000 trades, newest last: for a busy player that may cover only a few days, so the
+  // "before" window is cut to what the list actually covers
+  const all = d?.impliedValues || [], oldest = all.length ? day(all[0].date) : now, covered = (now - oldest) / DAYMS;
   const last3 = T.filter(x => age(x) <= 3.5), before = T.filter(x => age(x) > 3.5 && age(x) <= 17.5);
-  const m3 = med(last3), m0 = med(before);
-  const trend = m3 && m0 ? m3 / m0 - 1 : null;
-  const perDay3 = last3.length / 3.5, perDay0 = before.length / 14;
+  const beforeDays = Math.max(0, Math.min(17.5, covered) - 3.5);
+  const m3 = med(last3), m0 = beforeDays >= 3 && before.length >= 5 ? med(before) : null;
+  const trend = m3 && m0 && last3.length >= 5 ? m3 / m0 - 1 : null;
+  const perDay3 = last3.length / 3.5, perDay0 = beforeDays >= 3 ? before.length / beforeDays : null;
   // what he fetched alone in the last 5 days: the most common packages
   const alone = T.filter(x => !x.side1.includes(',') && age(x) <= 5.5);
   const counts = new Map(); for (const x of alone) counts.set(x.side2, (counts.get(x.side2) || 0) + 1);
   const common = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
   // what to do
   let action, why;
-  const hot = perDay3 >= 1.5 * Math.max(0.3, perDay0);
+  const hot = perDay0 != null && last3.length >= 10 && perDay3 >= 2 * Math.max(0.5, perDay0);
   if (trend != null && trend >= 0.15) { action = 'sell'; why = `price up ${Math.round(trend * 100)}% in 3 days${hot ? `, ${last3.length} trades (hot)` : ''}: sell into it, waiver spikes fade`; }
   else if (trend != null && trend <= -0.15) { action = 'sell'; why = `price down ${Math.round(-trend * 100)}% in 3 days: the market is cooling, sell before it drops further`; }
-  else if (hot) { action = 'sell'; why = `${last3.length} trades in 3 days: buyers are active now`; }
+  else if (hot) { action = 'sell'; why = `${last3.length} trades in 3 days, ${Math.round(perDay3 / Math.max(0.5, perDay0))}x the usual pace: buyers are active now`; }
   else if (!last3.length) { action = 'hold'; why = 'no trades in the last 3 days: quiet market'; }
   else { action = 'steady'; why = `steady (${last3.length} trades in 3 days)`; }
   return { n: T.length, n3: last3.length, price, label: pickLabel(L, price), trend, hot, action, why, common, recent: T.slice(0, 4) };
