@@ -1,0 +1,29 @@
+name: Probe FC trades (temporary)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/probe-fc.yml']
+permissions: { contents: write }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set +e
+          out=data/probe-fc.txt; : > $out
+          id=$(curl -s "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=12&ppr=1" | python3 -c "import json,sys;d=json.load(sys.stdin);print([x['player']['id'] for x in d if x['player']['name']=='Matthew Golden'][0])")
+          echo "golden fc id $id" >> $out
+          # endpoints the FantasyCalc site itself calls, from its JS bundles
+          for js in $(curl -s https://fantasycalc.com/ | grep -oE 'src="[^"]+\.js"' | sed 's/src="//;s/"$//'); do
+            case "$js" in http*) u=$js;; *) u="https://fantasycalc.com/${js#/}";; esac
+            curl -s "$u" | grep -oE '"/[a-zA-Z/]*trade[a-zA-Z/]*[^"]{0,40}"|`[^`]{0,60}trade[^`]{0,80}`|api\.fantasycalc\.com[^"`]{0,80}' | sort -u >> $out
+          done
+          for u in "https://api.fantasycalc.com/trades/implied/$id?isDynasty=true&numQbs=2&numTeams=12&ppr=1" \
+                   "https://api.fantasycalc.com/trades?playerId=$id&isDynasty=true&numQbs=2" \
+                   "https://api.fantasycalc.com/trades/recent?playerId=$id&isDynasty=true&numQbs=2" \
+                   "https://api.fantasycalc.com/trades/player/$id?isDynasty=true&numQbs=2"; do
+            echo "== $u" >> $out; curl -s -m 30 "$u" | head -c 1500 >> $out; echo >> $out
+          done
+          git config user.name bot; git config user.email actions@users.noreply.github.com
+          git add $out; git commit -m "probe"; git pull --rebase; git push
