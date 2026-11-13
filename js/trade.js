@@ -478,21 +478,30 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     r.dTitle = r.sim.me[1].title - r.sim.me[0].title;
     if (T) r.score = r.dTitle;
   }
-  // rank by expected value: value to you × chance he accepts (title-swing mode keeps its own order)
+  // Two rankings, both kept: 'best bet' = expected value (your gain × his chance of accepting, with the gain counted
+  // only up to ~0.6 1sts: a dream deal nobody accepts is worth less than a modest one that happens) and 'biggest
+  // gain' = raw value to you. Title-swing mode keeps its own order.
+  const first = L.fc.picks.get(`${+L.season + 1} 1st`) || 3000;
   for (const r of out) {
     const a = pAccept(L, r.partner, r); r.pAccept = a.p; r.acceptF = a.f;
-    if (!T) r.score *= a.p / 0.3; // scaled so an average-odds offer keeps its score
+    r.gain = r.score; // value to you (with goal bonuses)
+    r.ev = Math.min(r.score, 0.6 * first) * a.p;
+    if (!T) r.score = r.ev;
   }
-  // keep the list varied: each asset appears in at most two suggestions
-  const used = new Map(), final = [];
+  // keep the list varied: each asset appears in at most two suggestions (per ranking), then merge
+  const pick = (list, key) => {
+    const used = new Map(), sel = [];
+    for (const r of [...list].sort((a, b) => b[key] - a[key])) {
+      if (!T && r.value.total < R.minTatGain) continue;
+      const keys = [...r.giveKeys, ...r.getKeys];
+      if (keys.some(k => (used.get(k) || 0) >= 2)) continue;
+      keys.forEach(k => used.set(k, (used.get(k) || 0) + 1));
+      sel.push(r);
+      if (sel.length >= limit) break;
+    }
+    return sel;
+  };
   const pool2 = T ? out.slice(0, exactTop).filter(r => r.dTitle >= 0.01 && r.value.total > -plan.TITLE * 0.1) : out;
-  for (const r of pool2.sort((a, b) => b.score - a.score)) {
-    if (!T && r.value.total < R.minTatGain) continue;
-    const keys = [...r.giveKeys, ...r.getKeys];
-    if (keys.some(k => (used.get(k) || 0) >= 2)) continue;
-    keys.forEach(k => used.set(k, (used.get(k) || 0) + 1));
-    final.push(r);
-    if (final.length >= limit) break;
-  }
-  return final;
+  if (T) return pick(pool2, 'score');
+  return [...new Set([...pick(pool2, 'ev'), ...pick(pool2, 'gain')])];
 }

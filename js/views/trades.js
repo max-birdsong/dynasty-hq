@@ -280,21 +280,26 @@ function suggestions(L) {
       for (const t of lg.teams) t._pickIndex = pi?.index || null;
       all = all.concat(suggest(lg, { mode, partners })); await sleep(0);
     }
-    all.sort((a, b) => b.score - a.score);
+    const sortKey = () => mode === 'title' ? 'score' : (settings().suggestSort || 'ev');
+    all.sort((a, b) => b[sortKey()] - a[sortKey()]);
     if (!all.length && mode === 'title') { out.replaceChildren(empty('No trade found that adds at least 1% title odds at an acceptable long-term price.')); return; }
     if (!all.length) { out.replaceChildren(empty('No trades pass all the rules. Loosen them in Settings, add targets on the Values page, or upload newer TAT values.')); return; }
     // filter by goal
     const labels = [...new Set(all.flatMap(r => r.goals.map(g => g.label)))];
     const grid = h('div', { class: 'cards' });
-    const show = f => grid.replaceChildren(...all.filter(r => !f || (f === 'Pure value' ? r.pureValue : r.goals.some(g => g.label === f))).slice(0, 40).map(r => suggestionCard(r)));
+    let filt = null;
+    const show = f => { filt = f; all.sort((a, b) => b[sortKey()] - a[sortKey()]); grid.replaceChildren(...all.filter(r => !f || (f === 'Pure value' ? r.pureValue : r.goals.some(g => g.label === f))).slice(0, 40).map(r => suggestionCard(r))); };
+    const sortSel = mode === 'title' ? '' : h('select', { class: 'small', onchange: e => { settings().suggestSort = e.target.value; save({ settingsChanged: true }); show(filt); } },
+      [['ev', 'Best bets (gain × chance he accepts)'], ['gain', 'Biggest gain to you (TAT)']].map(([k, l]) => h('option', { value: k, selected: (settings().suggestSort || 'ev') === k }, l)));
     const chips = h('div', { class: 'row', style: { margin: '0 0 12px', gap: '6px' } }, h('span', { class: 'small muted' }, 'Goal:'),
       ['All', ...labels, ...(all.some(r => r.pureValue) ? ['Pure value'] : [])].map(l => h('button', { class: 'tag', style: { cursor: 'pointer' }, onclick: e => { chips.querySelectorAll('button').forEach(b => b.classList.remove('push')); e.target.classList.add('push'); show(l === 'All' ? null : l); } }, l)));
     chips.querySelector('button').classList.add('push');
+    if (sortSel) chips.append(h('span', { class: 'small muted', style: { marginLeft: '12px' } }, 'Sort:'), sortSel);
     out.replaceChildren(chips, grid); show(null);
   };
   box.append(h('div', { class: 'panel' },
     h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, 'Suggested trades'),
-      h('div', { class: 'muted small' }, 'Trades that serve one of your goals, ranked by value to you in generic 1sts. ', h('details', { style: { display: 'inline' } }, h('summary', { style: { display: 'inline', fontWeight: 400 } }, 'How'), ` Each suggestion is tagged with the goal it serves for you and, when there is one, for the partner. Trades that serve no goal only appear if they win decisively. Value = Sanderson value gained plus the effect on this season (a title is worth tens of 1sts, worked out from each league’s values; see the plan for the number). Treat the Sanderson-fair price as the worst acceptable deal, not the target. Offers already rejected are skipped.`))),
+      h('div', { class: 'muted small' }, 'Trades that serve one of your goals. Ranked by best bet (your gain × his chance of accepting) or by biggest gain to you; switch with Sort. ', h('details', { style: { display: 'inline' } }, h('summary', { style: { display: 'inline', fontWeight: 400 } }, 'How'), ` Each suggestion is tagged with the goal it serves for you and, when there is one, for the partner. Trades that serve no goal only appear if they win decisively. Value = Sanderson value gained plus the effect on this season (a title is worth tens of 1sts, worked out from each league’s values; see the plan for the number). Treat the Sanderson-fair price as the worst acceptable deal, not the target. Offers already rejected are skipped.`))),
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues'), h('button', { class: 'btn ghost', title: 'Trades ranked by how much they raise your title odds, with what each costs long-term', onclick: () => run([L], 'title') }, '🏆 Biggest title swings')))),
     out);
   box.insertBefore(blockPanel(L), box.firstChild);
