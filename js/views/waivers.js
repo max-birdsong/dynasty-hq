@@ -165,8 +165,20 @@ async function harvest(c) {
         : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No contender in this league with a need at his position right now: shop him in the league chat or wait for an injury.'));
   };
   box.append(h('div', { class: 'kpis', style: { marginBottom: '12px' } },
-    kpi(sell.length, 'to sell now'), kpi(total.sold, 'sold this season'), kpi(fmt(total.got, 2) + ' 1sts', 'harvested (value today)'), kpi(fmt(total.held, 2) + ' 1sts', 'still on your rosters')));
-  box.append(h('h2', {}, 'Sell now'), ...(sell.length ? sell.map(card) : [empty('Nothing hot right now: no pickup of yours has a rising or busy market this week.')]));
+    kpi(new Set(sell.map(x => x.r.pid)).size, 'players to sell now'), kpi(total.sold, 'sold this season'), kpi(fmt(total.got, 2) + ' 1sts', 'harvested (value today)'), kpi(fmt(total.held, 2) + ' 1sts', 'still on your rosters')));
+  // one card per player: the market is the same everywhere, the buyers differ by league
+  const groups = new Map(); for (const x of sell) (groups.get(x.r.pid) || groups.set(x.r.pid, []).get(x.r.pid)).push(x);
+  const groupCard = xs => {
+    const { r, p } = xs[0];
+    return h('div', { class: 'panel', style: { marginBottom: '8px' } },
+      h('div', { class: 'row spread' }, h('div', {}, posB(r.pos), h('b', {}, ' ' + r.name), h('span', { class: 'muted small' }, ` · yours in ${xs.length} league${xs.length > 1 ? 's' : ''}`)), h('b', {}, priceTxt(p))),
+      h('div', { class: 'small pos', style: { marginTop: '4px' } }, '📈 ', p.why),
+      p.common?.length ? h('div', { class: 'small', style: { marginTop: '4px' } }, h('span', { class: 'muted' }, 'Last 5 days, alone he went for: '), p.common.map(([k, n]) => `${k}${n > 1 ? ` (×${n})` : ''}`).join(' · ')) : '',
+      ...xs.map(({ L, bs }) => h('div', { class: 'small', style: { marginTop: '6px' } }, h('b', {}, L.nick + ': '), h('span', { class: 'muted' }, 'ask '),
+        bs.map(b => h('a', { href: 'javascript:void 0', class: 'pill', style: { marginRight: '6px', display: 'inline-block' }, title: b.why, onclick: () => openCalc(L, b.t.rid, ['p:' + r.pid], [b.ask.key]) },
+          `${b.t.owner}'s ${b.ask.short || b.ask.name}`, h('span', { class: 'muted' }, ` · ${b.why}`))))));
+  };
+  box.append(h('h2', {}, 'Sell now'), ...(groups.size ? [...groups.values()].map(groupCard) : [empty('Nothing to sell right now: none of your pickups that fetch a 4th or more has a moving market and a buyer this week.')]));
   if (rest.length) box.append(h('h2', { style: { marginTop: '16px' } }, 'Holding'),
     h('div', { class: 'panel' }, ...rest.map(({ L, r, p }) => h('div', { class: 'row spread small', style: { padding: '4px 0', borderTop: '1px solid var(--line)' } },
       h('div', {}, posB(r.pos), ' ', h('b', {}, r.name), h('span', { class: 'muted' }, ` · ${L.nick}`)), h('div', {}, priceTxt(p), p?.why ? h('span', { class: 'muted' }, ` · ${p.why}`) : '')))));
