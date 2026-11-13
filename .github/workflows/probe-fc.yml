@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           set +e
-          out=data/probe-fc.txt; : > $out
+          out=data/probe-fc.txt; : > $out  # v2
           id=$(curl -s "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=12&ppr=1" | python3 -c "import json,sys;d=json.load(sys.stdin);print([x['player']['id'] for x in d if x['player']['name']=='Matthew Golden'][0])")
           echo "golden fc id $id" >> $out
           # endpoints the FantasyCalc site itself calls, from its JS bundles
@@ -19,11 +19,18 @@ jobs:
             case "$js" in http*) u=$js;; *) u="https://fantasycalc.com/${js#/}";; esac
             curl -s "$u" | grep -oE '"/[a-zA-Z/]*trade[a-zA-Z/]*[^"]{0,40}"|`[^`]{0,60}trade[^`]{0,80}`|api\.fantasycalc\.com[^"`]{0,80}' | sort -u >> $out
           done
-          for u in "https://api.fantasycalc.com/trades/implied/$id?isDynasty=true&numQbs=2&numTeams=12&ppr=1" \
-                   "https://api.fantasycalc.com/trades?playerId=$id&isDynasty=true&numQbs=2" \
-                   "https://api.fantasycalc.com/trades/recent?playerId=$id&isDynasty=true&numQbs=2" \
-                   "https://api.fantasycalc.com/trades/player/$id?isDynasty=true&numQbs=2"; do
-            echo "== $u" >> $out; curl -s -m 30 "$u" | head -c 1500 >> $out; echo >> $out
+          for q in "playerId=$id" "playerIds=$id" "player=$id" "playerId=$id&limit=200" "playerId=$id&numTeams=12&ppr=1" ""; do
+            echo "== /trades?$q" >> $out
+            curl -s -m 30 "https://api.fantasycalc.com/trades?$q&isDynasty=true&numQbs=2" | python3 -c "
+import json,sys
+try:
+  d=json.load(sys.stdin)
+except Exception as e:
+  print('not json'); sys.exit()
+has=[t for t in d if any(x['id']==$id for x in t['side1']+t['side2'])]
+print(len(d),'trades;',len(has),'with the player; dates',d[0]['date'] if d else '',d[-1]['date'] if d else '')
+for t in has[:5]: print(' ', t['date'][:10], [x['name'] for x in t['side1']], '<->', [x['name'] for x in t['side2']], 'diff', t.get('maybeTradedValueDiff'))
+" >> $out
           done
           git config user.name bot; git config user.email actions@users.noreply.github.com
           git add $out; git commit -m "probe"; git pull --rebase; git push
