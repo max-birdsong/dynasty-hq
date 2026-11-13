@@ -1,0 +1,26 @@
+Matthew Golden playerId=12672: 50 trades, 0 with him, dates 2026-11-13..2026-11-13
+Matthew Golden playerIds=12672: 50 trades, 0 with him, dates 2026-11-13..2026-11-13
+Matthew Golden player=12672: 50 trades, 0 with him, dates 2026-11-13..2026-11-13
+Matthew Golden playerId=12672&numTeams=12&ppr=1&limit=500: 50 trades, 0 with him, dates 2026-11-13..2026-11-13
+Tyler Allgeier playerId=6408: 50 trades, 0 with him, dates 2026-11-13..2026-11-13
+Tyler Allgeier playerIds=6408: 50 trades, 0 with him, dates 2026-11-13..2026-11-13
+Tyler Allgeier player=6408: 50 trades, 0 with him, dates 2026-11-13..2026-11-13
+Tyler Allgeier playerId=6408&numTeams=12&ppr=1&limit=500: 50 trades, 1 with him, dates 2026-11-13..2026-11-13
+   2026-11-13 ['Emmett Johnson'] <-> ['Tyler Allgeier'] diff 296 teams 12 te 0.0
+Kyle Monangai playerId=12711: 50 trades, 4 with him, dates 2026-11-13..2026-11-13
+   2026-11-13 ['Corey Kiner'] <-> ['Kyle Monangai'] diff -997 teams 12 te 0.0
+   2026-11-13 ['Blake Corum', 'Pat Freiermuth', 'C.J. Stroud', '2027 1st'] <-> ['Cam Ward', 'Kyle Monangai', 'Makai Lemon', 'Jordan Addison'] diff 2072 teams 10 te 1.0
+   2026-11-13 ['Kyle Monangai', '2027 1st'] <-> ['Jaylen Warren', '2027 2nd'] diff 91 teams 10 te 0.5
+   2026-11-13 ['2027 2nd'] <-> ['Kyle Monangai'] diff -383 teams 12 te 0.5
+Kyle Monangai playerIds=12711: 50 trades, 4 with him, dates 2026-11-13..2026-11-13
+   2026-11-13 ['Corey Kiner'] <-> ['Kyle Monangai'] diff -997 teams 12 te 0.0
+   2026-11-13 ['Blake Corum', 'Pat Freiermuth', 'C.J. Stroud', '2027 1st'] <-> ['Cam Ward', 'Kyle Monangai', 'Makai Lemon', 'Jordan Addison'] diff 2072 teams 10 te 1.0
+   2026-11-13 ['Kyle Monangai', '2027 1st'] <-> ['Jaylen Warren', '2027 2nd'] diff 91 teams 10 te 0.5
+   2026-11-13 ['2027 2nd'] <-> ['Kyle Monangai'] diff -383 teams 12 te 0.5
+Kyle Monangai player=12711: 50 trades, 4 with him, dates 2026-11-13..2026-11-13
+   2026-11-13 ['Corey Kiner'] <-> ['Kyle Monangai'] diff -997 teams 12 te 0.0
+   2026-11-13 ['Blake Corum', 'Pat Freiermuth', 'C.J. Stroud', '2027 1st'] <-> ['Cam Ward', 'Kyle Monangai', 'Makai Lemon', 'Jordan Addison'] diff 2072 teams 10 te 1.0
+   2026-11-13 ['Kyle Monangai', '2027 1st'] <-> ['Jaylen Warren', '2027 2nd'] diff 91 teams 10 te 0.5
+   2026-11-13 ['2027 2nd'] <-> ['Kyle Monangai'] diff -383 teams 12 te 0.5
+Kyle Monangai playerId=12711&numTeams=12&ppr=1&limit=500: 50 trades, 1 with him, dates 2026-11-13..2026-11-13
+   2026-11-13 ['Corey Kiner'] <-> ['Kyle Monangai'] diff -997 teams 12 te 0.0
