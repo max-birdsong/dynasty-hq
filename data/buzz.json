@@ -237,6 +237,22 @@
 "takes": 0,
 "raw": 2,
 "v": 3
+},
+"c45821d2-df76-11f1-a64b-63c788f1ff9e": {
+"show": "Dynasty Nerds",
+"title": "Time to Give Up on These Rookies? | Dynasty Fantasy Football Podcast Ep. 947",
+"date": "2026-11-13T16:10:00+00:00",
+"takes": 1,
+"raw": 12,
+"v": 3
+},
+"b4f14e7a-54f5-4cd7-ae7d-476aee9b8290": {
+"show": "Under The Helmet",
+"title": "Jonathan Taylor, Wan'Dale Robinson, Trey McBride's Battle: The Pivotal Players for Week 10",
+"date": "2026-11-14T08:22:00+00:00",
+"takes": 0,
+"raw": 1,
+"v": 3
 }
 },
 "takes": [
@@ -1071,19 +1087,35 @@
 "audio": "https://pdst.fm/e/chrt.fm/track/GB12G2/traffic.megaphone.fm/DMALLC3567905511.mp3",
 "link": "",
 "guid": "cd757704-deab-11f1-b3bb-0b0c153dba4e"
+},
+{
+"pid": "13311",
+"player": "Chris Bell",
+"stance": "sell",
+"quote": "So if I could get any second, even 29, I will gladly give that for Chris Bell.",
+"t": 1767,
+"price": "any 2nd, even 29th",
+"price_dir": "ask",
+"speaker": null,
+"show": "Dynasty Nerds",
+"episode": "Time to Give Up on These Rookies? | Dynasty Fantasy Football Podcast Ep. 947",
+"date": "2026-11-13T16:10:00+00:00",
+"audio": "https://pdst.fm/e/chrt.fm/track/GB12G2/traffic.megaphone.fm/DMALLC8052556858.mp3",
+"link": "",
+"guid": "c45821d2-df76-11f1-a64b-63c788f1ff9e"
 }
 ],
-"updated": "2026-11-13T12:12:32.422276+00:00",
+"updated": "2026-11-14T11:28:25.745746+00:00",
 "log": [
-"run 2026-11-13T12:12 model claude-haiku-5-5",
+"run 2026-11-14T11:28 model claude-haiku-5-5",
 "Fantasy Footballers Dynasty: 188 episodes in feed",
 "FantasyPros Dynasty: 419 episodes in feed",
-"Dynasty Nerds: 971 episodes in feed",
-"Dynasty Nerds | The Dating Game & Win-Now Trade Targets | Dynasty Fantasy Fo: 138 MB, 1745 segments in 193s",
-"  -> 4 takes kept of 6",
+"Dynasty Nerds: 972 episodes in feed",
+"Dynasty Nerds | Time to Give Up on These Rookies? | Dynasty Fantasy Football: 71 MB, 556 segments in 104s",
+"  -> 1 takes kept of 12",
 "Fantasy Football Today Dynasty: 260 episodes in feed",
 "Under The Helmet: 600 episodes in feed",
-"Under The Helmet | 20 Critical Players for End-of-Week Status and Practice Repo: 19 MB, 191 segments in 52s",
-"  -> 0 takes kept of 2"
+"Under The Helmet | Jonathan Taylor, Wan'Dale Robinson, Trey McBride's Battle: T: 28 MB, 302 segments in 96s",
+"  -> 0 takes kept of 1"
 ]
 }
