@@ -1105,17 +1105,13 @@
 "guid": "c45821d2-df76-11f1-a64b-63c788f1ff9e"
 }
 ],
-"updated": "2026-11-14T11:28:25.745746+00:00",
+"updated": "2026-11-15T11:57:05.966846+00:00",
 "log": [
-"run 2026-11-14T11:28 model claude-haiku-5-5",
+"run 2026-11-15T11:57 model claude-haiku-5-5",
 "Fantasy Footballers Dynasty: 188 episodes in feed",
 "FantasyPros Dynasty: 419 episodes in feed",
 "Dynasty Nerds: 972 episodes in feed",
-"Dynasty Nerds | Time to Give Up on These Rookies? | Dynasty Fantasy Football: 71 MB, 556 segments in 104s",
-"  -> 1 takes kept of 12",
 "Fantasy Football Today Dynasty: 260 episodes in feed",
-"Under The Helmet: 600 episodes in feed",
-"Under The Helmet | Jonathan Taylor, Wan'Dale Robinson, Trey McBride's Battle: T: 28 MB, 302 segments in 96s",
-"  -> 0 takes kept of 1"
+"Under The Helmet: 600 episodes in feed"
 ]
 }
