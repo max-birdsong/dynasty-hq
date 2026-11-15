@@ -12,30 +12,53 @@ const ORD = ['1st', '2nd', '3rd', '4th', '5th'];
 const ESPN_FIX = { WSH: 'WAS', JAC: 'JAX', LA: 'LAR' };
 const MIN = 60e3;
 
-// kickoff and state per NFL team this week (ESPN's public scoreboard); null if unreachable
-async function games() {
-  try {
+// kickoff and state per NFL team this week; null if no source is reachable from the browser
+async function games(season, week) {
+  try { // ESPN's public scoreboard: kickoff times + state
     const r = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', { cache: 'no-store' });
-    if (!r.ok) return null;
-    const j = await r.json(), out = {};
-    for (const e of j.events || []) {
-      const c = e.competitions?.[0]; if (!c) continue;
-      for (const t of c.competitors || []) {
-        const ab = t.team?.abbreviation; if (!ab) continue;
-        out[ESPN_FIX[ab] || ab] = { kick: Date.parse(c.date || e.date), state: e.status?.type?.state || 'pre' };
+    if (r.ok) {
+      const j = await r.json(), out = {};
+      for (const e of j.events || []) {
+        const c = e.competitions?.[0]; if (!c) continue;
+        for (const t of c.competitors || []) {
+          const ab = t.team?.abbreviation; if (!ab) continue;
+          out[ESPN_FIX[ab] || ab] = { kick: Date.parse(c.date || e.date), state: e.status?.type?.state || 'pre' };
+        }
       }
+      if (Object.keys(out).length) return out;
     }
-    return out;
-  } catch { return null; }
+  } catch {}
+  for (const base of ['https://api.sleeper.com', 'https://api.sleeper.app']) { // Sleeper's schedule: state only
+    try {
+      const r = await fetch(`${base}/schedule/nfl/regular/${season}`, { cache: 'no-store' });
+      if (!r.ok) continue;
+      const out = {};
+      for (const g of await r.json()) {
+        if (+g.week !== +week) continue;
+        const state = /pre/.test(g.status) ? 'pre' : /complete/.test(g.status) ? 'post' : 'in';
+        for (const ab of [g.home, g.away]) if (ab) out[ab] = { kick: g.date ? Date.parse(g.date) : null, state, noTime: true };
+      }
+      if (Object.keys(out).length) return out;
+    } catch {}
+  }
+  return null;
 }
 
 export async function gameDay(leagues) {
-  const w = M.week, G = await games();
+  const w = M.week, G = await games(M.season, w);
   if (G && !Object.values(G).some(g => g.state === 'pre')) return { rows: [], done: true };
   // injuries move on game day (inactives ~90 min before kickoff): use a fresher player list than the daily cache
   const fresh = await cachedJson('https://api.sleeper.app/v1/players/nfl', 2 * 3600e3, { key: 'players-nfl' }).catch(() => null) || M.players;
   const P = id => fresh[id] || M.players[id] || {};
-  const game = id => G ? (G[P(id).team] || null) : undefined; // null = bye / no game; undefined = unknown
+  // safety net: any NFL team with a player who has scored this week has kicked off, whatever the schedule says
+  const allMus = await pool(leagues, 4, L => cachedJson(`https://api.sleeper.app/v1/league/${L.id}/matchups/${w}`, 5 * MIN).catch(() => []));
+  const started = new Set();
+  for (const mus of allMus) for (const m of mus || []) for (const [id, v] of Object.entries(m.players_points || {})) if (v && P(id).team) started.add(P(id).team);
+  const game = id => {
+    const tm = P(id).team;
+    if (started.has(tm)) return { ...(G?.[tm] || {}), state: G?.[tm]?.state === 'post' ? 'post' : 'in' };
+    return G ? (G[tm] || null) : undefined; // null = bye / no game; undefined = unknown
+  };
   const playable = id => { const g = game(id); return g === undefined ? true : !!g && g.state === 'pre'; };
   const pts = (L, id) => DEAD.has(P(id).injury_status) ? 0 : playerWeekPts(L, id, w);
   const out = [];
@@ -78,7 +101,7 @@ export async function gameDay(leagues) {
           if (!elig.includes(P(id).position)) continue;
           const mine = pts(L, id), gain = mine - alt;
           if (gain < 3) continue;
-          out.push({ L, t, slot, why, pid: id, mine, alt, gain, fa, theirs, kick: game(id)?.kick || null });
+          out.push({ L, t, slot, why, pid: id, mine, alt, gain, fa, theirs, kick: game(id)?.noTime ? null : (game(id)?.kick || null) });
         }
       });
     }
