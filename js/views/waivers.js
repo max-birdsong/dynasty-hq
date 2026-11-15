@@ -4,6 +4,7 @@ import * as api from '../api.js';
 import { scanLeague, indexTeams } from '../waiverscan.js';
 import { ledger, consolidations, stash, faabModel, audit, realPrice, buyers } from '../farm.js';
 import { calculator } from './trades.js';
+import { gameDay } from '../gameday.js';
 import { h, f1, sleep, fmt, pool, toast } from '../util.js';
 import { settings, save } from '../state.js';
 import { posB, empty, modeTag } from '../components.js';
@@ -167,6 +168,7 @@ async function harvest(c) {
           `${b.t.owner}'s ${b.ask.short || b.ask.name}`, h('span', { class: 'muted' }, ` · ${b.why}`))))
         : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No contender in this league with a need at his position right now: shop him in the league chat or wait for an injury.'));
   };
+  box.append(await gameDayBox(c));
   box.append(h('div', { class: 'kpis', style: { marginBottom: '12px' } },
     kpi(new Set(sell.map(x => x.r.pid)).size, 'players to sell now'), kpi(total.sold, 'sold this season'), kpi(fmt(total.got, 2) + ' 1sts', 'harvested (value today)'), kpi(fmt(total.held, 2) + ' 1sts', 'still on your rosters')));
   // one card per player: the market is the same everywhere, the buyers differ by league
@@ -189,6 +191,26 @@ async function harvest(c) {
   if (soldAll.length) box.append(h('p', { class: 'small muted', style: { marginTop: '12px' } }, 'Harvested: ', soldAll.map(({ L, r }) => `${r.name} → ${r.got.join(' + ')} (${L.nick})`).join(' · ')));
   box.append(h('p', { class: 'muted small' }, 'Prices come from real trades in FantasyCalc\'s database (all leagues, your league\'s format), each at his value that day, weighted heavily to the last few days (half-life 2 days, nothing older than 3 weeks). "Sell now" = his price moved 15%+ in the last 3 days or trading is busy. The ask is a contender\'s best 2nd–4th at or just under his real price; click it to open the trade in the calculator.'));
   return box;
+}
+// game day: contenders with a dead slot today that your bench can fill before kickoff
+async function gameDayBox(c) {
+  const g = await gameDay(c.mine).catch(e => { console.error(e); return null; });
+  if (g?.done) return '';
+  if (!g || !g.rows.length) return h('div', { class: 'small muted', style: { marginBottom: '10px' } }, g ? '🏈 Game day: no contender has a hole today that one of your bench players fills better than his own bench or the waiver wire.' : '');
+  const t = ms => ms ? new Date(ms).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  const nm = id => M.players[id]?.full_name || id;
+  const msg = o => `Saw you have ${o.why.replace(/^empty /, 'an empty ')} this week. ${nm(o.pid)} can fill it${o.kick ? ` (plays ${t(o.kick)})` : ''}. Yours for your ${o.ask.short || o.ask.name}?`;
+  return h('div', { class: 'panel', style: { marginBottom: '12px' } },
+    h('h2', { style: { marginTop: 0 } }, '🏈 Game day: contenders with a hole'),
+    h('p', { class: 'small muted' }, 'Their set lineup has an empty, bye or out starter. Your player beats both their bench and the best free agent by 3+ projected points. Contenders only. Ask is his real-trade round, at least a 4th.'),
+    ...g.rows.slice(0, 12).map(o => h('div', { class: 'small', style: { padding: '6px 0', borderTop: '1px solid var(--line)' } },
+      h('div', { class: 'row spread' },
+        h('div', {}, h('b', {}, o.L.nick), ` · ${o.t.owner} (${Math.round((o.t.playoff || 0) * 100)}% playoffs): `, h('b', {}, o.why), ` at ${o.slot.replace('_', ' ')}`),
+        o.kick ? h('span', { class: 'muted' }, 'kicks ' + t(o.kick)) : ''),
+      h('div', {}, posB(M.players[o.pid]?.position), ' ', h('b', {}, nm(o.pid)), ` ${o.mine.toFixed(1)} proj vs ${o.alt.toFixed(1)} ${o.theirs >= o.fa ? 'his bench' : 'best free agent'} (+${o.gain.toFixed(1)})`),
+      h('div', { style: { marginTop: '3px' } },
+        h('a', { href: 'javascript:void 0', class: 'pill', style: { marginRight: '6px' }, onclick: () => openCalc(o.L, o.t.rid, ['p:' + o.pid], [o.ask.key]) }, `Ask: ${o.ask.short || o.ask.name}`),
+        h('a', { href: 'javascript:void 0', class: 'pill', onclick: () => navigator.clipboard?.writeText(msg(o)).then(() => toast('Message copied')) }, '📋 Copy message')))));
 }
 const kpi = (v, l) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, l));
 

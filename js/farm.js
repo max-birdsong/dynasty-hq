@@ -150,7 +150,7 @@ export async function realPrice(L, pid) {
   else if (hot) { action = 'sell'; why = `${last3.length} trades in 3 days, ${Math.round(perDay3 / Math.max(0.5, perDay0))}x the usual pace: buyers are active now`; }
   else if (!last3.length) { action = 'hold'; why = 'no trades in the last 3 days: quiet market'; }
   if (price < floor) { action = 'hold'; why = `goes for less than a 4th${last3.length ? ` (${last3.length} trades in 3 days)` : ''}: keep as depth or cut when you need the spot`; }
-  else { action = 'steady'; why = `steady (${last3.length} trades in 3 days)`; }
+  else if (!action) { action = 'steady'; why = `steady (${last3.length} trades in 3 days)`; }
   const ny = +L.season + 1, rds = [1, 2, 3, 4].map(r => [r, L.fc.picks.get(`${ny} ${['1st', '2nd', '3rd', '4th'][r - 1]}`) || 0]).filter(x => x[1] > 0);
   const near = rds.length ? rds.reduce((b, x) => Math.abs(Math.log(x[1] / price)) < Math.abs(Math.log(b[1] / price)) ? x : b) : null;
   const nickname = near && price >= floor ? `${['1st', '2nd', '3rd', '4th'][near[0] - 1]} rounder` : null;
