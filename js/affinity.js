@@ -80,7 +80,7 @@ export function stance(ownerId, pid, hereLid) {
     const how = [e.d && `drafted him ${e.d}×`, e.t && `traded for him ${e.t}×`, e.w && `picked him up ${e.w}×`].filter(Boolean);
     const gone = [e.x && `traded him away ${e.x}×`, e.r && `cut him ${e.r}×`].filter(Boolean);
     if (own >= 2) { notes.push(`rosters him in ${own} of his ${g.n} leagues${how.length ? ` (${how.join(', ')})` : ''}`); likes += own - 1 + (e.d || 0) * 0.5 + (e.t || 0); }
-    else if (how.length) notes.push(how.join(', '));
+    else if (how.length) { notes.push(how.join(', ')); likes += (e.t || 0) + (e.d || 0) * 0.5 + (e.w || 0) * 0.3; }
     if (gone.length) { notes.push(gone.join(', ')); likes -= (e.x || 0); }
     if (buy) { notes.push(`added him ${buy}× in the last 90 days`); likes += 2 * buy; }
     if (sell && !e.x) { notes.push(`traded him away ${sell}× lately`); likes -= 2 * sell; } else if (sell) likes -= sell;
@@ -103,7 +103,7 @@ export function stance(ownerId, pid, hereLid) {
 export function affinityFlags(L, partner, r) {
   if (!M.affinity) return [];
   const f = [];
-  for (const a of r.give) if (a.id) { const s = stance(partner.ownerId, a.id, L.id); if (s) f.push({ info: true, msg: `${s.likes > 0 ? '👍' : '👎'} ${partner.owner} ${s.notes.join('; ')}: ${nm(a.id)} is ${s.likes > 0 ? 'someone he likes, a selling point' : 'someone he’s been getting rid of, expect resistance'}.` }); }
+  for (const a of r.give) if (a.id) { const s = stance(partner.ownerId, a.id, L.id); if (s) f.push({ info: true, msg: s.likes > 0 ? `👍 ${partner.owner} ${s.notes.join('; ')}: ${nm(a.id)} is someone he likes, a selling point.` : s.likes < 0 ? `👎 ${partner.owner} ${s.notes.join('; ')}: ${nm(a.id)} is someone he’s been getting rid of, expect resistance.` : `${partner.owner} ${s.notes.join('; ')}: mixed history with ${nm(a.id)}.` }); }
   // his leans by asset class, where this trade touches them
   const td = tendencies(partner.ownerId);
   const give = new Set(r.give.map(a => a.pick ? 'picks' : a.pos)), get = new Set(r.get.map(a => a.pick ? 'picks' : a.pos));
