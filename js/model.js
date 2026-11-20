@@ -430,9 +430,13 @@ export function sandersonScale() {
   const b2 = settings().sandersonB2 ?? 0.33, l1 = 0.75, r = Math.sqrt(b2 / l1);
   return Object.fromEntries(SCALE_KEYS.map((k, i) => [k, l1 * r ** i]));
 }
-export const DEFAULT_CLASSES = { 2027: 'strong' }; // Jeremiah Smith / Arch Manning class: consensus elite
+export const DEFAULT_CLASSES = { 2027: 'normal' }; // Sanderson, Nov 20 2026 mailbag: 1.01 = 3 1sts; class weakened (Coleman, Manning) beyond Jeremiah Smith
 export const classOf = y => settings().classes?.[y] ?? DEFAULT_CLASSES[y] ?? 'normal';
 const SANDERSON_1ST = [3, 2, 2, 1.5, 1.5, 1, 1, 1, 0.75, 0.75, 0.75, 0.75];
+// his latest explicit numbers for a class override the generic curve (slot 1 still follows the class setting)
+const SANDERSON_1ST_BY_YEAR = {
+  2027: [3, 1.5, 1.4, 1.25, 1, 1, 1, 1, 0.75, 0.75, 0.75, 0.75], // Nov 20 2026 mailbag: 1.02-1.04 = 1.25-1.5, mid = base, late = late
+};
 export function sandersonSlotValue(L, y, ord, s) {
   const B = L.fc.picks.get(`${y} 1st`) ?? M.fc['12-2-1']?.picks.get(`${y} 1st`) ?? 0;
   if (ord !== '1st') {
@@ -443,7 +447,7 @@ export function sandersonSlotValue(L, y, ord, s) {
     const [e, b, l] = pre.map(k => sc[k]);
     return B * (p <= 0.5 ? e + (b - e) * Math.max(0, (p - 1 / 6) / (1 / 3)) : b + (l - b) * Math.min(1, (p - 0.5) / (1 / 3)));
   }
-  const curve = SANDERSON_1ST.slice(); curve[0] = CLASS_TOP[classOf(y)] ?? 3;
+  const curve = (SANDERSON_1ST_BY_YEAR[y] || SANDERSON_1ST).slice(); curve[0] = CLASS_TOP[classOf(y)] ?? 3;
   const n = L.numTeams, p = n > 1 ? (s - 1) * 11 / (n - 1) : 0, a = Math.floor(p), b = Math.min(11, a + 1);
   return B * (curve[a] + (curve[b] - curve[a]) * (p - a));
 }
