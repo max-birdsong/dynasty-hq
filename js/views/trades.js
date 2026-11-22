@@ -270,7 +270,7 @@ function suggestions(L) {
   const S = settings();
   const box = h('div');
   const out = h('div');
-  const run = async (leagues, mode = 'value', partners = null) => {
+  const run = async (leagues, mode = 'value', partners = null, focus = null) => {
     if (!M.calcs) M.calcs = await loadCalcs();
     await import('../affinity.js').then(a => a.loadAffinity()).catch(() => {});
     out.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), mode === 'title' ? 'Simulating the season for each candidate trade (about 20 seconds)…' : 'Searching trades…'));
@@ -281,11 +281,12 @@ function suggestions(L) {
       const pi = await pickIndex(lg).catch(() => null);
       lg.pickIndex = pi;
       for (const t of lg.teams) t._pickIndex = pi?.index || null;
-      all = all.concat(suggest(lg, { mode, partners })); await sleep(0);
+      all = all.concat(suggest(lg, { mode, partners, focus })); await sleep(0);
     }
     const sortKey = () => mode === 'title' ? 'score' : (settings().suggestSort || 'ev');
     all.sort((a, b) => b[sortKey()] - a[sortKey()]);
     if (!all.length && mode === 'title') { out.replaceChildren(empty('No trade found that adds at least 1% title odds at an acceptable long-term price.')); return; }
+    if (!all.length && focus) { out.replaceChildren(empty(`No trade found around ${focus.name} that works for both sides on the calculators. Try the calculator by hand.`)); return; }
     if (!all.length) { out.replaceChildren(empty('No trades pass all the rules. Loosen them in Settings, add targets on the Values page, or upload newer TAT values.')); return; }
     // filter by goal
     const labels = [...new Set(all.flatMap(r => r.goals.map(g => g.label)))];
@@ -298,7 +299,8 @@ function suggestions(L) {
       ['All', ...labels, ...(all.some(r => r.pureValue) ? ['Pure value'] : [])].map(l => h('button', { class: 'tag', style: { cursor: 'pointer' }, onclick: e => { chips.querySelectorAll('button').forEach(b => b.classList.remove('push')); e.target.classList.add('push'); show(l === 'All' ? null : l); } }, l)));
     chips.querySelector('button').classList.add('push');
     if (sortSel) chips.append(h('span', { class: 'small muted', style: { marginLeft: '12px' } }, 'Sort:'), sortSel);
-    out.replaceChildren(chips, grid); show(null);
+    out.replaceChildren(...(focus ? [h('div', { class: 'panel small' }, h('b', {}, focus.side === 'get' ? `Trades to buy ${focus.name}` : `Trades to sell ${focus.name}`), ' (Sanderson vs market)')] : []), chips, grid); show(null);
+    out.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   box.append(h('div', { class: 'panel' },
     h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, 'Suggested trades'),
@@ -306,10 +308,33 @@ function suggestions(L) {
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues'), h('button', { class: 'btn ghost', title: 'Trades ranked by how much they raise your title odds, with what each costs long-term', onclick: () => run([L], 'title') }, '🏆 Biggest title swings')))),
     out);
   box.insertBefore(blockPanel(L), box.firstChild);
+  box.insertBefore(gapsPanel(L, run), box.firstChild);
   { const rq = requestsPanel(L, run); if (rq) box.insertBefore(rq, box.firstChild); }
   box.insertBefore(planPanel(L, { compact: true }), box.firstChild);
   if (!state().tatSets.length) out.append(h('div', { class: 'panel' }, 'Upload Sanderson rankings on the ', h('a', { href: '#/values' }, 'Values page'), ' first. Without them every player is valued at half his FC value, so suggestions are meaningless.'));
   return box;
+}
+
+// Sanderson vs market: assets he values well above what they trade for (buy) and well below (sell)
+function gapsPanel(L, run) {
+  const rows = [];
+  for (const t of L.teams) for (const a of teamAssets(L, t)) {
+    if (!a.fc || a.fc < 700 || !a.tat) continue;
+    if (!a.pick && !L.tatMap?.has(a.id)) continue; // no Sanderson ranking: nothing to compare
+    rows.push({ a, t, d: a.tat - a.fc, r: a.tat / a.fc - 1 });
+  }
+  const buy = rows.filter(x => !x.t.isMe && x.r > 0.15).sort((x, y) => y.d - x.d).slice(0, 12);
+  const sell = rows.filter(x => x.t.isMe && x.r < -0.15).sort((x, y) => x.d - y.d).slice(0, 12);
+  const line = (x, side) => h('div', { class: 'row spread small', style: { padding: '4px 0', borderTop: '1px solid var(--line)' } },
+    h('div', {}, x.a.pick ? h('b', {}, x.a.name) : [posB(x.a.pos), ' ', h('b', {}, x.a.name), x.a.age ? h('span', { class: 'muted' }, ` ${x.a.age.toFixed(1)}`) : ''],
+      side === 'get' ? h('span', { class: 'muted' }, ` · ${x.t.owner}`) : '',
+      h('div', { class: 'muted' }, `Sanderson ${fmt(x.a.tat)} vs FC ${fmt(x.a.fc)} (${x.r > 0 ? '+' : ''}${Math.round(x.r * 100)}%)`)),
+    h('button', { class: 'btn small' + (side === 'give' ? ' ghost' : ''), onclick: () => run([L], 'value', null, { key: x.a.key, side, name: x.a.pick ? x.a.name : (M.players[x.a.id]?.full_name || x.a.name) }) }, side === 'get' ? 'Find trades to buy' : 'Find trades to sell'));
+  return h('details', { class: 'panel' }, h('summary', {}, h('b', {}, `Sanderson vs market in ${L.nick}`), h('span', { class: 'small muted' }, ` (${buy.length} underrated to buy, ${sell.length} of yours overrated)`)),
+    h('p', { class: 'small muted' }, 'Underrated: Sanderson values them well above what they trade for on FantasyCalc, so the market sells them cheap. Overrated: yours that the market pays more for than Sanderson thinks they are worth. Only gaps over 15% and assets worth 700+ FC. The buttons build every suggestion around that one player.'),
+    h('div', { class: 'grid2', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' } },
+      h('div', {}, h('h3', { style: { margin: '4px 0' } }, '📈 Underrated: buy'), buy.length ? buy.map(x => line(x, 'get')) : h('div', { class: 'small muted' }, 'None over 15% right now.')),
+      h('div', {}, h('h3', { style: { margin: '4px 0' } }, '📉 Overrated on your roster: sell'), sell.length ? sell.map(x => line(x, 'give')) : h('div', { class: 'small muted' }, 'None over 15% right now.'))));
 }
 
 // Sleeper doesn't make trade blocks public, so they're marked by hand. Listed players are always considered,

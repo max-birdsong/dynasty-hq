@@ -326,7 +326,8 @@ export function goalsMet(L, r, goals) {
   return { met, theirs };
 }
 
-export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10, mode = 'value' } = {}) {
+// focus: { key, side: 'get' | 'give' } builds every trade around one asset (buy an underrated one, sell an overrated one)
+export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10, mode = 'value', focus = null } = {}) {
   // mode 'title': rank by how much the trade moves your title odds, not by total value
   const T = mode === 'title';
   if (T) exactTop = 24;
@@ -352,6 +353,9 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   };
   const holeGroups = new Set(plan.holes.map(x => x.g));
   const mine = teamAssets(L, L.me).filter(a => (a.fc > 250 || a.tat > 250) && !(a.id && untouch.has(a.id))).sort((a, b) => Math.max(b.fc, b.tat) - Math.max(a.fc, a.tat)).slice(0, poolSize);
+  const minGain = focus ? 0 : R.minTatGain;
+  if (focus?.side === 'give') { const fa = teamAssets(L, L.me).find(a => a.key === focus.key); if (fa && !mine.includes(fa)) mine.push(fa); }
+  if (focus?.side === 'get') { const ow = L.teams.find(t => !t.isMe && teamAssets(L, t).some(a => a.key === focus.key)); partners = ow ? [ow.rid] : []; }
   const out = [];
   for (const p of L.teams) {
     if (p.isMe || (partners && !partners.includes(p.rid))) continue;
@@ -365,6 +369,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     const theirPts = new Map(); if (tanker) for (const a of all) if (!a.pick) theirPts.set(a.id, reg.reduce((s, w) => s + playerWeekPts(L, a.id, w), 0) / Math.max(1, reg.length));
     const listed = all.filter(a => a.id && blockIds.has(String(a.id)) && !top.includes(a) && !fillers.includes(a));
     let theirs = [...top, ...fillers, ...listed];
+    if (focus?.side === 'get') { const fa = all.find(a => a.key === focus.key); if (fa && !theirs.includes(fa)) theirs.push(fa); }
     // he asked for something in the league chat (owner card: "Looking for"): build around it, no premium needed
     const want = rulesOf(p.ownerId, L.id)?.want || null;
     const VET = { QB: 29, RB: 26, WR: 27, TE: 27.5 }, OUT_NOW = new Set(['Out', 'IR', 'PUP', 'Sus', 'Doubtful']);
@@ -381,9 +386,15 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       // a tanker keeps his young core: the pool is his producers aged 25+ (QBs 28+)
       if (want === 'dump') theirs = all.filter(a => !a.pick && (a.age || 0) >= (a.pos === 'QB' ? 28 : 25) && reg.reduce((s, w) => s + playerWeekPts(L, a.id, w), 0) / Math.max(1, reg.length) >= 8).sort((a, b) => b.fc - a.fc).slice(0, 14);
     }
+    if (focus) { // keep the focus asset in play even when a request reshaped the pools
+      const side = focus.side === 'get' ? all : teamAssets(L, L.me), fa = side.find(a => a.key === focus.key);
+      if (fa && focus.side === 'get' && !theirs.includes(fa)) theirs = [...theirs, fa];
+      if (fa && focus.side === 'give' && !myPool.includes(fa)) myPool = [...myPool, fa];
+    }
     const cands = [];
     for (const gs of want ? [1, 2, 3] : [1, 2]) for (const ts of [1, 2]) {
       for (const g of combos(myPool, gs)) for (const t of combos(theirs, ts)) {
+        if (focus && !(focus.side === 'get' ? t : g).some(a => a.key === focus.key)) continue;
         // a tanker dumping points takes a little under market (but piles of pieces still don't add up to a star)
         const fc = fcSides(g.map(a => a.fc * biasFactor(p.ownerId, a)), t.map(a => perceived(a, p)));
         // people aren't ATMs: owners overvalue what they already have, so they need to come out a bit ahead
@@ -406,7 +417,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
           cands.push({ g, t, score: dReg + dPo + tat / 2000 });
           continue;
         }
-        if (score < R.minTatGain * 0.5) continue;
+        if (score < minGain * 0.5) continue;
         cands.push({ g, t, score });
       }
     }
@@ -441,7 +452,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       if (r.memory.same && ['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status)) continue;
       r.value = tradeValue(L, r);
       r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0);
-      if (!T && r.value.total < R.minTatGain) continue;
+      if (!T && r.value.total < minGain) continue;
       if (T) r.score = r.me ? (r.me.rosAfter - r.me.rosBefore) + (r.me.poAfter - r.me.poBefore) : c.score;
       out.push(r);
       if (++kept >= 4) break;
@@ -464,7 +475,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     if (!T) r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
     r.pureValue = r.pureValue || !r.goals.length;
   }
-  if (!T) for (let i = out.length - 1; i >= 0; i--) if (out[i].pureValue && out[i].value.total < 2 * R2.minTatGain) out.splice(i, 1);
+  if (!T && !focus) for (let i = out.length - 1; i >= 0; i--) if (out[i].pureValue && out[i].value.total < 2 * R2.minTatGain) out.splice(i, 1);
   out.sort((a, b) => b.score - a.score);
   // the best few get a full season simulation, so their this-season value is exact rather than estimated
   for (const r of out.slice(0, exactTop)) {
