@@ -1849,17 +1849,13 @@
 "guid": "90792709-d0d5-46ae-9dec-21d1da58f0bc"
 }
 ],
-"updated": "2026-11-21T12:39:18.563608+00:00",
+"updated": "2026-11-22T12:35:17.785998+00:00",
 "log": [
-"run 2026-11-21T12:39 model claude-haiku-5-5",
+"run 2026-11-22T12:35 model claude-haiku-5-5",
 "Fantasy Footballers Dynasty: 189 episodes in feed",
 "FantasyPros Dynasty: 421 episodes in feed",
 "Dynasty Nerds: 977 episodes in feed",
 "Fantasy Football Today Dynasty: 261 episodes in feed",
-"Fantasy Football Today Dynasty | Dynasty Rankings Debate!: 81 MB, 839 segments in 159s",
-"  -> 7 takes kept of 28",
-"Under The Helmet: 600 episodes in feed",
-"Under The Helmet | Garrett Wilson, Tony Pollard, Kyle Monangai: The Pivotal Pla: 27 MB, 654 segments in 75s",
-"  -> 1 takes kept of 4"
+"Under The Helmet: 600 episodes in feed"
 ]
 }
