@@ -327,7 +327,7 @@ export function goalsMet(L, r, goals) {
 }
 
 // focus: { key, side: 'get' | 'give' } builds every trade around one asset (buy an underrated one, sell an overrated one)
-export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10, mode = 'value', focus = null } = {}) {
+export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10, mode = 'value', focus = null, sellOnly = null } = {}) {
   // mode 'title': rank by how much the trade moves your title odds, not by total value
   const T = mode === 'title';
   if (T) exactTop = 24;
@@ -353,7 +353,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   };
   const holeGroups = new Set(plan.holes.map(x => x.g));
   const mine = teamAssets(L, L.me).filter(a => (a.fc > 250 || a.tat > 250) && !(a.id && untouch.has(a.id))).sort((a, b) => Math.max(b.fc, b.tat) - Math.max(a.fc, a.tat)).slice(0, poolSize);
-  const minGain = focus ? 0 : R.minTatGain;
+  const minGain = focus || sellOnly ? 0 : R.minTatGain;
+  if (sellOnly) { const so = new Set(sellOnly); mine.splice(0, mine.length, ...teamAssets(L, L.me).filter(a => so.has(a.key))); }
   if (focus?.side === 'give') { const fa = teamAssets(L, L.me).find(a => a.key === focus.key); if (fa && !mine.some(a => a.key === fa.key)) mine.push(fa); }
   if (focus?.side === 'get') { const ow = L.teams.find(t => !t.isMe && teamAssets(L, t).some(a => a.key === focus.key)); partners = ow ? [ow.rid] : []; }
   const out = [];
@@ -368,7 +369,10 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     const tanker = isTanking(L, p);
     const theirPts = new Map(); if (tanker) for (const a of all) if (!a.pick) theirPts.set(a.id, reg.reduce((s, w) => s + playerWeekPts(L, a.id, w), 0) / Math.max(1, reg.length));
     const listed = all.filter(a => a.id && blockIds.has(String(a.id)) && !top.includes(a) && !fillers.includes(a));
-    let theirs = [...top, ...fillers, ...listed];
+    // ask for his next 1st, not a later one, while he still owns it (a contender's next 1st is the one he'll part with)
+    const ny = +L.season + 1, ownsNext = all.some(a => a.pick && a.key === `k:${ny}:1:${p.rid}`);
+    const laterFirst = a => a.pick && a.key.split(':')[2] === '1' && +a.key.split(':')[1] > ny;
+    let theirs = [...top, ...fillers, ...listed].filter(a => !(ownsNext && laterFirst(a)));
     if (focus?.side === 'get') { const fa = all.find(a => a.key === focus.key); if (fa && !theirs.some(a => a.key === fa.key)) theirs.push(fa); }
     // he asked for something in the league chat (owner card: "Looking for"): build around it, no premium needed
     const want = rulesOf(p.ownerId, L.id)?.want || null;
@@ -386,6 +390,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       // a tanker keeps his young core: the pool is his producers aged 25+ (QBs 28+)
       if (want === 'dump') theirs = all.filter(a => !a.pick && (a.age || 0) >= (a.pos === 'QB' ? 28 : 25) && reg.reduce((s, w) => s + playerWeekPts(L, a.id, w), 0) / Math.max(1, reg.length) >= 8).sort((a, b) => b.fc - a.fc).slice(0, 14);
     }
+    if (sellOnly && want) { const so = new Set(sellOnly); myPool = myPool.filter(a => so.has(a.key)); if (!myPool.length) myPool = mine; }
     if (focus) { // keep the focus asset in play even when a request reshaped the pools
       const side = focus.side === 'get' ? all : teamAssets(L, L.me), fa = side.find(a => a.key === focus.key);
       if (fa && focus.side === 'get' && !theirs.some(a => a.key === fa.key)) theirs = [...theirs, fa];
