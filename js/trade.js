@@ -354,7 +354,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   const holeGroups = new Set(plan.holes.map(x => x.g));
   const mine = teamAssets(L, L.me).filter(a => (a.fc > 250 || a.tat > 250) && !(a.id && untouch.has(a.id))).sort((a, b) => Math.max(b.fc, b.tat) - Math.max(a.fc, a.tat)).slice(0, poolSize);
   const minGain = focus ? 0 : R.minTatGain;
-  if (focus?.side === 'give') { const fa = teamAssets(L, L.me).find(a => a.key === focus.key); if (fa && !mine.includes(fa)) mine.push(fa); }
+  if (focus?.side === 'give') { const fa = teamAssets(L, L.me).find(a => a.key === focus.key); if (fa && !mine.some(a => a.key === fa.key)) mine.push(fa); }
   if (focus?.side === 'get') { const ow = L.teams.find(t => !t.isMe && teamAssets(L, t).some(a => a.key === focus.key)); partners = ow ? [ow.rid] : []; }
   const out = [];
   for (const p of L.teams) {
@@ -369,7 +369,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     const theirPts = new Map(); if (tanker) for (const a of all) if (!a.pick) theirPts.set(a.id, reg.reduce((s, w) => s + playerWeekPts(L, a.id, w), 0) / Math.max(1, reg.length));
     const listed = all.filter(a => a.id && blockIds.has(String(a.id)) && !top.includes(a) && !fillers.includes(a));
     let theirs = [...top, ...fillers, ...listed];
-    if (focus?.side === 'get') { const fa = all.find(a => a.key === focus.key); if (fa && !theirs.includes(fa)) theirs.push(fa); }
+    if (focus?.side === 'get') { const fa = all.find(a => a.key === focus.key); if (fa && !theirs.some(a => a.key === fa.key)) theirs.push(fa); }
     // he asked for something in the league chat (owner card: "Looking for"): build around it, no premium needed
     const want = rulesOf(p.ownerId, L.id)?.want || null;
     const VET = { QB: 29, RB: 26, WR: 27, TE: 27.5 }, OUT_NOW = new Set(['Out', 'IR', 'PUP', 'Sus', 'Doubtful']);
@@ -388,8 +388,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     }
     if (focus) { // keep the focus asset in play even when a request reshaped the pools
       const side = focus.side === 'get' ? all : teamAssets(L, L.me), fa = side.find(a => a.key === focus.key);
-      if (fa && focus.side === 'get' && !theirs.includes(fa)) theirs = [...theirs, fa];
-      if (fa && focus.side === 'give' && !myPool.includes(fa)) myPool = [...myPool, fa];
+      if (fa && focus.side === 'get' && !theirs.some(a => a.key === fa.key)) theirs = [...theirs, fa];
+      if (fa && focus.side === 'give' && !myPool.some(a => a.key === fa.key)) myPool = [...myPool, fa];
     }
     const cands = [];
     for (const gs of want ? [1, 2, 3] : [1, 2]) for (const ts of [1, 2]) {
