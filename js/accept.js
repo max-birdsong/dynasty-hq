@@ -23,7 +23,7 @@ import { calcEdge, freshInjury } from './trade.js';
 //  filler: throw-ins he'd likely cut (players worth under 5% of the deal): reads as dumping your bench on him
 //  newToHim: asking for a player he acquired in the last 90 days: owners are attached to what they just went and got
 //  noRoom: he gets more players than he sends while his roster is full: someone has to be cut
-export const PRIOR = { bias: -0.9, edge: 8, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.0, starterForFuture: -1.0, ownTopPick: -2.2, heAsked: 0.9, heOffered: 0.5, filler: -0.4, newToHim: -0.5, noRoom: -0.5, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
+export const PRIOR = { bias: -1.14, edge: 8, goal: 0.6, fav: -0.5, unwanted: -0.6, oldToRebuilder: -2.0, starterForFuture: -1.0, ownTopPick: -2.2, heAsked: 0.9, heOffered: 0.5, filler: -0.4, newToHim: -0.5, noRoom: -0.5, pieces: -0.12, active: 0.4, dormant: -1.5, rejectedBefore: -0.8 };
 const PAST_PRIME = { QB: 31, RB: 26, WR: 28, TE: 28 };
 const KEYS = Object.keys(PRIOR);
 const sig = x => 1 / (1 + Math.exp(-x));
@@ -108,6 +108,9 @@ function direction(L, partner, r) {
 
 // weights: prior, pulled toward your logged outcomes once there are a few (MAP logistic regression, prior sd 1)
 let cache = null;
+// pieces counts only what's beyond a 1-for-1: as a raw count it is never 0 and soaked up the intercept
+// (with every logged offer a rejection, it learned -0.77 per piece and called every 4-for-4 hopeless)
+const fv = (f, k) => k === 'pieces' ? Math.max(0, (f.pieces || 2) - 2) : (f[k] || 0);
 export function weights() {
   const data = state().trades.filter(t => t.dir !== 'in' && t.features && ['accepted', 'rejected', 'ignored', 'withdrawn', 'countered'].includes(t.status));
   const key = data.map(t => t.id + t.status).join();
@@ -116,7 +119,7 @@ export function weights() {
   if (data.length >= 5) {
     for (let it = 0; it < 300; it++) {
       const g = Object.fromEntries(KEYS.map(k => [k, -(w[k] - PRIOR[k])])); // prior pull
-      for (const t of data) { const y = t.status === 'accepted' ? 1 : t.status === 'countered' ? 0.5 : 0, p = sig(KEYS.reduce((s, k) => s + w[k] * (t.features[k] || 0), 0)); for (const k of KEYS) g[k] += (y - p) * (t.features[k] || 0); }
+      for (const t of data) { const y = t.status === 'accepted' ? 1 : t.status === 'countered' ? 0.5 : 0, p = sig(KEYS.reduce((s, k) => s + w[k] * fv(t.features, k), 0)); for (const k of KEYS) g[k] += (y - p) * fv(t.features, k); }
       for (const k of KEYS) w[k] += 0.05 * g[k];
     }
   }
@@ -127,7 +130,7 @@ export const learnedFrom = () => (weights(), cache?.n || 0);
 
 export function pAccept(L, partner, r) {
   const f = features(L, partner, r), w = weights();
-  const p = sig(KEYS.reduce((s, k) => s + w[k] * (f[k] || 0), 0));
+  const p = sig(KEYS.reduce((s, k) => s + w[k] * fv(f, k), 0));
   return { p, f };
 }
 
@@ -150,6 +153,6 @@ export function reasons(f) {
   if (f.dormant) out.push([w.dormant, 'he’s been inactive']);
   else if (f.active) out.push([w.active, 'he trades a lot']);
   if (f.rejectedBefore) out.push([w.rejectedBefore * f.rejectedBefore, `he turned down your offers before (${f.rejectedBefore % 1 ? f.rejectedBefore.toFixed(1) : f.rejectedBefore}, other leagues count half)`]);
-  if (f.pieces >= 5) out.push([w.pieces * f.pieces, `${f.pieces} pieces is a lot to process`]);
+  if (f.pieces >= 5) out.push([w.pieces * fv(f, 'pieces'), `${f.pieces} pieces is a lot to process`]);
   return out.sort((a, b) => Math.abs(b[0]) - Math.abs(a[0])).map(([v, s]) => (v >= 0 ? '+ ' : '− ') + s);
 }
