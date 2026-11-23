@@ -327,7 +327,7 @@ export function goalsMet(L, r, goals) {
 }
 
 // focus: { key, side: 'get' | 'give' } builds every trade around one asset (buy an underrated one, sell an overrated one)
-export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10, mode = 'value', focus = null, sellOnly = null } = {}) {
+export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTop = 10, mode = 'value', focus = null, sellOnly = null, minGainAt = null } = {}) {
   // mode 'title': rank by how much the trade moves your title odds, not by total value
   const T = mode === 'title';
   if (T) exactTop = 24;
@@ -353,7 +353,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   };
   const holeGroups = new Set(plan.holes.map(x => x.g));
   const mine = teamAssets(L, L.me).filter(a => (a.fc > 250 || a.tat > 250) && !(a.id && untouch.has(a.id))).sort((a, b) => Math.max(b.fc, b.tat) - Math.max(a.fc, a.tat)).slice(0, poolSize);
-  const minGain = focus || sellOnly ? 0 : R.minTatGain;
+  const minGain = minGainAt ?? (focus || sellOnly ? 0 : R.minTatGain);
   if (sellOnly) { const so = new Set(sellOnly); mine.splice(0, mine.length, ...teamAssets(L, L.me).filter(a => so.has(a.key))); }
   if (focus?.side === 'give') { const fa = teamAssets(L, L.me).find(a => a.key === focus.key); if (fa && !mine.some(a => a.key === fa.key)) mine.push(fa); }
   if (focus?.side === 'get') { const ow = L.teams.find(t => !t.isMe && teamAssets(L, t).some(a => a.key === focus.key)); partners = ow ? [ow.rid] : []; }
@@ -438,7 +438,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     // the calculator this owner actually trades by (KeepTradeCut for most), and the extra he'll want for favourites
     const pc = preferredCalc(p.ownerId), usePc = pc && pc !== 'fc' && M.calcs?.[pc];
     const myPicks = teamAssets(L, L.me).filter(a => a.pick && +a.key.split(':')[2] >= 2);
-    for (const c of cands.slice(0, 60)) {
+    for (const c of cands.slice(0, sellOnly ? 300 : 60)) {
       let giveKeys = c.g.map(a => a.key), sweet = [];
       if (usePc) {
         const fav = c.t.filter(a => a.id && (stance(p.ownerId, a.id, L.id)?.likes || 0) >= 2).length;
@@ -460,7 +460,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       if (!T && r.value.total < minGain) continue;
       if (T) r.score = r.me ? (r.me.rosAfter - r.me.rosBefore) + (r.me.poAfter - r.me.poBefore) : c.score;
       out.push(r);
-      if (++kept >= 4) break;
+      if (++kept >= (sellOnly ? 15 : 4)) break;
     }
   }
   // goal first: trades that serve one of your goals rank ahead; pure value grabs must win decisively
