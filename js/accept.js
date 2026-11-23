@@ -118,7 +118,7 @@ export function weights() {
   const w = { ...PRIOR };
   if (data.length >= 5) {
     for (let it = 0; it < 300; it++) {
-      const g = Object.fromEntries(KEYS.map(k => [k, -(w[k] - PRIOR[k])])); // prior pull
+      const g = Object.fromEntries(KEYS.map(k => [k, -3 * (w[k] - PRIOR[k])])); // prior pull: worth ~3 offers per unit, so a dozen logged offers nudge rather than rewrite it
       for (const t of data) { const y = t.status === 'accepted' ? 1 : t.status === 'countered' ? 0.5 : 0, p = sig(KEYS.reduce((s, k) => s + w[k] * fv(t.features, k), 0)); for (const k of KEYS) g[k] += (y - p) * fv(t.features, k); }
       for (const k of KEYS) w[k] += 0.05 * g[k];
     }
