@@ -373,6 +373,14 @@
 "takes": 1,
 "raw": 4,
 "v": 3
+},
+"6517d071-a810-49bc-b210-977fad690c88": {
+"show": "Under The Helmet",
+"title": "Bears' Run Game Flop, Dawson Knox and Michael Mayer Disappoint, Tony Pollard's Empty Calorie Day: Week 11 Pivotal Player Review",
+"date": "2026-11-23T08:45:00+00:00",
+"takes": 0,
+"raw": 1,
+"v": 3
 }
 },
 "takes": [
@@ -1849,13 +1857,15 @@
 "guid": "90792709-d0d5-46ae-9dec-21d1da58f0bc"
 }
 ],
-"updated": "2026-11-22T12:35:17.785998+00:00",
+"updated": "2026-11-23T14:37:57.064905+00:00",
 "log": [
-"run 2026-11-22T12:35 model claude-haiku-5-5",
+"run 2026-11-23T14:37 model claude-haiku-5-5",
 "Fantasy Footballers Dynasty: 189 episodes in feed",
 "FantasyPros Dynasty: 421 episodes in feed",
 "Dynasty Nerds: 977 episodes in feed",
 "Fantasy Football Today Dynasty: 261 episodes in feed",
-"Under The Helmet: 600 episodes in feed"
+"Under The Helmet: 600 episodes in feed",
+"Under The Helmet | Bears' Run Game Flop, Dawson Knox and Michael Mayer Disappoi: 24 MB, 244 segments in 88s",
+"  -> 0 takes kept of 1"
 ]
 }
