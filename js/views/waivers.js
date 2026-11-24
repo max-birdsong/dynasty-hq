@@ -1,7 +1,7 @@
 // Waiver farm: find, stash, harvest, consolidate, audit. Across every league at once.
 import { M, startersNow } from '../model.js';
 import * as api from '../api.js';
-import { scanLeague, indexTeams, depthInfo } from '../waiverscan.js';
+import { scanLeague, indexTeams, depthInfo, passCast } from '../waiverscan.js';
 import { ledger, consolidations, stash, faabModel, audit, realPrice, buyers } from '../farm.js';
 import { calculator } from './trades.js';
 import { gameDay } from '../gameday.js';
@@ -266,13 +266,13 @@ async function queue(c) {
     let open = Math.max(0, spots - ids.filter(id => !res.has(id) && !taxi.has(id)).length);
     // a handcuff is worth more than his market value: the chance his starter goes down before your season ends,
     // times what he'd be worth as the starter (and more if the starter is yours: he insures your own points)
-    const tp = indexTeams(M.players), wl = Math.max(1, (L.playoffStart + 2) - M.week);
+    const tp = indexTeams(M.players), wl = Math.max(1, (L.playoffStart + 2) - M.week), cast = passCast(tp, id => L.fc.byId.get(id)?.value || 0);
     const cuff = id => {
       const p = M.players[id], d = depthInfo(M.players, tp, p);
       if (!d || d.order !== 2 || !d.starter || d.starterOut || !(p.position === 'RB' || (L.fmt.numQbs === 2 && p.position === 'QB'))) return null;
       const sid = String(d.starter.player_id), sv = L.fc.byId.get(sid), mine = ids.includes(sid);
       const rate = (p.position === 'RB' ? 0.05 : 0.02) * ((d.starter.age || 0) >= 28 ? 1.3 : 1) * (d.starter.injury_status === 'Questionable' ? 2 : 1);
-      const v = (sv?.redraft || sv?.value || 0) * 0.35 * (1 - (1 - rate) ** wl) * (mine ? 2 : 1);
+      const v = (sv?.redraft || sv?.value || 0) * 0.35 * (1 - (1 - rate) ** wl) * (mine ? 2 : 1) * (p.position === 'QB' ? cast(p.team) : 1);
       return v > 0 ? { v: Math.round(v), of: d.starter.full_name || d.starter.last_name, mine } : null;
     };
     const drops = ids.filter(id => !protect.has(id)).map(id => { const fc = L.fc.byId.get(id)?.value || 0, c = cuff(id); return { id, name: M.players[id]?.full_name || id, v: Math.max(fc, c?.v || 0), cuff: c && c.v > fc ? c : null }; }).sort((a, b) => a.v - b.v);

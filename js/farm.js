@@ -5,7 +5,7 @@ import * as api from './api.js';
 import { pool } from './util.js';
 import { loadTrades, pickIndex } from './owners.js';
 import { loadDp, makeValuer } from './history.js';
-import { OUT, depthInfo } from './waiverscan.js';
+import { OUT, depthInfo, passCast } from './waiverscan.js';
 import { teamPlan } from './plan.js';
 import { fcSides } from './trade.js';
 
@@ -204,6 +204,7 @@ export async function consolidations(L) {
 export function stash(L, rostered) {
   const out = [], weeksLeft = Math.max(1, (L.playoffStart + 2) - M.week);
   const sf = L.fmt.numQbs === 2;
+  const castF = passCast(byTeamPos(), id => fcv(L, id));
   for (const [id, p] of Object.entries(M.players)) {
     if (rostered.has(id) || !p?.active || !p.team || !(p.position === 'RB' || (sf && p.position === 'QB'))) continue;
     const d = depthInfo(M.players, byTeamPos(), p);
@@ -212,7 +213,7 @@ export function stash(L, rostered) {
     const rate = (p.position === 'RB' ? 0.05 : 0.02) * ((s.age || 0) >= 28 ? 1.3 : 1) * (s.injury_status === 'Questionable' ? 2 : 1);
     const risk = 1 - (1 - rate) ** weeksLeft;
     // what he'd be worth as the starter: a share of the starter's value (backups never get all of it)
-    const upside = (sv?.redraft || sv?.value || 0) * 0.35;
+    const upside = (sv?.redraft || sv?.value || 0) * 0.35 * (p.position === 'QB' ? castF(p.team) : 1);
     const score = risk * upside;
     if (score < 100) continue;
     out.push({ id, name: p.full_name, pos: p.position, team: p.team, starter: s.full_name || s.last_name, sAge: s.age, sInj: s.injury_status, risk, upside, score, v: fcv(L, id) });

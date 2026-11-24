@@ -33,6 +33,19 @@ export function indexTeams(players) {
   return m;
 }
 
+// how good a QB's weapons are: value of each team's top 3 WR/TE, relative to the median team (0.5 to 1.6).
+// A backup QB throwing to Chase and Higgins scores; one throwing to nobody doesn't, whatever the starter is worth.
+export function passCast(byTeamPos, fcv) {
+  const tot = new Map();
+  for (const [k, ps] of byTeamPos) {
+    const [team, pos] = k.split('|'); if (pos !== 'WR' && pos !== 'TE') continue;
+    tot.set(team, (tot.get(team) || []).concat(ps.map(p => fcv(String(p.player_id)) || 0)));
+  }
+  const sums = new Map([...tot].map(([t, vs]) => [t, vs.sort((a, b) => b - a).slice(0, 3).reduce((a, b) => a + b, 0)]));
+  const sorted = [...sums.values()].sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)] || 1;
+  return team => Math.max(0.5, Math.min(1.6, (sums.get(team) || med) / med));
+}
+
 // price of a value in this league's pick currency
 export function pickLabel(pick, ny, v) {
   for (const rd of [2, 3, 4]) { const pv = pick(`${ny} ${ORD[rd]}`); if (pv && v >= pv * 0.85) return `≈ a ${ORD[rd]}`; }
@@ -68,11 +81,13 @@ export function scanLeague(lg, env) {
     if (bz) tags.push(bz.news ? 'r/DynastyFF news' : `r/DynastyFF: ${bz.n} mention${bz.n > 1 ? 's' : ''}`);
     if (OUT.has(p.injury_status)) tags.push(p.injury_status);
     const hurt = tags.some(t => t.endsWith('next man up'));
+    const cast = p.position === 'QB' && d?.order === 2 ? (env.cast ||= passCast(byTeamPos, val))(p.team) : 1;
+    if (cast <= 0.75) tags.push('weak receivers: limited upside'); else if (cast >= 1.3) tags.push('strong receivers');
     // worth a roster spot if: valued above your worst player, or a real injury opening, or hot
     const gain = v - floor;
     const interesting = (v >= fourth * 0.5 && gain > 50) || hurt || (adds >= 2000 && v > 0) || (d?.order === 2 && (p.position === 'RB' || (p.position === 'QB' && lg.sf)) && v > 0) || (bz && (bz.news || bz.n >= 2));
     if (!interesting || OUT.has(p.injury_status) && !v) continue;
-    const score = gain + (hurt ? 800 : 0) + Math.min(400, adds / 50) + Math.max(0, trend) * 0.5 + (d?.order === 2 ? 100 : 0) + (bz ? (bz.news ? 700 : 150 * Math.min(3, bz.n)) : 0);
+    const score = gain + (hurt ? 800 * cast : 0) + Math.min(400, adds / 50) + Math.max(0, trend) * 0.5 + (d?.order === 2 ? 100 : 0) + (bz ? (bz.news ? 700 : 150 * Math.min(3, bz.n)) : 0);
     out.push({ id, name: p.full_name || `${p.first_name} ${p.last_name}`, pos: p.position, team: p.team, age: p.age, v, trend, adds, tags, hurt,
       price: pickLabel(lg.pick, lg.ny, v), gain, score, buzz: bz, drop: cut, lid: lg.id, nick: lg.nick });
   }
