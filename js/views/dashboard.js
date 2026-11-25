@@ -1,6 +1,6 @@
 import { M, teamAssets, asset, sandersonSlotValue } from '../model.js';
 import { firstsSent } from '../owners.js';
-import { state, syncReady } from '../state.js';
+import { state, syncReady, save } from '../state.js';
 import { h, fmt, pct, odds, sgn, f1 } from '../util.js';
 import { VERDICT } from './trades.js';
 import { table, adviceTag, pctBar, posB, heat, empty } from '../components.js';
@@ -22,6 +22,25 @@ export default function dashboard() {
         else { teamPlan(L); cset(key, { plan: L.plan, posNeeds: L.posNeeds }).catch(() => {}); }
         await new Promise(r => setTimeout(r, 0));
       }
+      // expected titles this season and the next three (same numbers as the league's Win equity tab), cached like plans
+      const { curves, total } = await import('../equity.js');
+      const S2 = state();
+      for (const L of M.leagues) {
+        if (!L.me || L.eq) continue;
+        const key = `eq:${L.id}:${planFp(L)}`, hit = await cget(key).catch(() => null);
+        if (hit?.eq) L.eq = hit.eq;
+        else {
+          try {
+            const c = curves(L), mine = total(c[L.me.rid]), avg = L.teams.reduce((s, t) => s + total(c[t.rid]), 0) / L.teams.length;
+            const rank = 1 + L.teams.filter(t => total(c[t.rid]) > mine + 1e-9).length;
+            L.eq = { mine, avg, rank, curve: c[L.me.rid] }; cset(key, { eq: L.eq }).catch(() => {});
+          } catch { L.eq = null; }
+        }
+        // keep one number per week so the card can show the trend
+        const e = (S2.history[L.id] ||= {})[M.week];
+        if (L.eq && e && e.eq3 == null) { e.eq3 = +L.eq.mine.toFixed(3); save({ sync: false }); }
+        await new Promise(r => setTimeout(r, 0));
+      }
       planning = false;
       if (!location.hash || location.hash === '#/') window.DHQ.route();
     })();
@@ -37,7 +56,7 @@ export default function dashboard() {
       `updated ${M.loadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
       S.tatSets.length ? ` · TAT: ${S.tatSets.at(-1).label}` : '',
       M.projSource === 'sleeper' ? '' : ' · season averages (projections unavailable)',
-      ` · ${fmt(mine.reduce((s, L) => s + (L.me.title || 0), 0), 1)} expected titles`)),
+      ` · ${fmt(mine.reduce((s, L) => s + (L.me.title || 0), 0), 1)} expected titles`, mine.every(L => L.eq) ? ` (${fmt(mine.reduce((s, L) => s + L.eq.mine, 0), 1)} over ${M.season}–${String(+M.season + 3).slice(2)})` : '')),
     pending.length ? h('a', { href: '#/trades', class: 'tag push' }, `${pending.length} offer${pending.length > 1 ? 's' : ''} out`) : ''));
   const setup = [];
   if (!syncReady()) setup.push(h('span', {}, h('a', { href: '#/settings' }, 'Connect GitHub'), ' to sync laptop and phone'));
@@ -49,6 +68,15 @@ export default function dashboard() {
   const hist = L => { const e = S.history[L.id] || {}; const ws = Object.keys(e).map(Number).sort((a, b) => a - b); const prev = ws.filter(w => w < M.week).at(-1); return prev != null ? e[prev]?.teams?.[e[prev].me] : null; };
   const arrow = (now, before) => before == null || Math.abs(now - before) < 0.02 ? '' : h('span', { class: now > before ? 'pos' : 'neg', title: `was ${Math.round(before * 100)}% last week` }, now > before ? ' ▲' : ' ▼');
   const stat = (v, before, l) => h('div', { class: 'stat' }, h('b', {}, odds(v), arrow(v || 0, before)), h('span', {}, l));
+  const eqLine = L => {
+    if (!L.eq) return '';
+    const e = S.history[L.id] || {}, prev = Object.keys(e).map(Number).filter(w => w < M.week && e[w]?.eq3 != null).sort((a, b) => a - b).at(-1);
+    const was = prev != null ? e[prev].eq3 : null, d = was == null ? 0 : L.eq.mine - was;
+    const yrs = `${L.season}–${String(+L.season + 3).slice(2)}`;
+    return h('div', { class: 'small', style: { marginTop: '6px' }, title: `Expected titles ${yrs}: ${L.eq.curve.map(x => Math.round(x * 100) + '%').join(' / ')}. League average ${L.eq.avg.toFixed(2)}.` },
+      h('span', { class: 'muted' }, `Titles ${yrs} `), h('b', {}, L.eq.mine.toFixed(2)), h('span', { class: 'muted' }, ` · #${L.eq.rank} · avg ${L.eq.avg.toFixed(2)}`),
+      Math.abs(d) >= 0.02 ? h('span', { class: d > 0 ? 'pos' : 'neg', title: `was ${was.toFixed(2)} last week` }, d > 0 ? ' ▲' : ' ▼') : '');
+  };
   const keyLine = L => { const p = L.plan; if (!p) return 'Working out the plan…'; const l = p.lines.find(x => /^Deadline/.test(x)) || p.lines.find(x => /^(If you filled|Even with|Filling |Biggest hole|You don't own)/.test(x)); return l ? l.replace(/^Deadline: [A-Z]+[.,]\s*/, '').replace(/^./, c => c.toUpperCase()) : ''; };
   root.append(h('div', { class: 'lcards' }, [...mine].sort((a, b) => (b.me.title || 0) - (a.me.title || 0)).map(L => {
     const p = L.plan, b = hist(L);
@@ -56,7 +84,7 @@ export default function dashboard() {
       h('div', { class: 'row spread' }, h('b', { class: 'lname' }, L.nick), h('span', { class: 'muted small' }, `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`)),
       h('div', { class: 'row', style: { gap: '6px', margin: '4px 0 8px' } }, p?.verdict ? h('span', { class: 'tag ' + (VERDICT[p.verdict] || '') }, p.verdict) : '', h('span', { class: 'small' }, p?.headline || '')),
       h('div', { class: 'stats' }, stat(L.me.playoff, b?.playoff, 'playoffs'), stat(L.me.bye, null, 'bye'), stat(L.me.title, b?.title, 'title')),
-      h('div', { class: 'small muted clamp' }, keyLine(L)));
+      h('div', { class: 'small muted clamp' }, keyLine(L)), eqLine(L));
   })));
 
   // everything else lives in one tabbed panel
