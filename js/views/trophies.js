@@ -29,9 +29,10 @@ async function seasonOf(lg, meId, current) {
   const pfOrder = [...ros].sort((a, b) => pf(b) - pf(a));
   const rid = mine.roster_id, me = s(mine);
   const games = (me.wins || 0) + (me.losses || 0) + (me.ties || 0);
-  // expected wins from scoring alone: where your points ranked, as a share of the league you'd beat in a typical week
+  // expected wins from scoring alone. Where your season points ranked, scaled to the spread a real all-play record has
+  // (the top scorer usually wins ~75% of weekly matchups, not 100%), so a high scorer isn't automatically "unlucky".
   const pfRank = pfOrder.indexOf(mine) + 1;
-  const xWins = games * (n - pfRank) / Math.max(1, n - 1);
+  const xWins = games * (0.5 + 0.5 * (0.5 - (pfRank - 1) / Math.max(1, n - 1)));
   let finish = standings.indexOf(mine) + 1, playoffs = false, place = null;
   if (br?.length) {
     playoffs = br.some(m => m.t1 === rid || m.t2 === rid);
