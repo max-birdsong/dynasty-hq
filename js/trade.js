@@ -1,5 +1,5 @@
 // Trade evaluation (FantasyCalc + waiver adjustment, Sanderson gain, full lineup impact) and suggestion search.
-import { M, asset, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies, CAREER_END, playerWeekPts } from './model.js';
+import { M, asset, futureSlotWith, spreadValue, teamAssets, teamWeekly, teamInj, startersNow, simInput, simParams, isPick, pid, expectedFromDist, mixOf, currencies, CAREER_END, playerWeekPts } from './model.js';
 import { settings, state, rulesOf } from './state.js';
 import { affinityFlags, stance, biasFactor, preferredCalc } from './affinity.js';
 import { pAccept } from './accept.js';
@@ -271,6 +271,23 @@ function offseasonGain(L, r) {
 }
 
 // Total value of a trade to you, in Sanderson (TAT) points: long-term value + what it does to this season
+function futurePickShift(L, r) {
+  if (!r.me?.ids || !r.them?.ids) return 0;
+  const y2 = +L.season + 2;
+  const held = [...L.me.picks.filter(k => !r.giveKeys.includes(k)), ...r.getKeys.filter(k => k.startsWith('k:'))]
+    .filter(k => { const [, y, rd] = k.split(':'); return +y === y2 && +rd === 1; });
+  if (!held.length) return 0;
+  const over = { [L.me.rid]: r.me.ids, [r.partner.rid]: r.them.ids };
+  let d = 0;
+  for (const k of held) {
+    const orig = +k.split(':')[3];
+    if (orig !== L.me.rid && orig !== r.partner.rid) continue; // only the two rosters that change
+    const before = asset(L, k).futureSlot, after = futureSlotWith(L, orig, over);
+    if (before && after && before !== after) d += spreadValue(L, y2, '1st', after, L.numTeams / 4) - spreadValue(L, y2, '1st', before, L.numTeams / 4);
+  }
+  return d;
+}
+
 export function tradeValue(L, r, exact = null) {
   const plan = teamPlan(L);
   let now, pickShift = 0;
@@ -285,6 +302,8 @@ export function tradeValue(L, r, exact = null) {
     }
     now = plan.TITLE * (exact.me[1].title - exact.me[0].title) + pickShift;
   } else now = r.me ? winNowValue(plan, r.me.rosAfter - r.me.rosBefore, r.me.poAfter - r.me.poBefore) : 0;
+  // the 1st after next: a trade that weakens (or strengthens) a roster long-term moves where that team's pick lands
+  const fp2 = futurePickShift(L, r); pickShift += fp2;
   // Diminishing returns on buying power (the "utility monster"): once you're well ahead of the league in value,
   // more value adds little title equity. Gains count fully up to the league's 75th percentile, less beyond it.
   const vals = L.teams.map(x => x.tatTotal).sort((a, b) => a - b);
@@ -297,7 +316,7 @@ export function tradeValue(L, r, exact = null) {
   const off = offseasonGain(L, r);
   const dr = off > 0 ? Math.max(0.5, 1 - lead) : 1; // losses always count in full
   const tat = off * dr;
-  return { total: tat + now, tat, tatRaw: off, tatMarket: r.tatGain, dr, now, pickShift };
+  return { total: tat + now + fp2, tat: tat + fp2, tatRaw: off, tatMarket: r.tatGain, dr, now, pickShift, futurePick: fp2 };
 }
 
 // Sanderson: rankings aren't a price list; every trade should serve a goal. Your goals come from the league plan.

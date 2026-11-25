@@ -16,7 +16,7 @@
 //     turned out (busts, stars, everything between), a boom stays a boom across the years, and picks draw from what
 //     rookies drafted at that rank actually did. Each team's best lineup is rebuilt from the draws, so depth covers busts.
 //  5. Each draw's lineups run through the same season simulator as this season (0-0 start, a generic schedule).
-import { M, teamAssets, simParams } from './model.js';
+import { M, teamAssets, simParams, futureSlotWith } from './model.js';
 import { bestLineup, scoreStats } from './lineup.js';
 import { simulate } from './sim.js';
 
@@ -144,6 +144,11 @@ export function futureTitles(L, years, swap = {}) {
   const sched = schedule(rids, weeks), allW = [...weeks, L.playoffStart, L.playoffStart + 1, L.playoffStart + 2, L.playoffStart + 3];
   const out = Object.fromEntries(rids.map(r => [r, []]));
   const assets = Object.fromEntries(L.teams.map(t => [t.rid, swap[t.rid] || teamAssets(L, t)]));
+  // a trade preview changes rosters, so picks two years out land where the changed rosters say they will
+  if (!plain) {
+    const over = Object.fromEntries(Object.entries(swap).map(([rid, A]) => [rid, A.filter(a => !a.pick && a.id).map(a => String(a.id))]));
+    for (const r of rids) assets[r] = assets[r].map(a => a.pick && a.futureSlot && over[a.orig] ? { ...a, futureSlot: futureSlotWith(L, a.orig, over) } : a);
+  }
   for (let k = 1; k <= years; k++) {
     const p = { ...simParams() }, h = YEAR_SD * Math.sqrt(k);
     if (p.seasonVar) p.horizon = Math.sqrt((p.horizon || 0) ** 2 + h * h); else p.sdSeason = Math.sqrt((p.sdSeason || 0.06) ** 2 + h * h);

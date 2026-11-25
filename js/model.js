@@ -311,7 +311,7 @@ export function simFp(L) {
 }
 export function planFp(L) {
   const S = settings();
-  return hash('plan5' + simFp(L) + JSON.stringify([S.leagueMode?.[L.id], S.rules, S.titleAuto, S.titleWorth, S.classes, S.sandersonB2, M.tatSet?.id, L.teams.map(t => [t.rid, Math.round((t.tatTotal || 0) / 100), Math.round((t.fcTotal || 0) / 100), t.picks.join(',')])]));
+  return hash('plan6' + simFp(L) + JSON.stringify([S.leagueMode?.[L.id], S.rules, S.titleAuto, S.titleWorth, S.classes, S.sandersonB2, M.tatSet?.id, L.teams.map(t => [t.rid, Math.round((t.tatTotal || 0) / 100), Math.round((t.fcTotal || 0) / 100), t.picks.join(',')])]));
 }
 
 export function runSim(L) {
@@ -491,6 +491,12 @@ export function studLine(L) {
 }
 // value a player is expected to hold next season (for next year's standings)
 const ageKeep = (a, L) => keepRate(a.pos, a.age || 26, (a.fc || 0) >= studLine(L));
+// the same order with some rosters replaced (a trade preview): { rid: playerIds }
+export function futureSlotWith(L, rid, override = {}) {
+  const v = t => (override[t.rid] || t.players).map(id => asset(L, 'p:' + id)).reduce((x, a) => x + a.tat * ageKeep(a, L), 0);
+  const s = new Map(L.teams.map(t => [t.rid, v(t)]));
+  return [...L.teams].sort((a, b) => s.get(a.rid) - s.get(b.rid)).map(t => t.rid).indexOf(+rid) + 1;
+}
 export function futureSlot(L, rid) {
   if (!L._futOrder) {
     const s = new Map(L.teams.map(t => [t.rid, t.players.map(id => asset(L, 'p:' + id)).reduce((x, a) => x + a.tat * ageKeep(a, L), 0)]));
