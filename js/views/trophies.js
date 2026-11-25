@@ -57,27 +57,48 @@ async function gather() {
   const meId = M.me.user_id;
   const out = [];
   await pool(M.leagues.filter(L => L.me), 3, async L => {
-    const seasons = [];
+    const seasons = [], visited = [L.id];
     const cur = await seasonOf(L.lg, meId, true).catch(() => null);
     if (cur) seasons.push(cur);
     let id = L.lg.previous_league_id;
     for (let k = 0; k < 12 && id && id !== '0'; k++) {
+      visited.push(id);
       const lg = await get(`${SL}/league/${id}`, true);
       if (!lg) break;
       const sz = await seasonOf(lg, meId, false).catch(() => null);
       if (sz) seasons.push(sz);
       id = lg.previous_league_id;
     }
-    out.push({ L, nick: L.nick, seasons: seasons.sort((a, b) => b.season - a.season) });
+    out.push({ L, nick: L.nick, seasons: seasons.sort((a, b) => b.season - a.season), ids: new Set(visited) });
   });
-  cache = out.sort((a, b) => a.nick.localeCompare(b.nick));
+  // leagues you left or that folded: every league you were in, season by season, that isn't part of a current league's history
+  try {
+    const known = new Set(out.flatMap(d => [...d.ids]));
+    const yrs = []; for (let y = 2017; y < +M.season; y++) yrs.push(y);
+    const lists = await pool(yrs, 3, y => get(`${SL}/user/${meId}/leagues/nfl/${y}`, true));
+    const arch = new Map();
+    lists.flat().filter(Boolean).forEach(lg => { if (!known.has(lg.league_id) && !(state().settings.hidden || []).includes(lg.league_id)) arch.set(lg.league_id, lg); });
+    const root = id => { let r = id; for (let k = 0; k < 12; k++) { const p = arch.get(r)?.previous_league_id; if (p && arch.has(p)) r = p; else break; } return r; };
+    const groups = new Map();
+    for (const lg of arch.values()) { const r = root(lg.league_id); (groups.get(r) || groups.set(r, []).get(r)).push(lg); }
+    await pool([...groups.values()], 3, async lgs => {
+      const seasons = (await pool(lgs, 3, lg => seasonOf(lg, meId, false).catch(() => null))).filter(Boolean);
+      if (!seasons.length) return;
+      const latest = [...lgs].sort((a, b) => b.season - a.season)[0];
+      out.push({ L: null, archived: true, nick: ARCHIVE_NICK[latest.name.trim()] || latest.name.trim(), seasons: seasons.sort((a, b) => b.season - a.season) });
+    });
+  } catch (e) { console.warn('archived leagues', e); }
+  cache = out.sort((a, b) => (a.archived ? 1 : 0) - (b.archived ? 1 : 0) || a.nick.localeCompare(b.nick));
   return cache;
 }
+// short names for old leagues (keyed by their last season's Sleeper name)
+const ARCHIVE_NICK = { 'We Can Think of Something': 'WCTS', 'Donnie’s League': 'Big 12', 'Big 12 SZN 2': 'Big 12', 'Empire Force SF PPR Dynasty': 'Empire', '#08 Dynasty Empire': '#08 Empire', 'Reddit Rando FFL': 'Reddit Rando', 'Why TF not': 'WTFN', 'Football is tite': 'Football is tite' };
 
 // ---------- money (stored in settings so every device sees it) ----------
 const ledger = () => (settings().money ||= {});
 // yearly buy-ins as Max gave them (rough); an amount typed on the page overrides these
-const DEFAULT_BUYIN = { Euro: 75, Fortress: 100, Gang: 100, Molon: 50, Mongol: 100, MP: 100, NF: 25, R2L: 30, UKDL: 30, Boys: 25, FJ: 30 };
+const DEFAULT_BUYIN = { Euro: 75, Fortress: 100, Gang: 100, Molon: 50, Mongol: 100, MP: 100, NF: 25, R2L: 30, UKDL: 30, Boys: 25, FJ: 30,
+  WCTS: 125, 'Big 12': 125, 'Reddit Rando': 25, WTFN: 25, Empire: 75 };
 const buyInOf = nick => { const v = ledger()[nick]?.buyIn; return v != null && v !== '' ? +v : DEFAULT_BUYIN[nick] ?? 0; };
 // standard payout in these leagues: 3rd gets the buy-in back, the rest of the pot splits 70/30 between 1st and 2nd
 function autoWin(s, buyIn) {
@@ -109,6 +130,7 @@ function setMoney(nick, season, key, val) {
 
 // value rank this season, first snapshot vs latest
 function valueTrend(L) {
+  if (!L) return { first: null, last: null };
   const hist = state().history[L.id] || {};
   const weeks = Object.keys(hist).map(Number).sort((a, b) => a - b);
   const rankAt = w => {
@@ -176,7 +198,7 @@ function render(data) {
       const vt = valueTrend(d.L);
       const m = money$[i];
       const main = h('tr', { class: 'click', onclick: () => { open.has(d.nick) ? open.delete(d.nick) : open.add(d.nick); draw(); } },
-        h('td', {}, (open.has(d.nick) ? '▾ ' : '▸ '), h('b', {}, d.nick)),
+        h('td', {}, (open.has(d.nick) ? '▾ ' : '▸ '), h('b', {}, d.nick), d.archived ? h('span', { class: 'muted small' }, ' archived') : ''),
         h('td', { class: 'n' }, d.seasons.length),
         h('td', { class: 'n' }, `${w}-${l}`),
         h('td', { class: 'n' }, `${ds.filter(s => s.playoffs).length}/${ds.length}`),
@@ -184,9 +206,9 @@ function render(data) {
         h('td', { class: 'n' }, best ? ord(best) : '–'),
         h('td', { class: 'n' }, ds.length ? (ds.reduce((a, s) => a + s.finish, 0) / ds.length).toFixed(1) : '–'),
         h('td', { class: 'n' }, effV ? pct(effV) : '–'),
-        h('td', { class: 'n' }, cur ? `${cur.wins}-${cur.losses}` : '–', d.L.me ? h('span', { class: 'muted small' }, ` · title ${pct(d.L.me.title)}`) : ''),
+        h('td', { class: 'n' }, cur ? `${cur.wins}-${cur.losses}` : '–', d.L?.me ? h('span', { class: 'muted small' }, ` · title ${pct(d.L.me.title)}`) : ''),
         h('td', { class: 'n', title: vt.first ? `Dynasty value rank week ${vt.from}: ${ord(vt.first)}, now ${ord(vt.last)}` : '' },
-          ord(vt.last), vt.first && vt.first !== vt.last ? h('span', { class: (vt.first > vt.last ? 'pos' : 'neg') + ' small' }, vt.first > vt.last ? ` ▲${vt.first - vt.last}` : ` ▼${vt.last - vt.first}`) : ''),
+          vt.last ? ord(vt.last) : '–', vt.first && vt.first !== vt.last ? h('span', { class: (vt.first > vt.last ? 'pos' : 'neg') + ' small' }, vt.first > vt.last ? ` ▲${vt.first - vt.last}` : ` ▼${vt.last - vt.first}`) : ''),
         h('td', { class: 'n' }, m.set ? h('span', { class: cls(m.net) }, money(m.net)) : h('span', { class: 'muted' }, '–')));
       const kids = open.has(d.nick) ? d.seasons.map(s => h('tr', { class: s.title ? 'me' : '' },
         h('td', { style: { paddingLeft: '28px' } }, s.season, s.current ? h('span', { class: 'muted small' }, ' (now)') : ''),
@@ -278,7 +300,7 @@ function mirror(data, done) {
     if (dry.length) add('🏜️', `Playoff droughts: ${dry.map(x => `${x[0]} ${x[1] === x[2] ? `(never in ${x[1]} seasons)` : `(${x[1]} straight seasons)`}`).join(', ')}.`);
   }
   // dynasty value trend this season
-  const tr = data.map(d => [d.nick, valueTrend(d.L)]).filter(([, v]) => v.first && v.last);
+  const tr = data.filter(d => d.L).map(d => [d.nick, valueTrend(d.L)]).filter(([, v]) => v.first && v.last);
   const up = tr.filter(([, v]) => v.first > v.last), down = tr.filter(([, v]) => v.first < v.last);
   if (tr.length) add('🧭', `Dynasty value this season: climbing in ${up.length ? up.map(([n, v]) => `${n} (${ord(v.first)}→${ord(v.last)})`).join(', ') : 'no league'}; sliding in ${down.length ? down.map(([n, v]) => `${n} (${ord(v.first)}→${ord(v.last)})`).join(', ') : 'no league'}.`);
   // trading habits
