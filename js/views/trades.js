@@ -479,7 +479,7 @@ function logView() {
 
 // mark logged offers as accepted when a matching completed trade shows up on Sleeper
 export async function detectAccepted() {
-  const open = state().trades.filter(t => ['sent', 'countered', 'ignored'].includes(t.status));
+  const open = state().trades.filter(t => !t.sleeperId && ['sent', 'countered', 'ignored'].includes(t.status)); // offers imported from Sleeper already carry their real outcome
   let n = 0;
   for (const lid of new Set(open.map(t => t.leagueId))) {
     const L = leagueById(lid); if (!L || !L.me) continue;
