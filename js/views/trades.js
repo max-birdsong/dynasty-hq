@@ -269,7 +269,7 @@ export function planPanel(L, { compact = false } = {}) {
     rest.length ? h('details', {}, h('summary', { class: 'small muted' }, 'Full reasoning'), h('ul', { class: 'small', style: { margin: '6px 0 0', paddingLeft: '18px' } }, rest.map(l => h('li', {}, l)))) : '');
 }
 
-function suggestions(L) {
+export function suggestions(L) {
   const S = settings();
   const box = h('div');
   const out = h('div');

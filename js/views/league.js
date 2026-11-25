@@ -3,9 +3,9 @@ import { state } from '../state.js';
 import { curves, seasons, total } from '../equity.js';
 import { h, fmt, pct, sgn, f1, lineChart, PALETTE } from '../util.js';
 import { table, adviceTag, modeTag, pctBar, posB, empty } from '../components.js';
-import { planPanel } from './trades.js';
+import { planPanel, suggestions } from './trades.js';
 
-export default function leagueView(id, tab = 'power') {
+export default function leagueView(id, tab = 'trades') {
   if (!id) {
     const first = M.leagues.find(L => L.me);
     if (first) { location.replace('#/league/' + first.id); return h('div'); }
@@ -27,11 +27,12 @@ export default function leagueView(id, tab = 'power') {
     ''));
   if (me) root.append(planPanel(L), titleSwingPanel(L));
 
-  const tabs = [['power', 'Power rankings'], ['equity', 'Win equity'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
+  const tabs = [['trades', 'Trades'], ['power', 'Power rankings'], ['equity', 'Win equity'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
   root.append(h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: k === tab ? 'on' : '', onclick: () => location.hash = `#/league/${id}/${k}` }, l))));
   const body = h('div', { class: 'panel' });
   root.append(body);
   if (tab === 'power') body.append(power(L));
+  if (tab === 'trades') body.append(suggestions(L));
   if (tab === 'roster') body.append(roster(L));
   if (tab === 'history') body.append(history(L));
   if (tab === 'equity') body.append(equityTab(L));
