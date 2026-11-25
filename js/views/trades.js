@@ -92,6 +92,7 @@ export function evalPanel(r, { showSim = false, compact = false, counterOf = nul
       marketVerdicts(L, r, partner),
       buzzBox(r),
       acceptLine(L, r, partner),
+      r.memory.hisAsk ? h('div', { class: 'flag ' + (r.memory.hisAsk.same || r.memory.hisAsk.fcDiff >= 0 ? '' : 'warn') }, hisAskText(r.memory.hisAsk)) : '',
       r.memory.same ? h('div', { class: 'flag ' + (['rejected', 'ignored', 'withdrawn'].includes(r.memory.same.status) ? 'bad' : '') }, `You sent this exact offer on ${new Date(r.memory.same.created).toLocaleDateString()}: ${r.memory.same.status}`) : '',
       r.memory.overlap.filter(o => o !== r.memory.same).slice(0, 3).map(o => h('div', { class: 'flag' }, `Earlier ask for ${o.getNames.join(' + ')} (${new Date(o.created).toLocaleDateString()}): ${o.status}`))),
     h('div', { class: 'row', style: { marginTop: '10px' } },
@@ -395,6 +396,7 @@ function suggestionCard(r) {
       h('b', {}, `~${Math.round(r.pAccept * 100)}% he accepts`), h('span', { class: 'muted' }, ' · ' + (reasons(r.acceptF)[0] || ''))) : '',
     r.calcPref ? h('div', { class: 'small pos' }, `Fair for ${r.partner.owner} on ${({ ktc: 'KeepTradeCut', dp: 'DynastyProcess', fp: 'FantasyPros' })[r.calcPref]}, the calculator he trades by` + (r.sweetened?.length ? `: sweetened with ${r.sweetened.join(' + ')}` : '') + '.') : '',
     r.flags.filter(f => f.info).map(f => h('div', { class: 'small muted' }, f.msg)),
+    r.memory.hisAsk ? h('div', { class: 'small ' + (r.memory.hisAsk.same || r.memory.hisAsk.fcDiff >= 0 ? 'pos' : 'warn') }, hisAskText(r.memory.hisAsk)) : '',
     r.memory.overlap.length ? h('div', { class: 'small warn' }, `Asked for ${r.memory.overlap[0].getNames.join(' + ')} before: ${r.memory.overlap[0].status}`) : '',
     h('div', { class: 'row', style: { marginTop: '8px' } },
       h('button', { class: 'btn ghost small', onclick: () => { const box = document.getElementById('app'); box.replaceChildren(h('div', {}, h('a', { href: `#/trades/${r.L.id}` }, '← back'), calculator(r.L, r.partner.rid, { give: r.giveKeys, get: r.getKeys }))); } }, 'Open in calculator'),
@@ -478,6 +480,14 @@ function logView() {
 }
 
 // mark logged offers as accepted when a matching completed trade shows up on Sleeper
+function hisAskText({ t, same, fcDiff }) {
+  const d = new Date(t.created).toLocaleDateString();
+  const what = `${t.getNames.join(' + ')} for ${t.giveNames.join(' + ')}`;
+  const outcome = { rejected: 'you declined', countered: 'you countered', withdrawn: 'he withdrew it', ignored: 'it expired', received: 'still open' }[t.status] || t.status;
+  if (same) return `He offered exactly this on ${d} (${outcome}). He should still say yes.`;
+  return `His own offer on ${d}: ${what} (${outcome}). This one gives him ${Math.abs(Math.round(fcDiff)).toLocaleString()} FC ${fcDiff >= 0 ? 'more' : 'less'} than he asked for.`;
+}
+
 export async function detectAccepted() {
   const open = state().trades.filter(t => !t.sleeperId && ['sent', 'countered', 'ignored'].includes(t.status)); // offers imported from Sleeper already carry their real outcome
   let n = 0;

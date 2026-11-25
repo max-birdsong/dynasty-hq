@@ -225,7 +225,15 @@ export function tradeMemory(L, partner, giveKeys, getKeys) {
   const past = state().trades.filter(t => t.dir !== 'in' && t.leagueId === L.id && t.partnerOwnerId === partner.ownerId);
   const same = past.find(t => sameSet(t.give, giveKeys) && sameSet(t.get, getKeys));
   const overlap = past.filter(t => t.status !== 'accepted' && t.get.some(k => getKeys.includes(k)));
-  return { same, overlap };
+  // his own offers for the same pieces: the clearest signal of what he'd take
+  const his = state().trades.filter(t => t.dir === 'in' && t.leagueId === L.id && t.partnerOwnerId === partner.ownerId && t.status !== 'accepted' && t.get.some(k => getKeys.includes(k)))
+    .sort((a, b) => b.created - a.created)[0] || null;
+  let hisAsk = null;
+  if (his) {
+    const fc = keys => keys.reduce((s, k) => { try { return s + (asset(L, k).fc || 0); } catch { return s; } }, 0);
+    hisAsk = { t: his, same: sameSet(his.give, giveKeys) && sameSet(his.get, getKeys), fcDiff: (fc(giveKeys) - fc(getKeys)) - (fc(his.give) - fc(his.get)) };
+  }
+  return { same, overlap, hisAsk };
 }
 const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
 
