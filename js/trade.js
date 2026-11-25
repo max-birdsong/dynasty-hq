@@ -543,6 +543,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     r.ev = Math.min(r.score, 0.6 * first) * a.p;
     if (!T) r.score = r.ev;
   }
+  // title swings only count if they pay for themselves (title equity now beats the long-term cost)
+  if (T) for (let i = out.length - 1; i >= 0; i--) if ((out[i].value?.total ?? 0) <= 0) out.splice(i, 1);
   // don't show long shots: under 10% chance he says yes
   for (let i = out.length - 1; i >= 0; i--) if ((out[i].pAccept ?? 1) < 0.10) out.splice(i, 1);
   // keep the list varied: each asset appears in at most two suggestions (per ranking), then merge

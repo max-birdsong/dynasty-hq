@@ -260,7 +260,7 @@ function titleSwingPanel(L) {
 // the league's call (same as its dashboard card) plus the best title trades behind it, from the cached search
 function callPanel(L) {
   const sw = L.swing || state().swings?.[L.id];
-  const top = (sw?.top || []).slice(0, 3);
+  const top = (sw?.top || []).filter(x => x.tat + x.now > 0).slice(0, 3); // only trades that pay for themselves
   const pill = (label, v, extra) => h('span', { style: { display: 'inline-block', padding: '2px 8px', borderRadius: '6px', fontSize: '12px', marginRight: '6px',
     background: v >= 0 ? 'rgba(47,163,107,.12)' : 'rgba(209,86,47,.12)', color: v >= 0 ? '#1f7a4f' : '#a8401f' } }, h('b', {}, label + ' '), extra ? extra + ' · ' : '', f1(L, v));
   const row = x => h('div', { style: { padding: '8px 0', borderTop: '1px solid var(--line)' } },
