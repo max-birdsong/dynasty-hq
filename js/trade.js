@@ -481,9 +481,10 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
         const dPo = sum(t.map(a => margOf(a, true).po)) + sum(g.map(a => margOf(a, false).po));
         const score = tat + winNowValue(plan, dReg, dPo) + (t.some(a => a.id && tg.has(a.id)) ? 1500 : 0) - 0.3 * Math.max(0, fc.partnerMargin - need);
         if (T) {
-          // points gained now; sell-side long-term cost capped at a title's worth so it stays a sane price
+          // must add real points now; among those, the best deal wins (title equity + long-term value), so the
+          // cheapest package that gets the player ranks above a bigger one that also spends a core piece
           if (dReg + dPo < 3 || tat < -plan.TITLE * 0.25) continue;
-          seenC.add(ck); cands.push({ g, t, score: dReg + dPo + tat / 2000 });
+          seenC.add(ck); cands.push({ g, t, score });
           continue;
         }
         if (score < minGain * 0.5) continue;
@@ -522,7 +523,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       r.value = tradeValue(L, r);
       r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0);
       if (!T && r.value.total < minGain) continue;
-      if (T) r.score = r.me ? (r.me.rosAfter - r.me.rosBefore) + (r.me.poAfter - r.me.poBefore) : c.score;
+      if (T) r.score = r.value.total;
       out.push(r);
       if (++kept >= (sellOnly ? 15 : 8)) break; // generous here: long shots are dropped once acceptance is scored
     }
@@ -558,7 +559,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     if (byeGoal && r.dBye >= 0.03 && !r.goals.includes(byeGoal)) { r.goals.push(byeGoal); r.pureValue = false; }
     r.score = r.value.total + (r.get.some(a => a.id && tg.has(a.id)) ? 1500 : 0) + (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
     r.dTitle = r.sim.me[1].title - r.sim.me[0].title;
-    if (T) r.score = r.dTitle;
+    if (T) r.score = r.dTitle >= 0.01 ? r.value.total : -Infinity; // title trades: at least +1% title, then best net value
   }
   // Two rankings, both kept: 'best bet' = expected value (your gain × his chance of accepting, with the gain counted
   // only up to ~0.6 1sts: a dream deal nobody accepts is worth less than a modest one that happens) and 'biggest
@@ -571,7 +572,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     if (!T) r.score = r.ev;
   }
   // title swings only count if they pay for themselves (title equity now beats the long-term cost)
-  if (T) for (let i = out.length - 1; i >= 0; i--) if ((out[i].value?.total ?? 0) <= 0) out.splice(i, 1);
+  if (T) for (let i = out.length - 1; i >= 0; i--) if ((out[i].value?.total ?? 0) <= 0 || !(out[i].dTitle >= 0.01)) out.splice(i, 1);
   // don't show long shots: under 10% chance he says yes
   for (let i = out.length - 1; i >= 0; i--) if ((out[i].pAccept ?? 1) < 0.10) out.splice(i, 1);
   // keep the list varied: each asset appears in at most two suggestions (per ranking), then merge
