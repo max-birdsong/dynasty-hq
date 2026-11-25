@@ -311,7 +311,7 @@ export function simFp(L) {
 }
 export function planFp(L) {
   const S = settings();
-  return hash('plan3' + simFp(L) + JSON.stringify([S.leagueMode?.[L.id], S.rules, S.titleAuto, S.titleWorth, S.classes, S.sandersonB2, M.tatSet?.id, L.teams.map(t => [t.rid, Math.round((t.tatTotal || 0) / 100), Math.round((t.fcTotal || 0) / 100), t.picks.join(',')])]));
+  return hash('plan4' + simFp(L) + JSON.stringify([S.leagueMode?.[L.id], S.rules, S.titleAuto, S.titleWorth, S.classes, S.sandersonB2, M.tatSet?.id, L.teams.map(t => [t.rid, Math.round((t.tatTotal || 0) / 100), Math.round((t.fcTotal || 0) / 100), t.picks.join(',')])]));
 }
 
 export function runSim(L) {
