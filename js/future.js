@@ -120,7 +120,7 @@ export function lineupIn(L, assets, k, d = -1) {
     if (a.pick) {
       const [, y, rd] = a.key.split(':');
       const yr = season - +y + 1; if (yr < 1) continue;
-      const slot = a.slot || (n + 1) / 2, rank = (+rd - 1) * n + slot;
+      const slot = a.slot || a.futureSlot || (n + 1) / 2, rank = (+rd - 1) * n + slot;
       const g = ROOKIE_Q[Object.keys(ROOKIE_Q).map(Number).find(hi => rank <= hi) ?? 60];
       const tot = d < 0 ? g.tot.reduce((x, y) => x + y, 0) / g.tot.length : g.tot[qIdx(u01(a.key, d))];
       const id = 'rk:' + a.key; ids.push(id); pts[id] = tot * g.share[Math.min(3, yr) - 1] * rookieFactor;
