@@ -313,7 +313,7 @@ export function suggestions(L, { embedded = false } = {}) {
   if (embedded) {
     // league page: suggestions first, the extras folded away underneath
     { const rq = requestsPanel(L, run); if (rq) box.append(rq); }
-    box.append(h('details', { class: 'panel' }, h('summary', {}, h('b', {}, 'Sanderson vs market'), h('span', { class: 'small muted' }, ' (players to buy cheap, yours to sell high)')), gapsPanel(L, run)), blockPanel(L));
+    box.append(blockPanel(L));
   } else {
     box.insertBefore(blockPanel(L), box.firstChild);
     box.insertBefore(gapsPanel(L, run), box.firstChild);
