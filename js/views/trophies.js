@@ -210,6 +210,9 @@ function render(data) {
   draw();
   wrap.append(h('div', { class: 'card' }, h('h3', {}, 'League by league'), h('div', { class: 'muted small', style: { marginBottom: '6px' } }, 'Tap a league for every season. In the season rows, the luck column compares your wins with what your points would usually earn, and the money column takes that year’s winnings (blank buy-in uses the league default).'), tbl));
 
+  // ---- year by year ----
+  wrap.append(yearCard(data));
+
   // ---- money ledger ----
   wrap.append(ledgerCard(data, money$, draw));
   return wrap;
@@ -287,4 +290,45 @@ function mirror(data, done) {
   const expT = M.leagues.filter(L => L.me).reduce((a, L) => a + (L.me.title || 0), 0);
   add('🔮', `This season the simulator expects ${fmt(expT, 1)} titles across your leagues.`);
   return h('div', { class: 'card' }, h('h3', {}, 'The mirror'), h('ul', { style: { margin: 0, paddingLeft: '4px', listStyle: 'none' } }, lines));
+}
+
+// ---------- the journey: every season across all leagues, year by year ----------
+function yearCard(data) {
+  const years = {};
+  for (const d of data) for (const s of d.seasons) {
+    const y = (years[s.season] ||= { season: s.season, leagues: 0, done: 0, paid: 0, won: 0, titles: 0, podiums: 0, playoffs: 0, finish: 0, w: 0, l: 0, current: s.current });
+    const e = ledger()[d.nick]?.seasons?.[s.season] || {};
+    y.leagues++; y.w += s.wins; y.l += s.losses;
+    y.paid += e.paid != null && e.paid !== '' ? +e.paid : buyInOf(d.nick);
+    y.won += wonIn(d.nick, s);
+    if (s.done) { y.done++; y.finish += s.finish; if (s.playoffs) y.playoffs++; if (s.title) y.titles++; if (s.place && s.place <= 3) y.podiums++; }
+  }
+  const rows = Object.values(years).sort((a, b) => a.season - b.season);
+  const maxAbs = Math.max(1, ...rows.map(y => Math.abs(y.won - y.paid)));
+  let cum = 0;
+  const bar = v => h('div', { style: { display: 'flex', alignItems: 'center', width: '160px', height: '14px' } },
+    h('div', { style: { width: '80px', display: 'flex', justifyContent: 'flex-end' } }, v < 0 ? h('i', { style: { display: 'block', height: '12px', width: Math.round(80 * -v / maxAbs) + 'px', background: 'var(--neg)', borderRadius: '3px 0 0 3px' } }) : ''),
+    h('div', { style: { width: '1px', height: '14px', background: 'var(--line)' } }),
+    h('div', { style: { width: '80px' } }, v > 0 ? h('i', { style: { display: 'block', height: '12px', width: Math.round(80 * v / maxAbs) + 'px', background: 'var(--pos)', borderRadius: '0 3px 3px 0' } }) : ''));
+  const tr = rows.map(y => {
+    const net = y.won - y.paid; cum += net;
+    return h('tr', { class: y.current ? 'me' : '' },
+      h('td', {}, y.season, y.current ? h('span', { class: 'muted small' }, ' (in progress)') : ''),
+      h('td', { class: 'n' }, y.leagues),
+      h('td', { class: 'n' }, `${y.w}-${y.l}`),
+      h('td', { class: 'n' }, y.done ? `${y.playoffs}/${y.done}` : '…'),
+      h('td', { class: 'n' }, y.titles ? '🏆'.repeat(y.titles) : y.podiums ? `${y.podiums} podium${y.podiums > 1 ? 's' : ''}` : y.done ? '–' : '…'),
+      h('td', { class: 'n' }, y.done ? (y.finish / y.done).toFixed(1) : '…'),
+      h('td', { class: 'n' }, money(y.paid)),
+      h('td', { class: 'n' }, y.current ? 'tbd' : money(y.won)),
+      h('td', { class: 'n' }, h('b', { class: cls(net) }, money(net))),
+      h('td', { class: 'n' }, y.current ? '–' : pct(net / Math.max(1, y.paid))),
+      h('td', {}, y.current ? '' : bar(net)),
+      h('td', { class: 'n' }, h('span', { class: cls(cum) }, money(cum))));
+  });
+  return h('div', { class: 'card' }, h('h3', {}, 'The journey, year by year'),
+    h('div', { class: 'muted small', style: { marginBottom: '6px' } }, 'All your leagues added up for each season. Running total is your all-time net after that year. This season shows only the buy-ins until it’s decided.'),
+    h('div', { class: 'tablewrap' }, h('table', {},
+      h('thead', {}, h('tr', {}, ['Season', 'Leagues', 'Record', 'Playoffs', 'Titles', 'Avg finish', 'Paid', 'Won', 'Net', 'ROI', '', 'Running total'].map((x, i) => h('th', { class: i && i !== 10 ? 'n' : '' }, x)))),
+      h('tbody', {}, tr))));
 }
