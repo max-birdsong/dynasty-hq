@@ -4,7 +4,6 @@
 import { M, teamAssets } from './model.js';
 import { settings, save } from './state.js';
 import { h, odds } from './util.js';
-import { table } from './components.js';
 
 export const CALLS = {
   compete: { label: 'Compete', cls: 'contend', side: 1 },
@@ -55,38 +54,42 @@ export function ruleRead(L) {
   return { call, r, tr, fr, n, age, ownNext, ownAfter, why };
 }
 
-export function strategyCard() {
-  const mine = M.leagues.filter(L => L.me);
+function clashOf(L) {
+  const rd = ruleRead(L), mc = myCall(L);
+  const mySide = CALLS[mc?.call]?.side || 0, ruleSide = rd.call === 'compete' ? 1 : rd.call === 'teardown' ? -1 : 0;
+  return { rd, mc, clash: !!(mySide && ruleSide && mySide !== ruleSide && (mc.call !== 'tank' || rd.r <= 2)) };
+}
+const ruleTag = c => c === 'borderline' ? h('span', { class: 'tag mid' }, 'Borderline') : h('span', { class: 'tag ' + CALLS[c].cls }, CALLS[c].label);
+
+// one line for the dashboard card: your multi-year plan (or the rule's read if you haven't set one)
+export function planChip(L) {
+  if (!L.me) return '';
+  const { rd, mc, clash } = clashOf(L);
+  const tip = `Rule: ${rd.call}. ${rd.why.join('; ')}` + (mc?.note ? `\nPlan: ${mc.note}` : '');
+  return h('div', { class: 'row small', title: tip, style: { gap: '6px', marginTop: '6px', flexWrap: 'wrap' } },
+    h('span', { class: 'muted' }, 'Plan'),
+    mc?.call ? h('span', { class: 'tag ' + CALLS[mc.call].cls }, CALLS[mc.call].label + (mc.year ? ` → ${mc.year}` : '')) : h('span', { class: 'muted' }, 'not set, rule says'), mc?.call ? '' : ruleTag(rd.call),
+    clash ? h('span', { class: 'tag bad' }, 'check') : '');
+}
+
+// editor for the league page
+export function strategyPanel(L) {
+  if (!L.me) return '';
   const S = settings();
-  const set = (L, patch) => {
-    const cur = myCall(L) || {};
-    const next = { ...cur, ...patch };
+  const { rd, mc, clash } = clashOf(L);
+  const set = patch => {
+    const next = { ...(myCall(L) || {}), ...patch };
     S.macro = { ...(S.macro || {}) };
     if (!next.call && !next.note && !next.year) delete S.macro[L.id]; else S.macro[L.id] = next;
     save({ settingsChanged: true });
   };
-  const rows = mine.map(L => {
-    const rd = ruleRead(L), mc = myCall(L);
-    const mySide = CALLS[mc?.call]?.side || 0, ruleSide = rd.call === 'compete' ? 1 : rd.call === 'teardown' ? -1 : 0;
-    return { L, nick: L.nick, rd, mc, rank: rd.r / rd.n, clash: !!(mySide && ruleSide && mySide !== ruleSide && (mc.call !== 'tank' || rd.r <= 2)), title: L.me.title || 0 };
-  });
-  const tagFor = c => c === 'borderline' ? h('span', { class: 'tag mid' }, 'Borderline') : h('span', { class: 'tag ' + CALLS[c].cls }, CALLS[c].label);
-  const tbl = table([
-    { key: 'nick', label: 'League', n: false, fmt: (v, r) => h('a', { href: '#/league/' + r.L.id }, v) },
-    { key: 'rank', label: 'Value rank', n: true, sort: r => -r.rank, fmt: (v, r) => `${r.rd.r} of ${r.rd.n}` },
-    { key: 'rule', label: 'Rule says', n: false, sort: r => r.rd.call, fmt: (v, r) => h('div', {}, tagFor(r.rd.call), h('div', { class: 'muted small' }, r.rd.why.join('; '))) },
-    { key: 'call', label: 'Your call', n: false, sort: r => r.mc?.call || '', fmt: (v, r) => h('div', { style: { minWidth: '210px' } },
-      h('div', { class: 'row', style: { gap: '6px' } },
-        h('select', { onchange: e => set(r.L, { call: e.target.value || undefined }) },
-          h('option', { value: '', selected: !r.mc?.call }, 'not set'),
-          Object.entries(CALLS).map(([k, c]) => h('option', { value: k, selected: r.mc?.call === k }, c.label))),
-        h('input', { type: 'number', placeholder: 'window', title: 'First season you plan to contend', style: { width: '70px' }, value: r.mc?.year || '', onchange: e => set(r.L, { year: +e.target.value || undefined }) }),
-        r.clash ? h('span', { class: 'tag bad', title: "Your call and the rule disagree. Fine if it's deliberate; worth a look if the numbers moved." }, 'check') : ''),
-      h('textarea', { rows: 2, placeholder: 'why / the plan', style: { width: '100%', marginTop: '4px', fontSize: '12px' }, onchange: e => set(r.L, { note: e.target.value.trim() || undefined }) }, r.mc?.note || '')) },
-  ], rows, { sortKey: 'rank', desc: false, rowClass: r => r.clash ? 'warnrow' : '' });
-  const clashes = rows.filter(r => r.clash).length;
-  return h('div', { class: 'card', style: { marginTop: '16px' } },
-    h('div', { class: 'row spread' }, h('h3', {}, 'Macro strategy'), clashes ? h('span', { class: 'tag bad' }, `${clashes} to check`) : h('span', { class: 'muted small' }, 'calls match the rule')),
-    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, "Sanderson's rule: top half of league value competes, bottom half tears down for a quick rebuild, the middle is a trap. Rank is TAT where loaded, else FantasyCalc. Your call wins; 'check' means it disagrees with the current numbers. Re-read every February after the rookie draft."),
-    tbl);
+  return h('div', { class: 'panel' },
+    h('div', { class: 'row spread' }, h('h3', {}, 'Multi-year plan'), clash ? h('span', { class: 'tag bad', title: "Your call disagrees with the current value rank. Fine if deliberate." }, 'check') : ''),
+    h('div', { class: 'small', style: { margin: '4px 0 8px' } }, h('span', { class: 'muted' }, "Sanderson's rule: "), ruleTag(rd.call), ' ', h('span', { class: 'muted' }, rd.why.join('; ') + '.')),
+    h('div', { class: 'row', style: { gap: '6px', flexWrap: 'wrap' } },
+      h('select', { onchange: e => set({ call: e.target.value || undefined }) },
+        h('option', { value: '', selected: !mc?.call }, 'Your call: not set'),
+        Object.entries(CALLS).map(([k, c]) => h('option', { value: k, selected: mc?.call === k }, c.label))),
+      h('input', { type: 'number', placeholder: 'contend from', title: 'First season you plan to contend', style: { width: '110px' }, value: mc?.year || '', onchange: e => set({ year: +e.target.value || undefined }) })),
+    h('textarea', { rows: 3, placeholder: 'why / the plan', style: { width: '100%', boxSizing: 'border-box', marginTop: '6px', fontSize: '13px' }, onchange: e => set({ note: e.target.value.trim() || undefined }) }, mc?.note || ''));
 }

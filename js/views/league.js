@@ -4,6 +4,7 @@ import { curves, seasons, total } from '../equity.js';
 import { h, fmt, pct, sgn, lineChart, PALETTE } from '../util.js';
 import { table, adviceTag, modeTag, pctBar, posB, empty } from '../components.js';
 import { planPanel } from './trades.js';
+import { strategyPanel } from '../strategy.js';
 
 export default function leagueView(id, tab = 'power') {
   if (!id) {
@@ -25,7 +26,7 @@ export default function leagueView(id, tab = 'power') {
       kpi(`${me.wins}-${me.losses}`, 'record'), kpi(pct(me.playoff), 'playoff odds'), kpi(pct(me.bye), 'bye odds'), kpi(pct(me.title), 'title odds'),
       kpi(`#${me.fcTotalRank}`, 'FantasyCalc'), kpi(`#${me.tatTotalRank}`, 'Sanderson'), kpi(`${fmt(me.ros, 1)} (#${me.rosRank})`, 'proj pts/wk')) : '',
     ''));
-  if (me) root.append(planPanel(L));
+  if (me) root.append(strategyPanel(L), planPanel(L));
 
   const tabs = [['power', 'Power rankings'], ['equity', 'Win equity'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
   root.append(h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: k === tab ? 'on' : '', onclick: () => location.hash = `#/league/${id}/${k}` }, l))));
