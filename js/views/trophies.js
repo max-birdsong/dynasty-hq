@@ -4,6 +4,7 @@ import { M } from '../model.js';
 import { state, settings, save } from '../state.js';
 import { h, fmt, sgn, pct, cls, pool } from '../util.js';
 import { cachedJson } from '../db.js';
+import { futureTitles } from '../future.js';
 
 const SL = 'https://api.sleeper.app/v1';
 const DAY = 86400e3;
@@ -242,6 +243,9 @@ function render(data) {
 
   // ---- year by year ----
   wrap.append(yearCard(data));
+  const ahead = h('div', { class: 'card' }, h('h3', {}, 'Looking ahead'), h('div', { class: 'muted small' }, 'Projecting your title odds for the next two seasons…'));
+  wrap.append(ahead);
+  setTimeout(() => lookAhead(data, money$, ahead), 50);
 
   // ---- money ledger ----
   wrap.append(ledgerCard(data, money$, draw));
@@ -362,4 +366,35 @@ function yearCard(data) {
     h('div', { class: 'tablewrap' }, h('table', {},
       h('thead', {}, h('tr', {}, ['Season', 'Leagues', 'Record', 'Playoffs', 'Titles', 'Avg finish', 'Paid', 'Won', 'Net', 'ROI', '', 'Running total'].map((x, i) => h('th', { class: i && i !== 10 ? 'n' : '' }, x)))),
       h('tbody', {}, tr))));
+}
+
+// ---------- the next two seasons: title odds from projected points (future.js), turned into expected money ----------
+async function lookAhead(data, money$, card) {
+  const cur = data.filter(d => d.L?.me);
+  const rows = [];
+  for (const d of cur) {
+    await new Promise(r => setTimeout(r, 0));
+    let fut; try { fut = futureTitles(d.L, 2)[d.L.me.rid]; } catch { continue; }
+    const s = d.seasons.find(x => x.current) || d.seasons[0], b = buyInOf(d.nick), rest = (s.n - 1) * b;
+    // the future simulator gives title odds only; runner-up and 3rd are taken as about as likely as the title,
+    // which is roughly what this season's odds show for teams in the hunt
+    const ev = t => t * rest * 0.7 + t * rest * 0.3 + t * b - b;
+    rows.push({ nick: d.nick, t: fut, ev: fut.map(ev), b });
+  }
+  const now = money$.reduce((a, m) => a + m.net + m.proj, 0);
+  const y1 = rows.reduce((a, r) => a + r.ev[0], 0), y2 = rows.reduce((a, r) => a + r.ev[1], 0);
+  const Y = +M.season;
+  card.replaceChildren(h('h3', {}, 'Looking ahead'),
+    h('div', { class: 'muted small', style: { marginBottom: '6px' } }, `Title odds for ${Y + 1} and ${Y + 2} from your rosters’ projected points (players aged with real production curves, picks turned into rookies), with today’s buy-ins. Rough by nature: it can’t see the trades and waiver moves you’ll make, and it assumes 2nd and 3rd are about as likely as the title.`),
+    h('div', { class: 'kpis', style: { marginBottom: '10px' } },
+      kpi(h('span', { class: cls(now) }, `≈${money(now)}`), `All-time after ${Y}`),
+      kpi(h('span', { class: cls(y1) }, `≈${money(y1)}`), `${Y + 1} expected`, `${fmt(rows.reduce((a, r) => a + r.t[0], 0), 1)} expected titles`),
+      kpi(h('span', { class: cls(y2) }, `≈${money(y2)}`), `${Y + 2} expected`, `${fmt(rows.reduce((a, r) => a + r.t[1], 0), 1)} expected titles`),
+      kpi(h('span', { class: cls(now + y1 + y2) }, `≈${money(now + y1 + y2)}`), `All-time after ${Y + 2}`)),
+    h('div', { class: 'tablewrap' }, h('table', {},
+      h('thead', {}, h('tr', {}, ['League', 'Buy-in', `${Y + 1} title`, `${Y + 1} $`, `${Y + 2} title`, `${Y + 2} $`].map((x, i) => h('th', { class: i ? 'n' : '' }, x)))),
+      h('tbody', {}, rows.sort((a, b) => (b.ev[0] + b.ev[1]) - (a.ev[0] + a.ev[1])).map(r => h('tr', {},
+        h('td', {}, h('b', {}, r.nick)), h('td', { class: 'n' }, money(r.b)),
+        h('td', { class: 'n' }, pct(r.t[0])), h('td', { class: 'n' }, h('span', { class: cls(r.ev[0]) }, `≈${money(r.ev[0])}`)),
+        h('td', { class: 'n' }, pct(r.t[1])), h('td', { class: 'n' }, h('span', { class: cls(r.ev[1]) }, `≈${money(r.ev[1])}`))))))));
 }
