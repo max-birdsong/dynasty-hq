@@ -1,4 +1,4 @@
-import { M, leagueById, teamAssets, asset, isPick, playerWeekPts, posOf } from '../model.js';
+import { M, leagueById, teamAssets, asset, isPick, playerWeekPts, posOf, planFp } from '../model.js';
 import { bestLineup } from '../lineup.js';
 import { state, logTrade, updateTrade, deleteTrade, settings, save, rawRules, setRules, rulesOf } from '../state.js';
 import { evalTrade, simDelta, suggest, tradeValue, calcEdge, calcValue } from '../trade.js';
@@ -269,22 +269,30 @@ export function planPanel(L, { compact = false } = {}) {
     rest.length ? h('details', {}, h('summary', { class: 'small muted' }, 'Full reasoning'), h('ul', { class: 'small', style: { margin: '6px 0 0', paddingLeft: '18px' } }, rest.map(l => h('li', {}, l)))) : '');
 }
 
+const SUGG_CACHE = new Map();
 export function suggestions(L, { embedded = false } = {}) {
   const S = settings();
   const box = h('div');
   const out = h('div');
+  let autoRun = false;
   const run = async (leagues, mode = 'value', partners = null, focus = null) => {
     if (!M.calcs) M.calcs = await loadCalcs();
     await import('../affinity.js').then(a => a.loadAffinity()).catch(() => {});
     out.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), mode === 'title' ? 'Simulating the season for each candidate trade (about 20 seconds)…' : 'Searching trades…'));
     await sleep(30);
     let all = [];
-    for (const lg of leagues) {
-      // this league's own price for picks, from its trade history
-      const pi = await pickIndex(lg).catch(() => null);
-      lg.pickIndex = pi;
-      for (const t of lg.teams) t._pickIndex = pi?.index || null;
-      all = all.concat(suggest(lg, { mode, partners, focus })); await sleep(0);
+    // one league, plain search: reuse this session's result until the league's inputs change
+    const ck = leagues.length === 1 && mode === 'value' && !partners && !focus ? leagues[0].id + ':' + planFp(leagues[0]) : null;
+    if (ck && SUGG_CACHE.has(ck)) all = SUGG_CACHE.get(ck).slice();
+    else {
+      for (const lg of leagues) {
+        // this league's own price for picks, from its trade history
+        const pi = await pickIndex(lg).catch(() => null);
+        lg.pickIndex = pi;
+        for (const t of lg.teams) t._pickIndex = pi?.index || null;
+        all = all.concat(suggest(lg, { mode, partners, focus })); await sleep(0);
+      }
+      if (ck) SUGG_CACHE.set(ck, all.slice());
     }
     const sortKey = () => mode === 'title' ? 'score' : (settings().suggestSort || 'ev');
     all.sort((a, b) => b[sortKey()] - a[sortKey()]);
@@ -303,7 +311,7 @@ export function suggestions(L, { embedded = false } = {}) {
     chips.querySelector('button').classList.add('push');
     if (sortSel) chips.append(h('span', { class: 'small muted', style: { marginLeft: '12px' } }, 'Sort:'), sortSel);
     out.replaceChildren(...(focus ? [h('div', { class: 'panel small' }, h('b', {}, focus.side === 'get' ? `Trades to buy ${focus.name}` : `Trades to sell ${focus.name}`), ' (Sanderson vs market)')] : []), chips, grid); show(null);
-    out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!autoRun) out.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   box.append(h('div', { class: 'panel' },
     h('div', { class: 'row spread' }, h('div', {}, h('h2', { style: { margin: 0 } }, 'Suggested trades'),
@@ -318,6 +326,7 @@ export function suggestions(L, { embedded = false } = {}) {
     { const rq = requestsPanel(L, run); if (rq) box.insertBefore(rq, box.firstChild); }
     box.insertBefore(planPanel(L, { compact: true }), box.firstChild);
   }
+  if (embedded && state().tatSets.length) setTimeout(() => { autoRun = true; run([L]).finally(() => { autoRun = false; }); }, 0); // league page: search straight away
   if (!state().tatSets.length) out.append(h('div', { class: 'panel' }, 'Upload Sanderson rankings on the ', h('a', { href: '#/values' }, 'Values page'), ' first. Without them every player is valued at half his FC value, so suggestions are meaningless.'));
   return box;
 }
