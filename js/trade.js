@@ -288,6 +288,20 @@ function futurePickShift(L, r) {
   return d;
 }
 
+// Rookie hype: next year's 1sts gain value from the season into draft time (DynastyProcess rank history 2020-2026,
+// median by tier relative to November: early 1sts about +20% by Mar/Apr, mid +19%, late +12%). Holding the pick
+// until spring captures that, so giving one away now costs the bump and getting one earns it.
+const PICK_CURVE = { 8: 0.92, 9: 0.94, 10: 1.0, 11: 1.07, 0: 1.16, 1: 1.18, 2: 1.2, 3: 1.2 }; // by month (0 = Jan), Nov = 1
+function pickSpringBump(L, a) {
+  if (!a.pick) return 0;
+  const [, y, rd] = a.key.split(':'); if (+y !== +L.season + 1 || +rd !== 1) return 0;
+  const now = PICK_CURVE[new Date().getMonth()]; if (now == null) return 0; // after the draft: the pick is a player
+  const slot = a.slot || a.futureSlot || L.teams.length / 2, n = L.teams.length;
+  const peak = slot <= n / 3 ? 1.21 : slot <= (2 * n) / 3 ? 1.19 : 1.12;
+  return Math.max(0, (a.tat || 0) * (peak / now - 1));
+}
+export function pickHype(L, r) { return r.get.reduce((s, a) => s + pickSpringBump(L, a), 0) - r.give.reduce((s, a) => s + pickSpringBump(L, a), 0); }
+
 export function tradeValue(L, r, exact = null) {
   const plan = teamPlan(L);
   let now, pickShift = 0;
@@ -316,7 +330,8 @@ export function tradeValue(L, r, exact = null) {
   const off = offseasonGain(L, r);
   const dr = off > 0 ? Math.max(0.5, 1 - lead) : 1; // losses always count in full
   const tat = off * dr;
-  return { total: tat + now + fp2, tat: tat + fp2, tatRaw: off, tatMarket: r.tatGain, dr, now, pickShift, futurePick: fp2 };
+  const hype = pickHype(L, r);
+  return { total: tat + now + fp2 + hype, tat: tat + fp2 + hype, tatRaw: off, tatMarket: r.tatGain, dr, now, pickShift, futurePick: fp2, hype };
 }
 
 // Sanderson: rankings aren't a price list; every trade should serve a goal. Your goals come from the league plan.
