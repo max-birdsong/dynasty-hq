@@ -3,6 +3,7 @@ import { firstsSent } from '../owners.js';
 import { state, syncReady } from '../state.js';
 import { h, fmt, pct, odds, sgn, f1 } from '../util.js';
 import { VERDICT } from './trades.js';
+import { strategyCard } from '../strategy.js';
 import { table, adviceTag, pctBar, posB, heat, empty } from '../components.js';
 
 let planning = false;
@@ -58,6 +59,8 @@ export default function dashboard() {
       h('div', { class: 'stats' }, stat(L.me.playoff, b?.playoff, 'playoffs'), stat(L.me.bye, null, 'bye'), stat(L.me.title, b?.title, 'title')),
       h('div', { class: 'small muted clamp' }, keyLine(L)));
   })));
+
+  root.append(strategyCard());
 
   // everything else lives in one tabbed panel
   const tabs = [];
