@@ -154,6 +154,9 @@ export function merge(local, remote) {
     out.history[lg] ||= {};
     for (const [w, e] of Object.entries(weeks)) { const o = out.history[lg][w]; if (!o || (e.t || 0) > (o.t || 0) || (o.fromSnapshot && !e.fromSnapshot)) out.history[lg][w] = e; }
   }
+  // per-league cached title-swing searches: newest wins
+  out.swings = { ...(local.swings || {}) };
+  for (const [k, v] of Object.entries(remote.swings || {})) if (!out.swings[k] || (v?.at || 0) > (out.swings[k]?.at || 0)) out.swings[k] = v;
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }

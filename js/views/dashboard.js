@@ -8,7 +8,7 @@ import { table, adviceTag, pctBar, posB, heat, empty } from '../components.js';
 let planning = false;
 export default function dashboard() {
   // team plans need a few extra simulations each; work them out in the background and redraw when ready
-  if (!planning && M.leagues.some(L => L.me && !L.plan)) {
+  if (!planning && M.leagues.some(L => L.me && (!L.plan || L.eq === undefined || ((L.me.playoff ?? 0) >= 0.05 && !L.swing)))) {
     planning = true;
     (async () => {
       const { teamPlan } = await import('../plan.js');
@@ -41,6 +41,28 @@ export default function dashboard() {
         if (L.eq && e && e.eq3 == null) { e.eq3 = +L.eq.mine.toFixed(3); save({ sync: false }); }
         await new Promise(r => setTimeout(r, 0));
       }
+      // title-swing search per league still in the race (the league page's "Could you move your title odds?"),
+      // cached until the league's inputs change and synced, so the phone can use what the laptop worked out
+      try {
+        if (!M.calcs) M.calcs = await fetch('data/calcs.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null);
+        await import('../affinity.js').then(a => a.loadAffinity()).catch(() => {});
+        const { suggest } = await import('../trade.js');
+        const todo = M.leagues.filter(L => L.me && (L.me.playoff ?? 0) >= 0.05);
+        let i = 0;
+        for (const L of todo) {
+          i++;
+          const fp = planFp(L), synced = S2.swings?.[L.id];
+          if (synced?.fp === fp) { L.swing = synced; continue; }
+          const el = document.getElementById('swing-status'); if (el) el.textContent = `Checking title trades: ${L.nick} (${i}/${todo.length})…`;
+          await new Promise(r => setTimeout(r, 50));
+          const res = suggest(L, { mode: 'title' }).filter(r => (r.pAccept ?? 1) >= 0.05).sort((a, b) => b.score - a.score).slice(0, 3);
+          L.swing = { fp, at: Date.now(), top: res.map(r => ({ dTitle: r.dTitle, pAccept: r.pAccept, partner: r.partner.owner, partnerRid: r.partner.rid, give: r.give.map(a => a.name), get: r.get.map(a => a.name), tat: r.value?.tat ?? 0, now: r.value?.now ?? 0 })) };
+          S2.swings = { ...(S2.swings || {}), [L.id]: L.swing }; save();
+          if (!location.hash || location.hash === '#/') window.DHQ.route();
+          await new Promise(r => setTimeout(r, 300));
+        }
+      } catch (e) { console.warn('title swings', e); }
+      const el = document.getElementById('swing-status'); if (el) el.textContent = '';
       planning = false;
       if (!location.hash || location.hash === '#/') window.DHQ.route();
     })();
@@ -61,6 +83,7 @@ export default function dashboard() {
   const setup = [];
   if (!syncReady()) setup.push(h('span', {}, h('a', { href: '#/settings' }, 'Connect GitHub'), ' to sync laptop and phone'));
   if (!S.tatSets.length) setup.push(h('span', {}, h('a', { href: '#/values' }, 'Upload TAT rankings'), ' to turn on Sanderson values'));
+  root.append(h('div', { id: 'swing-status', class: 'small muted' }));
   if (setup.length) root.append(h('div', { class: 'setup small' }, 'Setup: ', setup.flatMap((x, i) => i ? [' · ', x] : [x])));
   if (M.errors.length) root.append(h('div', { class: 'err-box' }, M.errors.join(' · ')));
 
@@ -77,6 +100,20 @@ export default function dashboard() {
       h('span', { class: 'muted' }, `Titles ${yrs} `), h('b', {}, L.eq.mine.toFixed(2)), h('span', { class: 'muted' }, ` · #${L.eq.rank} · avg ${L.eq.avg.toFixed(2)}`),
       Math.abs(d) >= 0.02 ? h('span', { class: d > 0 ? 'pos' : 'neg', title: `was ${was.toFixed(2)} last week` }, d > 0 ? ' ▲' : ' ▼') : '');
   };
+  // one call per league: is there a trade worth making for the title, and if not, what to do instead
+  const actionLine = L => {
+    const p = L.plan, t = L.me, n = L.teams.length; if (!p) return h('div', { class: 'small muted' }, 'Working out the plan…');
+    const r = p.dynRank, top = r <= n / 2, base1 = L.fc.picks.get(`${+L.season + 1} 1st`) || 3000;
+    const line = (tag, cls, text) => h('div', { class: 'small', style: { marginTop: '2px' } }, h('span', { class: 'tag ' + cls, style: { marginRight: '6px' } }, tag), text);
+    if ((t.playoff ?? 0) < 0.05) return top ? line('Reload', 'mid', `Out this year, but value ${r}/${n} is top half: sell what won't help in ${+L.season + 1}, keep the core.`)
+      : line('Sell', 'tank', `Out this year and value ${r}/${n} is bottom half: turn vets into picks and young players.`);
+    if (!L.swing) return h('div', { class: 'small muted' }, 'Checking title trades…');
+    const b = L.swing.top[0];
+    if (b && b.dTitle >= 0.03) return line('Buy', 'push', `${b.give.join(' + ')} for ${b.get.join(' + ')} (${b.partner}): +${(b.dTitle * 100).toFixed(0)}% title, ~${Math.round(b.pAccept * 100)}% he accepts.`);
+    const per = p.TITLE * (p.sens?.titlePo || 0) / base1; // 1sts per playoff point a week
+    const farm = per >= 0.01 ? ` Take value trades that gain more than ${per.toFixed(2)} 1sts per playoff point/wk they cost.` : ' Take value trades freely; playoff points barely move your odds.';
+    return line('Hold', 'contend', `No trade moves your ${odds(t.title)} much, and value ${r}/${n} is ${top ? 'top half: keep competing.' : 'bottom half: play it out, retool after.'}${farm}`);
+  };
   const keyLine = L => { const p = L.plan; if (!p) return 'Working out the plan…'; const l = p.lines.find(x => /^Deadline/.test(x)) || p.lines.find(x => /^(If you filled|Even with|Filling |Biggest hole|You don't own)/.test(x)); return l ? l.replace(/^Deadline: [A-Z]+[.,]\s*/, '').replace(/^./, c => c.toUpperCase()) : ''; };
   root.append(h('div', { class: 'lcards' }, [...mine].sort((a, b) => (b.me.title || 0) - (a.me.title || 0)).map(L => {
     const p = L.plan, b = hist(L);
@@ -84,7 +121,7 @@ export default function dashboard() {
       h('div', { class: 'row spread' }, h('b', { class: 'lname' }, L.nick), h('span', { class: 'muted small' }, `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`)),
       h('div', { class: 'row', style: { gap: '6px', margin: '4px 0 8px' } }, p?.verdict ? h('span', { class: 'tag ' + (VERDICT[p.verdict] || '') }, p.verdict) : '', h('span', { class: 'small' }, p?.headline || '')),
       h('div', { class: 'stats' }, stat(L.me.playoff, b?.playoff, 'playoffs'), stat(L.me.bye, null, 'bye'), stat(L.me.title, b?.title, 'title')),
-      h('div', { class: 'small muted clamp' }, keyLine(L)), eqLine(L));
+      actionLine(L), eqLine(L));
   })));
 
   // everything else lives in one tabbed panel
