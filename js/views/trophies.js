@@ -76,15 +76,28 @@ async function gather() {
 
 // ---------- money (stored in settings so every device sees it) ----------
 const ledger = () => (settings().money ||= {});
+// yearly buy-ins as Max gave them (rough); an amount typed on the page overrides these
+const DEFAULT_BUYIN = { Euro: 75, Fortress: 100, Gang: 100, Molon: 50, Mongol: 100, MP: 100, NF: 25, R2L: 30, UKDL: 30, Boys: 25, FJ: 30 };
+const buyInOf = nick => { const v = ledger()[nick]?.buyIn; return v != null && v !== '' ? +v : DEFAULT_BUYIN[nick] ?? 0; };
+// standard payout in these leagues: 3rd gets the buy-in back, the rest of the pot splits 70/30 between 1st and 2nd
+function autoWin(s, buyIn) {
+  if (!s.done || !s.place || s.place > 3) return 0;
+  const rest = s.n * buyIn - buyIn;
+  return s.place === 1 ? Math.round(rest * 0.7) : s.place === 2 ? Math.round(rest * 0.3) : buyIn;
+}
+function wonIn(nick, s) {
+  const e = ledger()[nick]?.seasons?.[s.season] || {};
+  return e.won != null && e.won !== '' ? +e.won : autoWin(s, e.paid != null && e.paid !== '' ? +e.paid : buyInOf(nick));
+}
 function netOf(nick, seasons) {
   const m = ledger()[nick] || {};
   let paid = 0, won = 0;
   for (const s of seasons) {
     const e = m.seasons?.[s.season] || {};
-    paid += e.paid != null && e.paid !== '' ? +e.paid : +(m.buyIn || 0);
-    won += +(e.won || 0);
+    paid += e.paid != null && e.paid !== '' ? +e.paid : buyInOf(nick);
+    won += wonIn(nick, s);
   }
-  return { paid, won, net: won - paid, set: m.buyIn != null && m.buyIn !== '' || Object.keys(m.seasons || {}).length > 0 };
+  return { paid, won, net: won - paid, set: paid > 0 };
 }
 function setMoney(nick, season, key, val) {
   const m = (ledger()[nick] ||= { seasons: {} });
@@ -206,18 +219,19 @@ function kpi(v, label, sub) { return h('div', { class: 'kpi' }, h('b', {}, v), h
 function luckLabel(d) { return Math.abs(d) < 0.75 ? h('span', { class: 'muted' }, 'fair') : h('span', { class: d > 0 ? 'pos' : 'neg' }, `${d > 0 ? 'lucky' : 'unlucky'} ${sgn(d, 1)}W`); }
 function moneyCell(nick, s) {
   const e = ledger()[nick]?.seasons?.[s.season] || {};
-  return h('input', { type: 'number', min: 0, step: 1, placeholder: 'won $', value: e.won ?? '', style: { width: '80px' }, title: `Winnings in ${s.season}`, onchange: ev => setMoney(nick, s.season, 'won', ev.target.value) });
+  const auto = autoWin(s, buyInOf(nick));
+  return h('input', { type: 'number', min: 0, step: 1, placeholder: s.current ? 'tbd' : '$' + auto, value: e.won ?? '', style: { width: '80px' }, title: `Winnings in ${s.season}. Blank uses the standard payout ($${auto}); type an amount to override.`, onchange: ev => setMoney(nick, s.season, 'won', ev.target.value) });
 }
 
 function ledgerCard(data, money$, redraw) {
   const totalPaid = money$.reduce((a, m) => a + m.paid, 0), totalWon = money$.reduce((a, m) => a + m.won, 0);
   const card = h('div', { class: 'card' }, h('h3', {}, 'The money'),
-    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, 'Set each league’s yearly buy-in. Enter winnings per season in the table above (tap a league to open its seasons). Everything syncs to your other devices.'));
+    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, 'Payouts follow your standard: 3rd gets the buy-in back, the rest of the pot splits 70/30 between 1st and 2nd. Buy-ins are your rough numbers; type over any of them, or over a season’s winnings in the table above, when the real amount was different. This season’s buy-in is counted as paid.'));
   const rows = data.map((d, i) => {
     const m = money$[i];
     return h('tr', {},
       h('td', {}, h('b', {}, d.nick)),
-      h('td', { class: 'n' }, h('input', { type: 'number', min: 0, step: 1, placeholder: 'buy-in $', value: ledger()[d.nick]?.buyIn ?? '', style: { width: '90px' }, onchange: e => { setMoney(d.nick, null, null, e.target.value); redraw(); } })),
+      h('td', { class: 'n' }, h('input', { type: 'number', min: 0, step: 1, placeholder: '$' + (DEFAULT_BUYIN[d.nick] ?? 0), value: ledger()[d.nick]?.buyIn ?? '', style: { width: '90px' }, onchange: e => { setMoney(d.nick, null, null, e.target.value); redraw(); } })),
       h('td', { class: 'n' }, d.seasons.length),
       h('td', { class: 'n' }, money(m.paid)),
       h('td', { class: 'n' }, money(m.won)),
