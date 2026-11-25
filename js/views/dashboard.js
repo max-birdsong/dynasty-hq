@@ -105,8 +105,15 @@ export default function dashboard() {
     const p = L.plan, t = L.me, n = L.teams.length; if (!p) return h('div', { class: 'small muted' }, 'Working out the plan…');
     const r = p.dynRank, top = r <= n / 2, base1 = L.fc.picks.get(`${+L.season + 1} 1st`) || 3000;
     const line = (tag, cls, text) => h('div', { class: 'small', style: { marginTop: '2px' } }, h('span', { class: 'tag ' + cls, style: { marginRight: '6px' } }, tag), text);
-    if ((t.playoff ?? 0) < 0.05) return top ? line('Reload', 'mid', `Out this year, but value ${r}/${n} is top half: sell what won't help in ${+L.season + 1}, keep the core.`)
-      : line('Sell', 'tank', `Out this year and value ${r}/${n} is bottom half: turn vets into picks and young players.`);
+    if ((t.playoff ?? 0) < 0.05) {
+      // which of your own future 1sts a bad record improves, and how the draft order is set
+      const ny = +L.season + 1, own1 = t.picks.includes(`k:${ny}:1:${t.rid}`), own2 = t.picks.includes(`k:${ny + 1}:1:${t.rid}`);
+      const by = L.draftOrder === 'record' ? 'record' : 'max PF';
+      const pickNote = own1 ? ` You own your ${ny} 1st, so every loss now moves it up (order by ${by}).`
+        : own2 ? ` You don't own your ${ny} 1st, but you do own your ${ny + 1}: a weak ${ny} season makes it a top pick (order by ${by}), so sell anyone who'd score for you in ${ny}, not just the old guys.` : '';
+      return top ? line('Reload', 'mid', `Out this year, but value ${r}/${n} is top half: sell what won't help in ${ny}, keep the core.${pickNote}`)
+        : line('Sell', 'tank', `Out this year and value ${r}/${n} is bottom half: turn vets into picks and young players.${pickNote}`);
+    }
     if (!L.swing) return h('div', { class: 'small muted' }, 'Checking title trades…');
     // a title trade only earns "Buy" if it pays for itself: title equity gained beats the long-term value given up
     const b = L.swing.top.find(x => x.dTitle >= 0.03 && x.tat + x.now >= 0);
