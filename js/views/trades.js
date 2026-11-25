@@ -269,7 +269,7 @@ export function planPanel(L, { compact = false } = {}) {
     rest.length ? h('details', {}, h('summary', { class: 'small muted' }, 'Full reasoning'), h('ul', { class: 'small', style: { margin: '6px 0 0', paddingLeft: '18px' } }, rest.map(l => h('li', {}, l)))) : '');
 }
 
-export function suggestions(L) {
+export function suggestions(L, { embedded = false } = {}) {
   const S = settings();
   const box = h('div');
   const out = h('div');
@@ -310,10 +310,16 @@ export function suggestions(L) {
       h('div', { class: 'muted small' }, 'Trades that serve one of your goals. Ranked by best bet (your gain × his chance of accepting) or by biggest gain to you; switch with Sort. ', h('details', { style: { display: 'inline' } }, h('summary', { style: { display: 'inline', fontWeight: 400 } }, 'How'), ` Each suggestion is tagged with the goal it serves for you and, when there is one, for the partner. Trades that serve no goal only appear if they win decisively. Value = Sanderson value gained plus the effect on this season (a title is worth tens of 1sts, worked out from each league’s values; see the plan for the number). Treat the Sanderson-fair price as the worst acceptable deal, not the target. Offers already rejected are skipped.`))),
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => run([L]) }, `Find in ${L.nick}`), h('button', { class: 'btn ghost', onclick: () => run(M.leagues.filter(x => x.me)) }, 'All leagues'), h('button', { class: 'btn ghost', title: 'Trades ranked by how much they raise your title odds, with what each costs long-term', onclick: () => run([L], 'title') }, '🏆 Biggest title swings')))),
     out);
-  box.insertBefore(blockPanel(L), box.firstChild);
-  box.insertBefore(gapsPanel(L, run), box.firstChild);
-  { const rq = requestsPanel(L, run); if (rq) box.insertBefore(rq, box.firstChild); }
-  box.insertBefore(planPanel(L, { compact: true }), box.firstChild);
+  if (embedded) {
+    // league page: suggestions first, the extras folded away underneath
+    { const rq = requestsPanel(L, run); if (rq) box.append(rq); }
+    box.append(h('details', { class: 'panel' }, h('summary', {}, h('b', {}, 'Sanderson vs market'), h('span', { class: 'small muted' }, ' (players to buy cheap, yours to sell high)')), gapsPanel(L, run)), blockPanel(L));
+  } else {
+    box.insertBefore(blockPanel(L), box.firstChild);
+    box.insertBefore(gapsPanel(L, run), box.firstChild);
+    { const rq = requestsPanel(L, run); if (rq) box.insertBefore(rq, box.firstChild); }
+    box.insertBefore(planPanel(L, { compact: true }), box.firstChild);
+  }
   if (!state().tatSets.length) out.append(h('div', { class: 'panel' }, 'Upload Sanderson rankings on the ', h('a', { href: '#/values' }, 'Values page'), ' first. Without them every player is valued at half his FC value, so suggestions are meaningless.'));
   return box;
 }

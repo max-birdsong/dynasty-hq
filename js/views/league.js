@@ -4,6 +4,7 @@ import { curves, seasons, total } from '../equity.js';
 import { h, fmt, pct, sgn, f1, lineChart, PALETTE } from '../util.js';
 import { table, adviceTag, modeTag, pctBar, posB, empty } from '../components.js';
 import { planPanel, suggestions } from './trades.js';
+import { actionLine } from './dashboard.js';
 
 export default function leagueView(id, tab = 'trades') {
   if (!id) {
@@ -25,14 +26,14 @@ export default function leagueView(id, tab = 'trades') {
       kpi(`${me.wins}-${me.losses}`, 'record'), kpi(pct(me.playoff), 'playoff odds'), kpi(pct(me.bye), 'bye odds'), kpi(pct(me.title), 'title odds'),
       kpi(`#${me.fcTotalRank}`, 'FantasyCalc'), kpi(`#${me.tatTotalRank}`, 'Sanderson'), kpi(`${fmt(me.ros, 1)} (#${me.rosRank})`, 'proj pts/wk')) : '',
     ''));
-  if (me) root.append(planPanel(L), titleSwingPanel(L));
+  if (me) root.append(callPanel(L));
 
   const tabs = [['trades', 'Trades'], ['power', 'Power rankings'], ['equity', 'Win equity'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
   root.append(h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: k === tab ? 'on' : '', onclick: () => location.hash = `#/league/${id}/${k}` }, l))));
   const body = h('div', { class: 'panel' });
   root.append(body);
   if (tab === 'power') body.append(power(L));
-  if (tab === 'trades') body.append(suggestions(L));
+  if (tab === 'trades') body.append(suggestions(L, { embedded: true }));
   if (tab === 'roster') body.append(roster(L));
   if (tab === 'history') body.append(history(L));
   if (tab === 'equity') body.append(equityTab(L));
@@ -254,4 +255,17 @@ function titleSwingPanel(L) {
     h('div', {}, h('h3', { style: { margin: 0 } }, 'Could you move your title odds?'), h('div', { class: 'small muted' }, `${pct(L.me.title)} now. Checks every realistic trade for the biggest title swing.`)),
     h('button', { class: 'btn small', onclick: run }, 'Check')));
   return box;
+}
+
+// the league's call (same as its dashboard card) plus the best title trades behind it, from the cached search
+function callPanel(L) {
+  const sw = L.swing || state().swings?.[L.id];
+  const top = (sw?.top || []).slice(0, 3);
+  return h('div', { class: 'panel' }, actionLine(L),
+    top.length ? h('div', { style: { marginTop: '10px' } }, h('div', { class: 'small muted', style: { marginBottom: '4px' } }, 'Biggest title swings'),
+      top.map(x => h('div', { class: 'row spread small', style: { padding: '3px 0', borderTop: '1px solid var(--line)' } },
+        h('span', {}, `${x.give.join(' + ')} → ${x.get.join(' + ')}`, h('span', { class: 'muted' }, ` · ${x.partner}`)),
+        h('span', { class: 'muted' }, `+${(x.dTitle * 100).toFixed(1)}% · net ${f1(L, x.tat + x.now)} · ${Math.round(x.pAccept * 100)}% yes`))))
+      : '',
+    h('details', { style: { marginTop: '8px' } }, h('summary', { class: 'small muted' }, 'Full reasoning'), planPanel(L, { compact: true })));
 }
