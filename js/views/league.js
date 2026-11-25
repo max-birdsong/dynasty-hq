@@ -244,7 +244,7 @@ function titleSwingPanel(L) {
       if (!M.calcs) M.calcs = await fetch('data/calcs.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null);
       await import('../affinity.js').then(a => a.loadAffinity()).catch(() => {});
       const { suggest } = await import('../trade.js');
-      const res = suggest(L, { mode: 'title' }).filter(r => (r.pAccept ?? 1) >= 0.05).sort((a, b) => b.score - a.score);
+      const res = suggest(L, { mode: 'title' }).filter(r => (r.pAccept ?? 1) >= 0.10).sort((a, b) => b.score - a.score);
       swingCache.set(fp(), res); show(res);
     } catch (e) { box.replaceChildren(h('div', { class: 'err-box' }, 'Could not run the search: ' + e.message)); }
   };

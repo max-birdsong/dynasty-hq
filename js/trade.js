@@ -499,7 +499,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       if (!T && r.value.total < minGain) continue;
       if (T) r.score = r.me ? (r.me.rosAfter - r.me.rosBefore) + (r.me.poAfter - r.me.poBefore) : c.score;
       out.push(r);
-      if (++kept >= (sellOnly ? 15 : 4)) break;
+      if (++kept >= (sellOnly ? 15 : 8)) break; // generous here: long shots are dropped once acceptance is scored
     }
   }
   // goal first: trades that serve one of your goals rank ahead; pure value grabs must win decisively
@@ -543,6 +543,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     r.ev = Math.min(r.score, 0.6 * first) * a.p;
     if (!T) r.score = r.ev;
   }
+  // don't show long shots: under 10% chance he says yes
+  for (let i = out.length - 1; i >= 0; i--) if ((out[i].pAccept ?? 1) < 0.10) out.splice(i, 1);
   // keep the list varied: each asset appears in at most two suggestions (per ranking), then merge
   const pick = (list, key) => {
     const used = new Map(), sel = [];
