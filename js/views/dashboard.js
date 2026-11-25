@@ -28,7 +28,7 @@ export const actionLine = L => {
   }
   if (!L.swing) return h('div', { class: 'small muted' }, 'Checking title trades…');
   const b = L.swing.top.find(x => x.dTitle >= 0.03 && x.tat + x.now >= 0);
-  if (b) return call('Buy', 'buy', `${b.give.map(short).join(' + ')} → ${b.get.map(short).join(' + ')}`, `${b.partner} · +${(b.dTitle * 100).toFixed(0)}% title · ${Math.round(b.pAccept * 100)}% yes`);
+  if (b) return call('Buy', 'buy', `${b.give.map(short).join(' + ')} → ${b.get.map(short).join(' + ')}`, `Now +${(b.dTitle * 100).toFixed(0)}% title · long-term ${f1(L, b.tat)} · ${Math.round(b.pAccept * 100)}% yes`);
   return call('Hold', 'hold', 'No title trade worth it', top ? 'Take value trades that keep playoff points' : 'Play it out, retool after');
 };
 

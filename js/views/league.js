@@ -261,11 +261,12 @@ function titleSwingPanel(L) {
 function callPanel(L) {
   const sw = L.swing || state().swings?.[L.id];
   const top = (sw?.top || []).slice(0, 3);
+  const pill = (label, v, extra) => h('span', { style: { display: 'inline-block', padding: '2px 8px', borderRadius: '6px', fontSize: '12px', marginRight: '6px',
+    background: v >= 0 ? 'rgba(47,163,107,.12)' : 'rgba(209,86,47,.12)', color: v >= 0 ? '#1f7a4f' : '#a8401f' } }, h('b', {}, label + ' '), extra ? extra + ' · ' : '', f1(L, v));
+  const row = x => h('div', { style: { padding: '8px 0', borderTop: '1px solid var(--line)' } },
+    h('div', { class: 'row spread', style: { gap: '8px' } }, h('span', { style: { fontWeight: 600, fontSize: '13.5px' } }, `${x.give.join(' + ')} → ${x.get.join(' + ')}`), h('span', { class: 'small muted' }, `${x.partner} · ${Math.round(x.pAccept * 100)}% yes`)),
+    h('div', { style: { marginTop: '4px' } }, pill('This season', x.now, `${x.dTitle >= 0 ? '+' : ''}${(x.dTitle * 100).toFixed(1)}% title`), pill('Long-term', x.tat), pill('Net', x.tat + x.now)));
   return h('div', { class: 'panel' }, actionLine(L),
-    top.length ? h('div', { style: { marginTop: '10px' } }, h('div', { class: 'small muted', style: { marginBottom: '4px' } }, 'Biggest title swings'),
-      top.map(x => h('div', { class: 'row spread small', style: { padding: '3px 0', borderTop: '1px solid var(--line)' } },
-        h('span', {}, `${x.give.join(' + ')} → ${x.get.join(' + ')}`, h('span', { class: 'muted' }, ` · ${x.partner}`)),
-        h('span', { class: 'muted' }, `+${(x.dTitle * 100).toFixed(1)}% · net ${f1(L, x.tat + x.now)} · ${Math.round(x.pAccept * 100)}% yes`))))
-      : '',
+    top.length ? h('div', { style: { marginTop: '12px' } }, h('div', { class: 'small muted', style: { marginBottom: '2px' } }, 'Biggest title swings: what each gives you this season vs what it costs long-term'), top.map(row)) : '',
     h('details', { style: { marginTop: '8px' } }, h('summary', { class: 'small muted' }, 'Full reasoning'), planPanel(L, { compact: true })));
 }
