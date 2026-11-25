@@ -308,7 +308,7 @@ export function myGoals(L, plan) {
   else for (const h of plan.holes) g.push({ id: 'fix:' + (h.pos || [h.g]).join(','), label: `Fix ${h.g}` });
   if (!plan.tanking && (t.title ?? 0) >= 0.06) g.push({ id: 'points', label: 'Buy points' });
   if (plan.tanking || plan.weakLongTerm) g.push({ id: 'younger', label: 'Get younger' });
-  if (plan.tanking || ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15)) g.push({ id: 'picks', label: 'Turn players into picks' });
+  if (plan.tanking || ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15) || ((t.playoff ?? 0) < 0.05 && plan.weakLongTerm)) g.push({ id: 'picks', label: 'Turn players into picks' });
   // extend the window: add long-term value at a minimal cost to this season's title odds (any contender)
   if (!plan.tanking && (t.title ?? 0) >= 0.06) g.push({ id: 'window', label: 'Extend the window' });
   // Sanderson's first reason to buy: it materially raises your bye odds. Only meaningful while a bye is in play.
