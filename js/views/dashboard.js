@@ -130,10 +130,10 @@ export default function dashboard() {
     const n = L.teams.length, full = p.dynRank > n / 2;
     const fade = teamAssets(L, t).filter(a => !a.pick && a.id && (a.tat || 0) >= 400 && (full ? (a.age || 0) >= 24.5 : (a.age || 0) >= 25.5))
       .map(a => { const k = keepRate(a.pos, a.age || 26, (a.fc || 0) >= studLine(L)); return { a, lose: a.tat * (1 - k), k }; })
-      .filter(x => x.k < 0.97).sort((x, y) => y.lose - x.lose).slice(0, 3);
+      .filter(x => x.k < (full ? 0.97 : 0.75)).sort((x, y) => y.lose - x.lose).slice(0, 3); // Reload: only players who won't hold up for next year
     if (!fade.length) return '';
     return h('div', { class: 'small', style: { marginTop: '6px' } }, h('span', { class: 'muted' }, full ? 'Sell first: ' : 'Sell before they fade: '),
-      fade.map((x, i) => [i ? ', ' : '', h('span', { title: `TAT ${Math.round(x.a.tat)}, keeps about ${Math.round(x.k * 100)}% of it by next season` }, `${x.a.name.split(' ').slice(-1)[0]} (${(x.a.age || 0).toFixed(0)}, −${Math.round((1 - x.k) * 100)}%)`)]));
+      fade.map((x, i) => [i ? ', ' : '', h('span', { title: `TAT ${Math.round(x.a.tat)}, keeps about ${Math.round(x.k * 100)}% of it by next season` }, `${(M.players[x.a.id]?.last_name || x.a.name.split(' ').slice(-1)[0])} (${(x.a.age || 0).toFixed(0)}, −${Math.round((1 - x.k) * 100)}%)`)]));
   };
   const keyLine = L => { const p = L.plan; if (!p) return 'Working out the plan…'; const l = p.lines.find(x => /^Deadline/.test(x)) || p.lines.find(x => /^(If you filled|Even with|Filling |Biggest hole|You don't own)/.test(x)); return l ? l.replace(/^Deadline: [A-Z]+[.,]\s*/, '').replace(/^./, c => c.toUpperCase()) : ''; };
   root.append(h('div', { class: 'lcards' }, [...mine].sort((a, b) => (b.me.title || 0) - (a.me.title || 0)).map(L => {
