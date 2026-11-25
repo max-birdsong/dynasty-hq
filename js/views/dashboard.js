@@ -83,7 +83,7 @@ export default function dashboard() {
           const el = document.getElementById('swing-status'); if (el) el.textContent = `Checking title trades: ${L.nick} (${i}/${todo.length})…`;
           await new Promise(r => setTimeout(r, 50));
           const res = suggest(L, { mode: 'title' }).filter(r => (r.pAccept ?? 1) >= 0.10).sort((a, b) => b.score - a.score).slice(0, 3);
-          L.swing = { fp, at: Date.now(), top: res.map(r => ({ dTitle: r.dTitle, pAccept: r.pAccept, partner: r.partner.owner, partnerRid: r.partner.rid, give: r.give.map(a => a.name), get: r.get.map(a => a.name), tat: r.value?.tat ?? 0, now: r.value?.now ?? 0 })) };
+          L.swing = { fp, at: Date.now(), top: res.map(r => ({ dTitle: r.dTitle, pAccept: r.pAccept, partner: r.partner.owner, partnerRid: r.partner.rid, give: r.give.map(a => a.name), get: r.get.map(a => a.name), giveKeys: r.giveKeys, getKeys: r.getKeys, tat: r.value?.tat ?? 0, now: r.value?.now ?? 0 })) };
           S2.swings = { ...(S2.swings || {}), [L.id]: L.swing }; save();
           if (!location.hash || location.hash === '#/') window.DHQ.route();
           await new Promise(r => setTimeout(r, 300));

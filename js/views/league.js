@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import { curves, seasons, total } from '../equity.js';
 import { h, fmt, pct, sgn, f1, lineChart, PALETTE } from '../util.js';
 import { table, adviceTag, modeTag, pctBar, posB, empty } from '../components.js';
-import { planPanel, suggestions } from './trades.js';
+import { planPanel, suggestions, calculator } from './trades.js';
 import { actionLine } from './dashboard.js';
 
 export default function leagueView(id, tab = 'trades') {
@@ -265,8 +265,17 @@ function callPanel(L) {
     background: v >= 0 ? 'rgba(47,163,107,.12)' : 'rgba(209,86,47,.12)', color: v >= 0 ? '#1f7a4f' : '#a8401f' } }, h('b', {}, label + ' '), extra ? extra + ' · ' : '', f1(L, v));
   const row = x => h('div', { style: { padding: '8px 0', borderTop: '1px solid var(--line)' } },
     h('div', { class: 'row spread', style: { gap: '8px' } }, h('span', { style: { fontWeight: 600, fontSize: '13.5px' } }, `${x.give.join(' + ')} → ${x.get.join(' + ')}`), h('span', { class: 'small muted' }, `${x.partner} · ${Math.round(x.pAccept * 100)}% yes`)),
-    h('div', { style: { marginTop: '4px' } }, pill('This season', x.now, `${x.dTitle >= 0 ? '+' : ''}${(x.dTitle * 100).toFixed(1)}% title`), pill('Long-term', x.tat), pill('Net', x.tat + x.now)));
+    h('div', { style: { marginTop: '4px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 0' } }, x.giveKeys ? h('button', { class: 'btn ghost small', style: { marginRight: '8px' }, onclick: () => openCalc(L, x) }, 'Open in calculator') : '', pill('This season', x.now, `${x.dTitle >= 0 ? '+' : ''}${(x.dTitle * 100).toFixed(1)}% title`), pill('Long-term', x.tat), pill('Net', x.tat + x.now)));
   return h('div', { class: 'panel' }, actionLine(L),
     top.length ? h('div', { style: { marginTop: '12px' } }, h('div', { class: 'small muted', style: { marginBottom: '2px' } }, 'Biggest title swings: what each gives you this season vs what it costs long-term'), top.map(row)) : '',
     h('details', { style: { marginTop: '8px' } }, h('summary', { class: 'small muted' }, 'Full reasoning'), planPanel(L, { compact: true })));
+}
+
+// a title trade in the full calculator (lineup change, odds, every calculator), with a way back
+function openCalc(L, x) {
+  const live = new Set([...teamAssets(L, L.me), ...teamAssets(L, L.byRid[x.partnerRid])].map(a => a.key));
+  const app = document.getElementById('app');
+  app.replaceChildren(h('div', {}, h('a', { href: 'javascript:void 0', onclick: () => window.DHQ?.route() }, `← back to ${L.nick}`),
+    calculator(L, x.partnerRid, { give: (x.giveKeys || []).filter(k => live.has(k)), get: (x.getKeys || []).filter(k => live.has(k)) })));
+  window.scrollTo(0, 0);
 }
