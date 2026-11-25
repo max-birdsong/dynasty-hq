@@ -11,6 +11,7 @@ import { loadBuzz, buzzLine, takesFor } from '../buzz.js';
 let compsP = null;
 const loadComps = () => compsP || (compsP = fetch('data/comps.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null));
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
+import { tradeStats } from '../tradestats.js';
 
 const STATUSES = ['sent', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
 const STATUSES_IN = ['received', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
@@ -438,11 +439,12 @@ function logView() {
   const S = state();
   const box = h('div', { class: 'panel' });
   const status = h('div', { class: 'muted small' }, 'Checking Sleeper for accepted trades…');
+  let showAll = false;
   const draw = () => {
-    const rows = S.trades;
-    const stats = [...STATUSES, 'received'].map(s => [s, rows.filter(t => t.status === s && (s === 'received' || t.dir !== 'in')).length]).filter(x => x[1]);
+    const rows = showAll ? S.trades : S.trades.slice(0, 60);
+    const stats = [...STATUSES, 'received'].map(s => [s, S.trades.filter(t => t.status === s && (s === 'received' || t.dir !== 'in')).length]).filter(x => x[1]);
     box.replaceChildren(
-      h('div', { class: 'row spread' }, h('h2', { style: { margin: 0 } }, 'Trade log'), h('div', { class: 'row' }, stats.map(([s, n]) => h('span', { class: 'tag' }, `${s} ${n}`)))),
+      h('div', { class: 'row spread' }, h('h2', { style: { margin: 0 } }, 'Trade log'), h('div', { class: 'row' }, stats.map(([s, n]) => h('span', { class: 'tag' }, `${s} ${n}`)), S.trades.length > 60 ? h('button', { class: 'btn ghost small', onclick: () => { showAll = !showAll; draw(); } }, showAll ? 'Show recent 60' : `Show all ${S.trades.length}`) : '')),
       status,
       rows.length ? h('div', { class: 'tablewrap', style: { marginTop: '10px' } }, h('table', {},
         h('thead', {}, h('tr', {}, ['Date', 'League', 'Partner', 'You send', 'You get', 'TAT', 'FC them', 'Status', 'Notes', ''].map(x => h('th', {}, x)))),
@@ -472,7 +474,7 @@ function logView() {
     }
   });
   detectAccepted().then(n => { status.textContent = n ? `Found ${n} accepted trade(s) on Sleeper and marked them.` : 'Open offers are checked against completed Sleeper trades every time you open this page.'; if (n) draw(); });
-  return box;
+  return h('div', {}, tradeStats(S.trades), box);
 }
 
 // mark logged offers as accepted when a matching completed trade shows up on Sleeper
