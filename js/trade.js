@@ -404,10 +404,20 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
       if (fa && focus.side === 'get' && !theirs.some(a => a.key === fa.key)) theirs = [...theirs, fa];
       if (fa && focus.side === 'give' && !myPool.some(a => a.key === fa.key)) myPool = [...myPool, fa];
     }
-    const cands = [];
+    const cands = [], seenC = new Set();
     for (const gs of want ? [1, 2, 3] : [1, 2]) for (const ts of [1, 2]) {
-      for (const g of combos(myPool, gs)) for (const t of combos(theirs, ts)) {
+      for (const g of combos(myPool, gs)) for (let t of combos(theirs, ts)) {
         if (focus && !(focus.side === 'get' ? t : g).some(a => a.key === focus.key)) continue;
+        // a small throw-in on his side (little Sanderson value next to the main piece) adds almost nothing for you
+        // and is exactly the kind of piece an owner digs in over, so ask for the main piece alone. Overpaying him
+        // a little on the market is fine when your Sanderson gain survives.
+        let trimmed = false;
+        if (t.length === 2) {
+          const [lo, hi] = [...t].sort((x, y) => (x.tat || 0) - (y.tat || 0));
+          if (!lo.pick && (lo.tat || 0) < Math.max(700, 0.15 * (hi.tat || 0)) && !(focus && lo.key === focus.key)) { t = [hi]; trimmed = true; }
+        }
+        const ck = g.map(a => a.key).sort().join(',') + '>' + t.map(a => a.key).sort().join(',');
+        if (seenC.has(ck)) continue;
         // a tanker dumping points takes a little under market (but piles of pieces still don't add up to a star)
         const fc = fcSides(g.map(a => a.fc * biasFactor(p.ownerId, a)), t.map(a => perceived(a, p)));
         // people aren't ATMs: owners overvalue what they already have, so they need to come out a bit ahead
@@ -416,7 +426,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
         const tankHelp = tanker && t.some(a => !a.pick && (theirPts.get(a.id) || 0) > 3);
         const asked = want && g.every(fits);
         const need = want === 'dump' && asked ? -0.1 * fc.B : onBlock || tankHelp || asked ? 0 : (p.mode === 'rebuild' ? R.rebuilderFcMargin : 0.03) * Math.max(fc.A, fc.B);
-        if (fc.partnerMargin < need || fc.partnerMargin > need + 0.3 * fc.B + 400) continue;
+        if (fc.partnerMargin < need || (!trimmed && fc.partnerMargin > need + 0.3 * fc.B + 400)) continue;
         if (!asked && p.mode === 'rebuild' && g.some(a => tooOldFor(a, R))) continue;
         if (!asked && p.mode !== 'contend' && g.some(a => a.pos === 'RB' && (a.age || 0) >= R.oldRbAge)) continue;
         // long-term part as of the off-season (this season's production is counted separately, via winNowValue)
@@ -427,11 +437,11 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
         if (T) {
           // points gained now; sell-side long-term cost capped at a title's worth so it stays a sane price
           if (dReg + dPo < 3 || tat < -plan.TITLE * 0.25) continue;
-          cands.push({ g, t, score: dReg + dPo + tat / 2000 });
+          seenC.add(ck); cands.push({ g, t, score: dReg + dPo + tat / 2000 });
           continue;
         }
         if (score < minGain * 0.5) continue;
-        cands.push({ g, t, score });
+        seenC.add(ck); cands.push({ g, t, score });
       }
     }
     cands.sort((a, b) => b.score - a.score);
