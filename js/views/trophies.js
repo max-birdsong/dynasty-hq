@@ -238,7 +238,8 @@ function mirror(data, done) {
   if (done.length) {
     // luck
     const luck = done.reduce((a, s) => a + (s.wins + s.ties / 2 - s.xWins), 0);
-    const worst = [...done].sort((a, b) => (a.wins - a.xWins) - (b.wins - b.xWins))[0], best = [...done].sort((a, b) => (b.wins - b.xWins) - (a.wins - a.xWins))[0];
+    const top = done.filter(s => s.pfRank <= s.n / 2), low = done.filter(s => s.pfRank > s.n / 2);
+    const worst = [...(top.length ? top : done)].sort((a, b) => (a.wins - a.xWins) - (b.wins - b.xWins))[0], best = [...(low.length ? low : done)].sort((a, b) => (b.wins - b.xWins) - (a.wins - a.xWins))[0];
     add('🎲', Math.abs(luck) < 2 ? `Luck has been fair overall (${sgn(luck, 1)} wins compared with what your scoring usually earns).`
       : luck > 0 ? `You’ve been lucky: ${fmt(luck, 1)} more wins than your points usually earn. Biggest gift: ${best.nick} ${best.season} (${best.wins}-${best.losses} with the ${ord(best.pfRank)}-most points).`
       : `You’ve been unlucky: ${fmt(-luck, 1)} fewer wins than your points deserved. Worst robbery: ${worst.nick} ${worst.season} (${worst.wins}-${worst.losses} with the ${ord(worst.pfRank)}-most points).`);
