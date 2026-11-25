@@ -1,7 +1,7 @@
 import { M, leagueById, teamAssets, startersNow, playerWeekPts, simParams } from '../model.js';
 import { state } from '../state.js';
 import { curves, seasons, total } from '../equity.js';
-import { h, fmt, pct, sgn, lineChart, PALETTE } from '../util.js';
+import { h, fmt, pct, sgn, f1, lineChart, PALETTE } from '../util.js';
 import { table, adviceTag, modeTag, pctBar, posB, empty } from '../components.js';
 import { planPanel } from './trades.js';
 
@@ -25,7 +25,7 @@ export default function leagueView(id, tab = 'power') {
       kpi(`${me.wins}-${me.losses}`, 'record'), kpi(pct(me.playoff), 'playoff odds'), kpi(pct(me.bye), 'bye odds'), kpi(pct(me.title), 'title odds'),
       kpi(`#${me.fcTotalRank}`, 'FantasyCalc'), kpi(`#${me.tatTotalRank}`, 'Sanderson'), kpi(`${fmt(me.ros, 1)} (#${me.rosRank})`, 'proj pts/wk')) : '',
     ''));
-  if (me) root.append(planPanel(L));
+  if (me) root.append(planPanel(L), titleSwingPanel(L));
 
   const tabs = [['power', 'Power rankings'], ['equity', 'Win equity'], ['roster', 'My roster'], ['history', 'History'], ['picks', 'Picks'], ['sim', 'How the odds work']];
   root.append(h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: k === tab ? 'on' : '', onclick: () => location.hash = `#/league/${id}/${k}` }, l))));
@@ -215,4 +215,42 @@ function equityTab(L) {
       { key: 'tot', label: 'Expected titles', n: true, fmt: v => v.toFixed(2) },
     ], rows, { sortKey: 'tot', rowClass: r => r.isMe ? 'me' : '' }),
     h('p', { class: 'small muted' }, `${yrs[0]} is the simulator's title odds. Later seasons use projected points, not market value: each player's scoring is aged with curves measured from every NFL season since 2010 (points per game by position and age, and how much of the season players that age actually play), picks become rookies who score what rookies drafted at that rank did, and each team's best lineup is run through the same simulator from 0-0, with more uncertainty for each year ahead (nobody knows 2029). Use the Trades calculator to see how a deal moves your curve.`));
+}
+
+// "Could I move my title odds?" Runs the same search as Trades > Biggest title swings, on demand (it simulates the
+// season for each candidate, ~20s), and remembers the answer for this league until its inputs change.
+const swingCache = new Map();
+function titleSwingPanel(L) {
+  const box = h('div', { class: 'panel' });
+  const fp = () => L.id + ':' + (L.plan ? Math.round((L.me.title || 0) * 1000) : '') + ':' + M.loadedAt?.getTime?.();
+  const show = res => {
+    const top = res.slice(0, 3);
+    box.replaceChildren(
+      h('div', { class: 'row spread' }, h('h3', { style: { margin: 0 } }, 'Could you move your title odds?'), h('a', { href: `#/trades/${L.id}`, class: 'small' }, 'All trades →')),
+      top.length ? h('div', { class: 'muted small', style: { margin: '4px 0 8px' } }, `Best realistic swings from ${pct(L.me.title)} now. Long-term cost is Sanderson value you give up.`) : '',
+      top.length ? h('div', {}, top.map(r => h('div', { style: { padding: '6px 0', borderTop: '1px solid var(--line, #eee)' } },
+        h('div', { class: 'row spread' }, h('b', {}, `${r.dTitle >= 0 ? '+' : ''}${(r.dTitle * 100).toFixed(1)}% title`), h('span', { class: 'small muted' }, `${r.partner.owner} · ~${Math.round((r.pAccept || 0) * 100)}% he accepts`)),
+        h('div', { class: 'small' }, `Send ${r.give.map(a => a.name).join(' + ')} · get ${r.get.map(a => a.name).join(' + ')}`),
+        h('div', { class: 'small muted' }, `Long-term ${f1(L, r.value.tat)} · this season ${f1(L, r.value.now)}`))))
+        : h('div', { class: 'small', style: { marginTop: '6px' } }, `Not really: no trade adds at least 1% title odds at an acceptable long-term price. Your ${pct(L.me.title)} is about what this roster is.`),
+      h('div', { class: 'row', style: { marginTop: '8px' } }, h('button', { class: 'btn ghost small', onclick: run }, 'Re-check')));
+  };
+  const run = async () => {
+    box.replaceChildren(h('div', { class: 'loading' }, h('div', { class: 'spinner' }), 'Simulating candidate trades (about 20 seconds)…'));
+    await new Promise(r => setTimeout(r, 30));
+    try {
+      if (!M.calcs) M.calcs = await fetch('data/calcs.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null);
+      await import('../affinity.js').then(a => a.loadAffinity()).catch(() => {});
+      const { suggest } = await import('../trade.js');
+      const res = suggest(L, { mode: 'title' }).sort((a, b) => b.score - a.score);
+      swingCache.set(fp(), res); show(res);
+    } catch (e) { box.replaceChildren(h('div', { class: 'err-box' }, 'Could not run the search: ' + e.message)); }
+  };
+  const hit = swingCache.get(fp());
+  if (hit) show(hit);
+  else if ((L.me?.playoff ?? 0) < 0.05) box.replaceChildren(h('div', { class: 'small muted' }, 'Out of the playoff race, so there are no title odds to move this season.'));
+  else box.replaceChildren(h('div', { class: 'row spread' },
+    h('div', {}, h('h3', { style: { margin: 0 } }, 'Could you move your title odds?'), h('div', { class: 'small muted' }, `${pct(L.me.title)} now. Checks every realistic trade for the biggest title swing.`)),
+    h('button', { class: 'btn small', onclick: run }, 'Check')));
+  return box;
 }
