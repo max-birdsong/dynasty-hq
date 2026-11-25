@@ -96,7 +96,7 @@ export default function dashboard() {
     const e = S.history[L.id] || {}, prev = Object.keys(e).map(Number).filter(w => w < M.week && e[w]?.eq3 != null).sort((a, b) => a - b).at(-1);
     const was = prev != null ? e[prev].eq3 : null, d = was == null ? 0 : L.eq.mine - was;
     const yrs = `${L.season}–${String(+L.season + 3).slice(2)}`;
-    return h('div', { class: 'small lfoot', title: `Expected titles ${yrs}: ${L.eq.curve.map(x => Math.round(x * 100) + '%').join(' / ')}. League average ${L.eq.avg.toFixed(2)}.` },
+    return h('div', { class: 'small lfoot', style: { marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--line)' }, title: `Expected titles ${yrs}: ${L.eq.curve.map(x => Math.round(x * 100) + '%').join(' / ')}. League average ${L.eq.avg.toFixed(2)}.` },
       h('span', { class: 'muted' }, `Titles ${yrs} `), h('b', {}, L.eq.mine.toFixed(2)), h('span', { class: 'muted' }, ` · #${L.eq.rank} · avg ${L.eq.avg.toFixed(2)}`),
       Math.abs(d) >= 0.02 ? h('span', { class: d > 0 ? 'pos' : 'neg', title: `was ${was.toFixed(2)} last week` }, d > 0 ? ' ▲' : ' ▼') : '');
   };
@@ -104,7 +104,10 @@ export default function dashboard() {
   const actionLine = L => {
     const p = L.plan, t = L.me, n = L.teams.length; if (!p) return h('div', { class: 'small muted' }, 'Working out the plan…');
     const r = p.dynRank, top = r <= n / 2, base1 = L.fc.picks.get(`${+L.season + 1} 1st`) || 3000;
-    const line = (tag, cls, text) => h('div', { class: 'lcall' }, h('span', { class: 'call ' + cls }, tag), h('span', { class: 'lcall-t' }, text));
+    const COL = { buy: '#2fa36b', hold: '#2f7dd1', retool: '#d1a12f', teardown: '#d1562f' };
+    const line = (tag, cls, text) => h('div', { class: 'lcall', style: { display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '4px', fontSize: '13px', lineHeight: '1.35' } },
+      h('span', { class: 'call ' + cls, style: { flex: 'none', fontSize: '11px', fontWeight: '700', letterSpacing: '.03em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: '6px', color: '#fff', background: COL[cls], marginTop: '1px' } }, tag),
+      h('span', {}, text));
     if ((t.playoff ?? 0) < 0.05 || (t.title ?? 0) < 0.04) {
       // which of your own future 1sts a bad record improves, and how the draft order is set
       const ny = +L.season + 1, own1 = t.picks.includes(`k:${ny}:1:${t.rid}`), own2 = t.picks.includes(`k:${ny + 1}:1:${t.rid}`);
