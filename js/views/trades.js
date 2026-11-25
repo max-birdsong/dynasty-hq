@@ -406,6 +406,7 @@ function suggestionCard(r) {
       `FC ${r.partner.owner} ${sgn(r.fc.partnerMargin)}`, r.me ? ` · your pts/wk ${sgn(r.me.rosAfter - r.me.rosBefore, 1)} now, ${sgn(r.me.poAfter - r.me.poBefore, 1)} playoffs` : '',
       r.them ? ` · theirs ${sgn(r.them.rosAfter - r.them.rosBefore, 1)}` : ''),
     r.me ? lineupProof(r) : '',
+    r.partner && r.giveKeys ? ladderBox(r) : '',
     h('div', { class: 'small muted', style: { marginTop: '4px' } }, h('b', {}, r.mixLabel), ` · picks ${sgn(r.mix.picks)}, this season ${sgn(r.mix.now)}, future years ${sgn(r.mix.future)}`),
     r.flags.filter(f => f.warn).map(f => h('div', { class: 'small warn' }, '⚠️ ' + f.msg)),
     r.pAccept != null ? h('div', { class: 'small', style: { cursor: 'pointer' }, title: reasons(r.acceptF).join('\n'), onclick: () => toast(reasons(r.acceptF).join(' · ')) },
@@ -529,6 +530,41 @@ function lineupProof(r) {
       h('div', { class: 'small muted', style: { marginTop: '4px' } }, 'Average projected points per week for each player over those weeks; red leaves, green arrives, others shift slots.'));
   };
   return h('details', { style: { marginTop: '4px' }, ontoggle: e => { if (e.target.open && !body.childNodes.length) build(); } }, h('summary', { class: 'small' }, 'Show the lineup change'), body);
+}
+
+// Negotiation ladder: open low, step up only if needed. Opener = the trade without its add-ons (picks/cheapest piece),
+// Fair = opener plus your cheapest picks until it's even on the calculator he trades by, Likely yes = as suggested.
+function ladderBox(r) {
+  const body = h('div');
+  const build = () => {
+    const L = r.L, p = r.partner, calc = r.calcPref || 'fc';
+    const ev = keys => {
+      const x = evalTrade(L, p, keys, r.getKeys), v = tradeValue(L, x);
+      let edge = null; try { edge = calcEdge(L, x.give, x.get, calc); } catch {}
+      let pa = null; try { pa = pAccept(L, p, x).p; } catch {}
+      return { keys, give: x.give, net: v.total, edge, pa };
+    };
+    const byTat = (a, b) => (a.tat || 0) - (b.tat || 0);
+    let open = r.give.filter(a => !a.pick);
+    if (!open.length || open.length === r.give.length) open = r.give.length > 1 ? [...r.give].sort(byTat).slice(1) : r.give;
+    const extra = [...r.give.filter(a => !open.includes(a)), ...teamAssets(L, L.me).filter(a => a.pick && !r.giveKeys.includes(a.key) && +a.key.split(':')[2] >= 2)].sort(byTat);
+    const opener = ev(open.map(a => a.key));
+    let fair = opener;
+    for (const a of extra) { if ((fair.edge ?? 0) >= 0 || fair.keys.length >= open.length + 2) break; fair = ev([...fair.keys, a.key]); }
+    const likely = ev(r.giveKeys);
+    const seen = new Set(), rows = [];
+    for (const [label, x] of [['Opener', opener], ['Fair', fair], ['Likely yes', likely]]) { const k = [...x.keys].sort().join(); if (seen.has(k)) continue; seen.add(k); rows.push([label, x]); }
+    const calcName = { fc: 'FantasyCalc', ktc: 'KeepTradeCut', dp: 'DynastyProcess', fp: 'FantasyPros' }[calc] || calc;
+    body.replaceChildren(h('table', { class: 'small', style: { width: '100%', marginTop: '4px' } },
+      h('thead', {}, h('tr', {}, ['', 'You send', 'Net to you', `Him on ${calcName}`, 'Yes'].map(t => h('th', { style: { textAlign: 'left' } }, t)))),
+      h('tbody', {}, rows.map(([label, x]) => h('tr', {},
+        h('td', {}, h('b', {}, label)), h('td', {}, x.give.map(a => a.name.replace(/ \((proj|likely)[^)]*\)/, '').replace(/ \(own\)/, '')).join(' + ')),
+        h('td', { class: x.net >= 0 ? 'pos' : 'neg' }, f1(r.L, x.net)),
+        h('td', {}, x.edge == null ? '–' : `${x.edge >= 0 ? '+' : ''}${Math.round(x.edge * 100)}%`),
+        h('td', {}, x.pa == null ? '–' : `${Math.round(x.pa * 100)}%`))))),
+      h('div', { class: 'muted small', style: { marginTop: '4px' } }, 'Send the opener first; step up only if he declines. Him on his calculator: + means he comes out ahead.'));
+  };
+  return h('details', { style: { marginTop: '4px' }, ontoggle: e => { if (e.target.open && !body.childNodes.length) build(); } }, h('summary', { class: 'small' }, 'Negotiation ladder'), body);
 }
 
 export async function detectAccepted() {
