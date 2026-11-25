@@ -313,9 +313,7 @@ export function suggestions(L, { embedded = false } = {}) {
   if (embedded) {
     // league page: suggestions first, the extras folded away underneath
     { const rq = requestsPanel(L, run); if (rq) box.append(rq); }
-    box.append(blockPanel(L));
   } else {
-    box.insertBefore(blockPanel(L), box.firstChild);
     box.insertBefore(gapsPanel(L, run), box.firstChild);
     { const rq = requestsPanel(L, run); if (rq) box.insertBefore(rq, box.firstChild); }
     box.insertBefore(planPanel(L, { compact: true }), box.firstChild);
