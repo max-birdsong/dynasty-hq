@@ -335,7 +335,13 @@ export function tradeValue(L, r, exact = null) {
 }
 
 // Sanderson: rankings aren't a price list; every trade should serve a goal. Your goals come from the league plan.
+// tear-down league: out of it (or title odds not worth protecting) with a bottom-half roster
+export function isTeardown(L, plan = teamPlan(L)) {
+  const t = L.me; if (!t || !plan) return false;
+  return ((t.playoff ?? 0) < 0.05 || (t.title ?? 0) < 0.04) && (plan.dynRank || 0) > L.teams.length / 2;
+}
 export function myGoals(L, plan) {
+  if (isTeardown(L, plan)) return [{ id: 'teardown', label: 'Tear down: players for picks and youth' }];
   const t = L.me, g = [];
   // shedding points: holes are the point, not a problem; every point you send away improves your own pick
   if (plan.tanking && plan.ownFirst) g.push({ id: 'shed', label: L.draftOrder === 'maxpf' ? 'Shed points (max PF decides your pick)' : 'Shed points (better pick)' });
@@ -360,6 +366,7 @@ export function goalsMet(L, r, goals) {
     else if (g.id === 'shed' && dReg < -2) met.push(g);
     else if (g.id === 'younger' && r.mix.future > 300 && (ag == null || av == null || ag < av - 1.5)) met.push(g);
     else if (g.id === 'picks' && r.mix.picks > 300) met.push(g);
+    else if (g.id === 'teardown' && !r.give.some(a => a.pick) && (r.mix.picks > 300 || (r.mix.future > 300 && (ag == null || av == null || ag < av - 1.5)))) met.push(g);
     else if (g.id === 'window' && (r.value?.tat ?? r.tatGain) > 300 && (r.sim ? r.sim.me[1].title - r.sim.me[0].title >= -0.02 : (r.value?.now ?? 0) >= -0.02 * (L.plan?.TITLE || 0))) met.push(g);
   }
   // the partner's side: contenders want points, rebuilders want picks and youth
@@ -378,6 +385,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
   if (!L.me) return [];
   const S = settings(), R = S.rules;
   const plan = teamPlan(L);
+  const TD = isTeardown(L, plan);
   const untouch = new Set(S.untouchable.map(String));
   const tg = new Set(S.targets.map(String));
   const po = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) po.push(w);
@@ -452,6 +460,8 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
           const [lo, hi] = [...t].sort((x, y) => (x.tat || 0) - (y.tat || 0));
           if (!lo.pick && (lo.tat || 0) < Math.max(700, 0.15 * (hi.tat || 0)) && !(focus && lo.key === focus.key)) { t = [hi]; trimmed = true; }
         }
+        // tear-down: never spend picks, and only take back picks or young players
+        if (TD && (g.some(a => a.pick) || t.some(a => !a.pick && (a.age || 30) > (a.pos === 'QB' ? 26 : 24.5)))) continue;
         const ck = g.map(a => a.key).sort().join(',') + '>' + t.map(a => a.key).sort().join(',');
         if (seenC.has(ck)) continue;
         // a tanker dumping points takes a little under market (but piles of pieces still don't add up to a star)
@@ -533,7 +543,9 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     if (r.type.id === 'preference') r.pureValue = true;
     if (!T) r.score += (r.goals.length ? R2.minTatGain : 0) + (r.theirGoal ? R2.minTatGain / 2 : 0);
     r.pureValue = r.pureValue || !r.goals.length;
+    if (TD && !r.goals.length) r._drop = true;
   }
+  for (let i = out.length - 1; i >= 0; i--) if (out[i]._drop) out.splice(i, 1);
   if (!T && !focus) for (let i = out.length - 1; i >= 0; i--) if (out[i].pureValue && out[i].value.total < 2 * R2.minTatGain) out.splice(i, 1);
   out.sort((a, b) => b.score - a.score);
   // the best few get a full season simulation, so their this-season value is exact rather than estimated

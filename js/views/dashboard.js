@@ -12,7 +12,7 @@ const call = (tag, cls, main, sub) => h('div', { style: { display: 'flex', gap: 
   h('div', { style: { minWidth: 0 } }, h('div', { style: { fontSize: '13.5px', fontWeight: '600', lineHeight: '1.3' } }, main), sub ? h('div', { class: 'muted', style: { fontSize: '12px', marginTop: '2px' } }, sub) : ''));
 const last = a => M.players[a.id]?.last_name || a.name.split(' ').slice(-1)[0];
 // players losing the most value before you'd use them (a retool keeps the young core)
-const faders = (L, full) => teamAssets(L, L.me).filter(a => !a.pick && a.id && (a.tat || 0) >= 400 && (full ? (a.age || 0) >= 24.5 : (a.age || 0) >= 25.5))
+const faders = (L, full) => teamAssets(L, L.me).filter(a => !a.pick && a.id && (a.tat || 0) >= 400 && (full ? (a.age || 0) >= (a.pos === 'QB' ? 28 : 24.5) : (a.age || 0) >= 25.5))
   .map(a => ({ a, k: keepRate(a.pos, a.age || 26, (a.fc || 0) >= studLine(L)) })).map(x => ({ ...x, lose: x.a.tat * (1 - x.k) }))
   .filter(x => x.k < (full ? 0.97 : 0.75)).sort((x, y) => y.lose - x.lose).slice(0, 3);
 const short = n => { const m = n.match(/^(\d{4}) (1st|2nd|3rd|4th) \((?:proj|likely) #(\d+)\)/); return m ? `${m[1]} ${m[2]} (#${m[3]})` : n.replace(/ \(.*\)$/, ''); };
