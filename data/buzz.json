@@ -1945,19 +1945,17 @@
 "guid": "e2a3e5d0-e783-11f1-8473-1b2cc25ad7b4"
 }
 ],
-"updated": "2026-11-24T14:52:29.045966+00:00",
+"updated": "2026-11-25T14:20:53.846977+00:00",
 "log": [
-"run 2026-11-24T14:52 model claude-haiku-5-5",
+"run 2026-11-25T14:20 model claude-haiku-5-5",
 "Fantasy Footballers Dynasty: 190 episodes in feed",
-"Fantasy Footballers Dynasty | Way Too Early Look at the 2027 Rookie Class - Dynasty Fantas: 60 MB, 1305 segments in 233s",
-"  -> 2 takes kept of 5",
-"FantasyPros Dynasty: 421 episodes in feed",
-"Dynasty Nerds: 978 episodes in feed",
-"Dynasty Nerds | Biggest Risers and Fallers From Week 11 | Dynasty Fantasy Fo: 72 MB, 1134 segments in 196s",
-"  -> 2 takes kept of 18",
-"Fantasy Football Today Dynasty: 261 episodes in feed",
+"FantasyPros Dynasty: 422 episodes in feed",
+"FantasyPros Dynasty | Dynasty Trade Deadline Targets: 3 Win-Now Buys & 3 Players t: failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
+"Dynasty Nerds: 979 episodes in feed",
+"Dynasty Nerds | Our Dynasty Thanksgiving | Dynasty Fantasy Football Podcast : failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
+"Fantasy Football Today Dynasty: 262 episodes in feed",
+"Fantasy Football Today Dynasty | BEST Dynasty Trade Targets for Championship Contenders!: failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
 "Under The Helmet: 600 episodes in feed",
-"Under The Helmet | Sam Darnold and Micah Parsons Back? Week 12 Scoville Scale P: 39 MB, 618 segments in 123s",
-"  -> 0 takes kept of 2"
+"Under The Helmet | Thanksgiving, Giving Thanks for Fantasy, Jonah Coleman with : failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'"
 ]
 }
