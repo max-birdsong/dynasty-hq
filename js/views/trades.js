@@ -1,4 +1,5 @@
-import { M, leagueById, teamAssets, asset, isPick } from '../model.js';
+import { M, leagueById, teamAssets, asset, isPick, playerWeekPts, posOf } from '../model.js';
+import { bestLineup } from '../lineup.js';
 import { state, logTrade, updateTrade, deleteTrade, settings, save, rawRules, setRules, rulesOf } from '../state.js';
 import { evalTrade, simDelta, suggest, tradeValue, calcEdge, calcValue } from '../trade.js';
 import { teamPlan } from '../plan.js';
@@ -391,6 +392,7 @@ function suggestionCard(r) {
     h('div', { class: 'small', style: { marginTop: '8px' } },
       `FC ${r.partner.owner} ${sgn(r.fc.partnerMargin)}`, r.me ? ` · your pts/wk ${sgn(r.me.rosAfter - r.me.rosBefore, 1)} now, ${sgn(r.me.poAfter - r.me.poBefore, 1)} playoffs` : '',
       r.them ? ` · theirs ${sgn(r.them.rosAfter - r.them.rosBefore, 1)}` : ''),
+    r.me ? lineupProof(r) : '',
     h('div', { class: 'small muted', style: { marginTop: '4px' } }, h('b', {}, r.mixLabel), ` · picks ${sgn(r.mix.picks)}, this season ${sgn(r.mix.now)}, future years ${sgn(r.mix.future)}`),
     r.flags.filter(f => f.warn).map(f => h('div', { class: 'small warn' }, '⚠️ ' + f.msg)),
     r.pAccept != null ? h('div', { class: 'small', style: { cursor: 'pointer' }, title: reasons(r.acceptF).join('\n'), onclick: () => toast(reasons(r.acceptF).join(' · ')) },
@@ -487,6 +489,33 @@ function hisAskText({ t, same, fcDiff }) {
   const outcome = { rejected: 'you declined', countered: 'you countered', withdrawn: 'he withdrew it', ignored: 'it expired', received: 'still open' }[t.status] || t.status;
   if (same) return `He offered exactly this on ${d} (${outcome}). He should still say yes.`;
   return `His own offer on ${d}: ${what} (${outcome}). This one gives him ${Math.abs(Math.round(fcDiff)).toLocaleString()} FC ${fcDiff >= 0 ? 'more' : 'less'} than he asked for.`;
+}
+
+// The projection behind "your pts/wk": your best lineup before and after, slot by slot, so you can sanity-check it
+const SLOTN = { SUPER_FLEX: 'SF', FLEX: 'FLEX', REC_FLEX: 'W/T', WRRB_FLEX: 'W/R' };
+function lineupProof(r) {
+  const L = r.L, body = h('div');
+  const build = () => {
+    const po = []; for (let w = L.playoffStart; w <= M.lastWeek; w++) po.push(w);
+    const reg = L.regWeeks?.length ? L.regWeeks : po;
+    const avg = (ids, weeks) => { const o = {}; for (const id of ids) o[id] = weeks.reduce((s, w) => s + playerWeekPts(L, id, w), 0) / Math.max(1, weeks.length); return o; };
+    const table = (weeks, label) => {
+      const before = L.me.players, after = r.me.ids, all = [...new Set([...before, ...after])], pts = avg(all, weeks);
+      const A = bestLineup(before, pts, posOf, L.slots).lineup, B = bestLineup(after, pts, posOf, L.slots).lineup;
+      const nm = id => id ? (M.players[id]?.full_name || id) : '–', pp = id => id ? (pts[id] || 0).toFixed(1) : '0.0';
+      const rows = A.map(([slot, a], i) => ({ slot: SLOTN[slot] || slot, a, b: B[i]?.[1] })).filter(x => x.a !== x.b);
+      const tot = ids => ids.reduce((s, [, id]) => s + (id ? pts[id] || 0 : 0), 0);
+      const inn = new Set(r.get.map(x => x.id)), out = new Set(r.give.map(x => x.id));
+      return h('div', { style: { marginTop: '6px' } }, h('div', { class: 'small' }, h('b', {}, label), ` · lineup ${tot(A).toFixed(1)} → ${tot(B).toFixed(1)} (${sgn(tot(B) - tot(A), 1)})`),
+        rows.length ? h('table', { class: 'small', style: { width: '100%', marginTop: '2px' } }, h('tbody', {}, rows.map(x => h('tr', {},
+          h('td', { class: 'muted', style: { width: '42px' } }, x.slot),
+          h('td', { class: out.has(x.a) ? 'neg' : '' }, `${nm(x.a)} ${pp(x.a)}`), h('td', { class: 'muted' }, '→'),
+          h('td', { class: inn.has(x.b) ? 'pos' : '' }, `${nm(x.b)} ${pp(x.b)}`))))) : h('div', { class: 'small muted' }, 'No lineup changes.'));
+    };
+    body.replaceChildren(table(po, `Playoffs (wk ${L.playoffStart}-${M.lastWeek})`), table(reg, 'Rest of regular season'),
+      h('div', { class: 'small muted', style: { marginTop: '4px' } }, 'Average projected points per week for each player over those weeks; red leaves, green arrives, others shift slots.'));
+  };
+  return h('details', { style: { marginTop: '4px' }, ontoggle: e => { if (e.target.open && !body.childNodes.length) build(); } }, h('summary', { class: 'small' }, 'Show the lineup change'), body);
 }
 
 export async function detectAccepted() {

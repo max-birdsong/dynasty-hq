@@ -1,4 +1,5 @@
 import { h, fmt, sgn, pct, cls } from './util.js';
+import { settings } from './state.js';
 
 // cols: [{key, label, n:true(numeric), fmt:(v,row)=>node|string, sort:(row)=>val, title}]
 export function table(cols, rows, { rowClass, onRow, sortKey, desc = true, id } = {}) {
@@ -29,7 +30,7 @@ export const pctBar = v => h('div', { class: 'cell-bar' }, pct(v), h('div', { cl
 
 export function assetLine(a, extra) {
   return h('div', { class: 'asset' },
-    h('span', { class: 'nm' }, posB(a.pos), a.name, a.age ? h('span', { class: 'muted small' }, ' ' + a.age.toFixed(1)) : '', a.inj ? h('span', { class: 'neg small' }, ' ' + a.inj) : ''),
+    h('span', { class: 'nm' }, posB(a.pos), a.name, a.age ? h('span', { class: 'muted small' }, ' ' + a.age.toFixed(1)) : '', a.inj ? h('span', { class: 'neg small', title: settings().seasonOut?.[a.id] || '' }, ' ' + a.inj + (a.id && settings().seasonOut?.[a.id] ? ' · out for season' : '')) : ''),
     h('span', { class: 'muted small num' }, extra ?? `FC ${fmt(a.fc)} · TAT ${fmt(a.tat)}`));
 }
 

@@ -227,7 +227,7 @@ function titleSwingPanel(L) {
     const top = res.slice(0, 3);
     box.replaceChildren(
       h('div', { class: 'row spread' }, h('h3', { style: { margin: 0 } }, 'Could you move your title odds?'), h('a', { href: `#/trades/${L.id}`, class: 'small' }, 'All trades →')),
-      top.length ? h('div', { class: 'muted small', style: { margin: '4px 0 8px' } }, `Best realistic swings from ${pct(L.me.title)} now. Long-term cost is Sanderson value you give up.`) : '',
+      top.length ? h('div', { class: 'muted small', style: { margin: '4px 0 8px' } }, `Best realistic swings from ${pct(L.me.title)} now. Values are what you gain (negative means it costs you). Trades he's very unlikely to accept are left out.`) : '',
       top.length ? h('div', {}, top.map(r => h('div', { style: { padding: '6px 0', borderTop: '1px solid var(--line, #eee)' } },
         h('div', { class: 'row spread' }, h('b', {}, `${r.dTitle >= 0 ? '+' : ''}${(r.dTitle * 100).toFixed(1)}% title`), h('span', { class: 'small muted' }, `${r.partner.owner} · ~${Math.round((r.pAccept || 0) * 100)}% he accepts`)),
         h('div', { class: 'small' }, `Send ${r.give.map(a => a.name).join(' + ')} · get ${r.get.map(a => a.name).join(' + ')}`),
@@ -242,7 +242,7 @@ function titleSwingPanel(L) {
       if (!M.calcs) M.calcs = await fetch('data/calcs.json', { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null);
       await import('../affinity.js').then(a => a.loadAffinity()).catch(() => {});
       const { suggest } = await import('../trade.js');
-      const res = suggest(L, { mode: 'title' }).sort((a, b) => b.score - a.score);
+      const res = suggest(L, { mode: 'title' }).filter(r => (r.pAccept ?? 1) >= 0.05).sort((a, b) => b.score - a.score);
       swingCache.set(fp(), res); show(res);
     } catch (e) { box.replaceChildren(h('div', { class: 'err-box' }, 'Could not run the search: ' + e.message)); }
   };

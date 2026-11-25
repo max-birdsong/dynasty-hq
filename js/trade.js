@@ -205,7 +205,9 @@ export function checkRules(L, partner, r) {
   }
   // what the partner thinks of the players moving (portfolio across shared leagues)
   f.push(...affinityFlags(L, partner, r));
-  if (r.give.some(a => a.id && M.players[a.id]?.injury_status === 'IR')) f.push({ info: true, msg: 'IR players count as out for the rest of the season here (Sleeper projects them at zero). If he’s due back before the playoffs, he’s worth more to a contender than shown.' });
+  const seasonOut = settings().seasonOut || {};
+  const irUnknown = r.give.filter(a => a.id && M.players[a.id]?.injury_status === 'IR' && !seasonOut[a.id]);
+  if (irUnknown.length) f.push({ info: true, msg: `${irUnknown.map(a => a.name).join(', ')}: on IR, counted as out for the rest of the season (Sleeper projects zero). If he's due back before the playoffs, he's worth more to a contender than shown.` });
   // "Buying at the Deadline": protect the window and the rebuild pick
   const me = L.me, plan = L.plan;
   if (me && r.tatGain < 0) {
