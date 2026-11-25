@@ -110,15 +110,23 @@ function wonIn(nick, s) {
   const e = ledger()[nick]?.seasons?.[s.season] || {};
   return e.won != null && e.won !== '' ? +e.won : autoWin(s, e.paid != null && e.paid !== '' ? +e.paid : buyInOf(nick));
 }
-function netOf(nick, seasons) {
-  const m = ledger()[nick] || {};
-  let paid = 0, won = 0;
+// a season only counts once it's decided; the one in progress is shown as a projection instead
+const paidIn = (nick, s) => { const e = ledger()[nick]?.seasons?.[s.season] || {}; return e.paid != null && e.paid !== '' ? +e.paid : buyInOf(nick); };
+// expected payout this season from the simulator: title, runner-up (reached the final but lost) and, as a rough
+// stand-in for 3rd (the sim doesn't track it), the same chance as finishing 2nd
+function expectedWin(nick, s, L) {
+  const me = L?.me; if (!me || !s.current) return 0;
+  const b = paidIn(nick, s), rest = (s.n - 1) * b, t = me.title || 0, second = Math.max(0, (me.final || 0) - t);
+  return t * rest * 0.7 + second * rest * 0.3 + second * b;
+}
+function netOf(nick, seasons, L) {
+  let paid = 0, won = 0, projPaid = 0, projWon = 0;
   for (const s of seasons) {
-    const e = m.seasons?.[s.season] || {};
-    paid += e.paid != null && e.paid !== '' ? +e.paid : buyInOf(nick);
+    if (s.current) { projPaid += paidIn(nick, s); projWon += expectedWin(nick, s, L); continue; }
+    paid += paidIn(nick, s);
     won += wonIn(nick, s);
   }
-  return { paid, won, net: won - paid, set: paid > 0 };
+  return { paid, won, net: won - paid, proj: projWon - projPaid, projWon, projPaid, set: paid > 0 };
 }
 function setMoney(nick, season, key, val) {
   const m = (ledger()[nick] ||= { seasons: {} });
@@ -160,9 +168,9 @@ function render(data) {
   const W = all.reduce((a, s) => a + s.wins, 0), Lo = all.reduce((a, s) => a + s.losses, 0), T = all.reduce((a, s) => a + s.ties, 0);
   const titles = done.filter(s => s.title), finals = done.filter(s => s.final), po = done.filter(s => s.playoffs);
   const avgFinish = done.length ? done.reduce((a, s) => a + s.finish, 0) / done.length : null;
-  const money$ = data.map(d => netOf(d.nick, d.seasons));
+  const money$ = data.map(d => netOf(d.nick, d.seasons, d.L));
   const anyMoney = money$.some(m => m.set);
-  const net = money$.reduce((a, m) => a + m.net, 0);
+  const net = money$.reduce((a, m) => a + m.net, 0), proj = money$.reduce((a, m) => a + m.proj, 0);
 
   // ---- headline numbers ----
   wrap.append(h('div', { class: 'kpis' },
@@ -171,7 +179,7 @@ function render(data) {
     kpi(`${po.length}/${done.length}`, 'Playoff trips', done.length ? pct(po.length / done.length) : ''),
     kpi(`${W}-${Lo}${T ? '-' + T : ''}`, 'All-time record', pct((W + T / 2) / Math.max(1, W + Lo + T))),
     kpi(avgFinish ? avgFinish.toFixed(1) : '–', 'Average finish'),
-    kpi(anyMoney ? h('span', { class: cls(net) }, money(net)) : '–', 'Money, all time', anyMoney ? '' : 'add buy-ins below')));
+    kpi(anyMoney ? h('span', { class: cls(net) }, money(net)) : '–', 'Money, all time', anyMoney ? `finished seasons · ≈${money(net + proj)} projected after ${M.season}` : 'add buy-ins below')));
 
   // ---- trophy shelf ----
   const medals = done.filter(s => s.place && s.place <= 3).sort((a, b) => a.place - b.place || b.season - a.season);
@@ -251,7 +259,7 @@ function moneyCell(nick, s) {
 function ledgerCard(data, money$, redraw) {
   const totalPaid = money$.reduce((a, m) => a + m.paid, 0), totalWon = money$.reduce((a, m) => a + m.won, 0);
   const card = h('div', { class: 'card' }, h('h3', {}, 'The money'),
-    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, 'Payouts follow your standard: 3rd gets the buy-in back, the rest of the pot splits 70/30 between 1st and 2nd. Buy-ins are your rough numbers; type over any of them, or over a season’s winnings in the table above, when the real amount was different. This season’s buy-in is counted as paid.'));
+    h('div', { class: 'muted small', style: { marginBottom: '8px' } }, 'Payouts follow your standard: 3rd gets the buy-in back, the rest of the pot splits 70/30 between 1st and 2nd. Buy-ins are your rough numbers; type over any of them, or over a season’s winnings in the table above, when the real amount was different. Finished seasons only; this season’s column is the simulator’s expectation (buy-in against title and runner-up odds).'));
   const rows = data.map((d, i) => {
     const m = money$[i];
     return h('tr', {},
@@ -261,12 +269,14 @@ function ledgerCard(data, money$, redraw) {
       h('td', { class: 'n' }, money(m.paid)),
       h('td', { class: 'n' }, money(m.won)),
       h('td', { class: 'n' }, h('b', { class: cls(m.net) }, money(m.net))),
-      h('td', { class: 'n' }, m.paid ? pct(m.net / m.paid) : '–'));
+      h('td', { class: 'n' }, m.paid ? pct(m.net / m.paid) : '–'),
+      h('td', { class: 'n' }, m.projPaid ? h('span', { class: cls(m.proj) + ' small', title: `Buy-in ${money(m.projPaid)}, expected winnings ${money(m.projWon)}` }, `≈${money(m.proj)}`) : h('span', { class: 'muted' }, '–')));
   });
   card.append(h('div', { class: 'tablewrap' }, h('table', {},
-    h('thead', {}, h('tr', {}, ['League', 'Buy-in / yr', 'Seasons', 'Paid', 'Won', 'Net', 'ROI'].map((x, i) => h('th', { class: i ? 'n' : '' }, x)))),
+    h('thead', {}, h('tr', {}, ['League', 'Buy-in / yr', 'Seasons', 'Paid', 'Won', 'Net', 'ROI', `${M.season} projected`].map((x, i) => h('th', { class: i ? 'n' : '' }, x)))),
     h('tbody', {}, rows, h('tr', { class: 'me' }, h('td', {}, 'Total'), h('td', {}), h('td', {}), h('td', { class: 'n' }, money(totalPaid)), h('td', { class: 'n' }, money(totalWon)),
-      h('td', { class: 'n' }, h('b', { class: cls(totalWon - totalPaid) }, money(totalWon - totalPaid))), h('td', { class: 'n' }, totalPaid ? pct((totalWon - totalPaid) / totalPaid) : '–'))))));
+      h('td', { class: 'n' }, h('b', { class: cls(totalWon - totalPaid) }, money(totalWon - totalPaid))), h('td', { class: 'n' }, totalPaid ? pct((totalWon - totalPaid) / totalPaid) : '–'),
+      h('td', { class: 'n' }, (() => { const p = money$.reduce((a, m) => a + m.proj, 0); return h('span', { class: cls(p) }, `≈${money(p)}`); })()))))));
   return card;
 }
 
@@ -319,10 +329,9 @@ function yearCard(data) {
   const years = {};
   for (const d of data) for (const s of d.seasons) {
     const y = (years[s.season] ||= { season: s.season, leagues: 0, done: 0, paid: 0, won: 0, titles: 0, podiums: 0, playoffs: 0, finish: 0, w: 0, l: 0, current: s.current });
-    const e = ledger()[d.nick]?.seasons?.[s.season] || {};
     y.leagues++; y.w += s.wins; y.l += s.losses;
-    y.paid += e.paid != null && e.paid !== '' ? +e.paid : buyInOf(d.nick);
-    y.won += wonIn(d.nick, s);
+    y.paid += paidIn(d.nick, s);
+    y.won += s.current ? expectedWin(d.nick, s, d.L) : wonIn(d.nick, s);
     if (s.done) { y.done++; y.finish += s.finish; if (s.playoffs) y.playoffs++; if (s.title) y.titles++; if (s.place && s.place <= 3) y.podiums++; }
   }
   const rows = Object.values(years).sort((a, b) => a.season - b.season);
@@ -333,7 +342,7 @@ function yearCard(data) {
     h('div', { style: { width: '1px', height: '14px', background: 'var(--line)' } }),
     h('div', { style: { width: '80px' } }, v > 0 ? h('i', { style: { display: 'block', height: '12px', width: Math.round(80 * v / maxAbs) + 'px', background: 'var(--pos)', borderRadius: '0 3px 3px 0' } }) : ''));
   const tr = rows.map(y => {
-    const net = y.won - y.paid; cum += net;
+    const net = y.won - y.paid; if (!y.current) cum += net;
     return h('tr', { class: y.current ? 'me' : '' },
       h('td', {}, y.season, y.current ? h('span', { class: 'muted small' }, ' (in progress)') : ''),
       h('td', { class: 'n' }, y.leagues),
@@ -342,14 +351,14 @@ function yearCard(data) {
       h('td', { class: 'n' }, y.titles ? '🏆'.repeat(y.titles) : y.podiums ? `${y.podiums} podium${y.podiums > 1 ? 's' : ''}` : y.done ? '–' : '…'),
       h('td', { class: 'n' }, y.done ? (y.finish / y.done).toFixed(1) : '…'),
       h('td', { class: 'n' }, money(y.paid)),
-      h('td', { class: 'n' }, y.current ? 'tbd' : money(y.won)),
-      h('td', { class: 'n' }, h('b', { class: cls(net) }, money(net))),
-      h('td', { class: 'n' }, y.current ? '–' : pct(net / Math.max(1, y.paid))),
+      h('td', { class: 'n' }, y.current ? `≈${money(y.won)}` : money(y.won)),
+      h('td', { class: 'n' }, h('b', { class: cls(net) }, (y.current ? '≈' : '') + money(net))),
+      h('td', { class: 'n' }, (y.current ? '≈' : '') + pct(net / Math.max(1, y.paid))),
       h('td', {}, y.current ? '' : bar(net)),
-      h('td', { class: 'n' }, h('span', { class: cls(cum) }, money(cum))));
+      h('td', { class: 'n' }, y.current ? h('span', { class: cls(cum + net) + ' small', title: 'If this season pays out what the simulator expects' }, `≈${money(cum + net)}`) : h('span', { class: cls(cum) }, money(cum))));
   });
   return h('div', { class: 'card' }, h('h3', {}, 'The journey, year by year'),
-    h('div', { class: 'muted small', style: { marginBottom: '6px' } }, 'All your leagues added up for each season. Running total is your all-time net after that year. This season shows only the buy-ins until it’s decided.'),
+    h('div', { class: 'muted small', style: { marginBottom: '6px' } }, 'All your leagues added up for each season. Running total is your all-time net after that year. This season isn’t counted yet: its row is a projection, buy-ins against what the simulator expects you to win (title and runner-up odds; 3rd is a rough estimate).'),
     h('div', { class: 'tablewrap' }, h('table', {},
       h('thead', {}, h('tr', {}, ['Season', 'Leagues', 'Record', 'Playoffs', 'Titles', 'Avg finish', 'Paid', 'Won', 'Net', 'ROI', '', 'Running total'].map((x, i) => h('th', { class: i && i !== 10 ? 'n' : '' }, x)))),
       h('tbody', {}, tr))));
