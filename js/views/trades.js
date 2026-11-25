@@ -549,11 +549,19 @@ function ladderBox(r) {
     if (!open.length || open.length === r.give.length) open = r.give.length > 1 ? [...r.give].sort(byTat).slice(1) : r.give;
     const extra = [...r.give.filter(a => !open.includes(a)), ...teamAssets(L, L.me).filter(a => a.pick && !r.giveKeys.includes(a.key) && +a.key.split(':')[2] >= 2)].sort(byTat);
     const opener = ev(open.map(a => a.key));
+    // fair: the cheapest single add-on that makes it even for him, else the cheapest pair, else the closest we got
     let fair = opener;
-    for (const a of extra) { if ((fair.edge ?? 0) >= 0 || fair.keys.length >= open.length + 2) break; fair = ev([...fair.keys, a.key]); }
+    if ((opener.edge ?? 0) < 0) {
+      let best = null;
+      for (const a of extra.slice(0, 8)) { const x = ev([...opener.keys, a.key]); if ((x.edge ?? -1) >= 0) { best = x; break; } if (!best || (x.edge ?? -1) > (best.edge ?? -1)) best = x; }
+      if ((best?.edge ?? -1) < 0) for (let i = 0; i < Math.min(5, extra.length); i++) for (let j = i + 1; j < Math.min(5, extra.length); j++) {
+        const x = ev([...opener.keys, extra[i].key, extra[j].key]); if ((x.edge ?? -1) >= 0 && (best.edge ?? -1) < 0) best = x;
+      }
+      if (best) fair = best;
+    }
     const likely = ev(r.giveKeys);
     const seen = new Set(), rows = [];
-    for (const [label, x] of [['Opener', opener], ['Fair', fair], ['Likely yes', likely]]) { const k = [...x.keys].sort().join(); if (seen.has(k)) continue; seen.add(k); rows.push([label, x]); }
+    for (const [label, x] of [['Opener', opener], [(fair.edge ?? -1) >= 0 ? 'Fair' : 'Closer', fair], ['Likely yes', likely]]) { const k = [...x.keys].sort().join(); if (seen.has(k)) continue; seen.add(k); rows.push([label, x]); }
     const calcName = { fc: 'FantasyCalc', ktc: 'KeepTradeCut', dp: 'DynastyProcess', fp: 'FantasyPros' }[calc] || calc;
     body.replaceChildren(h('table', { class: 'small', style: { width: '100%', marginTop: '4px' } },
       h('thead', {}, h('tr', {}, ['', 'You send', 'Net to you', `Him on ${calcName}`, 'Yes'].map(t => h('th', { style: { textAlign: 'left' } }, t)))),
