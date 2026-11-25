@@ -134,3 +134,11 @@ details > summary { list-style: revert; }
 .vbar::after { content: ''; position: absolute; left: 50%; top: -5px; width: 1px; height: 12px; background: var(--muted); }
 .vbar i { position: absolute; top: -5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--accent); }
 @media (max-width: 600px) { .vrow { grid-template-columns: 110px 1fr 90px; } }
+
+/* league card call */
+.lcall { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; font-size: 13px; line-height: 1.35; }
+.lcall-t { color: var(--text, inherit); }
+.call { flex: none; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; color: #fff; margin-top: 1px; }
+.call.buy { background: #2fa36b; } .call.hold { background: #2f7dd1; } .call.retool { background: #d1a12f; } .call.teardown { background: #d1562f; }
+.lcard .stats { margin-bottom: 10px; }
+.lcard .lfoot { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }

@@ -96,7 +96,7 @@ export default function dashboard() {
     const e = S.history[L.id] || {}, prev = Object.keys(e).map(Number).filter(w => w < M.week && e[w]?.eq3 != null).sort((a, b) => a - b).at(-1);
     const was = prev != null ? e[prev].eq3 : null, d = was == null ? 0 : L.eq.mine - was;
     const yrs = `${L.season}–${String(+L.season + 3).slice(2)}`;
-    return h('div', { class: 'small', style: { marginTop: '6px' }, title: `Expected titles ${yrs}: ${L.eq.curve.map(x => Math.round(x * 100) + '%').join(' / ')}. League average ${L.eq.avg.toFixed(2)}.` },
+    return h('div', { class: 'small lfoot', title: `Expected titles ${yrs}: ${L.eq.curve.map(x => Math.round(x * 100) + '%').join(' / ')}. League average ${L.eq.avg.toFixed(2)}.` },
       h('span', { class: 'muted' }, `Titles ${yrs} `), h('b', {}, L.eq.mine.toFixed(2)), h('span', { class: 'muted' }, ` · #${L.eq.rank} · avg ${L.eq.avg.toFixed(2)}`),
       Math.abs(d) >= 0.02 ? h('span', { class: d > 0 ? 'pos' : 'neg', title: `was ${was.toFixed(2)} last week` }, d > 0 ? ' ▲' : ' ▼') : '');
   };
@@ -104,25 +104,24 @@ export default function dashboard() {
   const actionLine = L => {
     const p = L.plan, t = L.me, n = L.teams.length; if (!p) return h('div', { class: 'small muted' }, 'Working out the plan…');
     const r = p.dynRank, top = r <= n / 2, base1 = L.fc.picks.get(`${+L.season + 1} 1st`) || 3000;
-    const line = (tag, cls, text) => h('div', { class: 'small', style: { marginTop: '2px' } }, h('span', { class: 'tag ' + cls, style: { marginRight: '6px' } }, tag), text);
+    const line = (tag, cls, text) => h('div', { class: 'lcall' }, h('span', { class: 'call ' + cls }, tag), h('span', { class: 'lcall-t' }, text));
     if ((t.playoff ?? 0) < 0.05 || (t.title ?? 0) < 0.04) {
       // which of your own future 1sts a bad record improves, and how the draft order is set
       const ny = +L.season + 1, own1 = t.picks.includes(`k:${ny}:1:${t.rid}`), own2 = t.picks.includes(`k:${ny + 1}:1:${t.rid}`);
       const by = L.draftOrder === 'record' ? 'record' : 'max PF';
-      const pickNote = own1 ? ` You own your ${ny} 1st, so every loss now moves it up (order by ${by}).`
-        : own2 ? ` You don't own your ${ny} 1st, but you do own your ${ny + 1}: a weak ${ny} season makes it a top pick (order by ${by}), so sell anyone who'd score for you in ${ny}, not just the old guys.` : '';
-      return top ? line('Reload', 'mid', `${(t.playoff ?? 0) < 0.05 ? 'Out this year' : `${odds(t.title)} title odds aren't worth protecting`}, but value ${r}/${n} is top half: sell what won't help in ${ny}, keep the core.${pickNote}`)
-        : line('Sell', 'tank', `${(t.playoff ?? 0) < 0.05 ? 'Out this year' : `${odds(t.title)} title odds aren't worth protecting`} and value ${r}/${n} is bottom half: turn vets into picks and young players.${pickNote}`);
+      const pickNote = own1 ? ` Losing helps: you own your ${ny} 1st.`
+        : own2 ? ` You own your ${ny + 1} 1st, so a weak ${ny} makes it a top pick: sell anyone who'd score for you in ${ny}, not just the old guys.` : '';
+      const why = (t.playoff ?? 0) < 0.05 ? 'Out this year' : `${odds(t.title)} title odds aren't worth protecting`;
+      return top ? line('Retool', 'retool', `${why}, but your roster is top half (${r}/${n}). Keep the core, sell what won't hold up for ${ny}, compete again next year.${pickNote}`)
+        : line('Tear down', 'teardown', `${why} and your roster is bottom half (${r}/${n}). Turn vets into picks and young players.${pickNote}`);
     }
     if (!L.swing) return h('div', { class: 'small muted' }, 'Checking title trades…');
     // a title trade only earns "Buy" if it pays for itself: title equity gained beats the long-term value given up
     const b = L.swing.top.find(x => x.dTitle >= 0.03 && x.tat + x.now >= 0);
-    if (b) return line('Buy', 'push', `${b.give.join(' + ')} for ${b.get.join(' + ')} (${b.partner}): +${(b.dTitle * 100).toFixed(0)}% title, net ${f1(L, b.tat + b.now)}, ~${Math.round(b.pAccept * 100)}% he accepts.`);
+    if (b) return line('Buy', 'buy', `${b.give.join(' + ')} for ${b.get.join(' + ')} (${b.partner}) adds ${(b.dTitle * 100).toFixed(0)}% title odds and is worth it long-term. About ${Math.round(b.pAccept * 100)}% he says yes.`);
     const near = L.swing.top.find(x => x.dTitle >= 0.03);
-    const nearTxt = near ? ` Best title trade (+${(near.dTitle * 100).toFixed(0)}%) costs more long-term than it adds (net ${f1(L, near.tat + near.now)}).` : '';
-    const per = p.TITLE * (p.sens?.titlePo || 0) / base1; // 1sts per playoff point a week
-    const farm = per >= 0.01 ? ` Take value trades that gain more than ${per.toFixed(2)} 1sts per playoff point/wk they cost.` : ' Take value trades freely; playoff points barely move your odds.';
-    return line('Hold', 'contend', `${near ? 'No title trade pays for itself' : `No trade moves your ${odds(t.title)} much`}, and value ${r}/${n} is ${top ? 'top half: keep competing.' : 'bottom half: play it out, retool after.'}${nearTxt}${farm}`);
+    const nearTxt = near ? ` The best one (+${(near.dTitle * 100).toFixed(0)}%) costs more than it's worth.` : '';
+    return line('Hold', 'hold', `${near ? 'No title trade pays for itself.' : `No trade moves your ${odds(t.title)} much.`}${nearTxt} ${top ? 'Keep competing' : 'Play it out, retool after'}, and take value trades that don't cost you playoff points.`);
   };
   // for Reload / Sell: the players losing the most value before you'd use them (Reload keeps the young core)
   const sellList = L => {
@@ -132,7 +131,7 @@ export default function dashboard() {
       .map(a => { const k = keepRate(a.pos, a.age || 26, (a.fc || 0) >= studLine(L)); return { a, lose: a.tat * (1 - k), k }; })
       .filter(x => x.k < (full ? 0.97 : 0.75)).sort((x, y) => y.lose - x.lose).slice(0, 3); // Reload: only players who won't hold up for next year
     if (!fade.length) return '';
-    return h('div', { class: 'small', style: { marginTop: '6px' } }, h('span', { class: 'muted' }, full ? 'Sell first: ' : 'Sell before they fade: '),
+    return h('div', { class: 'small', style: { marginTop: '6px' } }, h('b', {}, full ? 'Sell first: ' : 'Sell before they fade: '),
       fade.map((x, i) => [i ? ', ' : '', h('span', { title: `TAT ${Math.round(x.a.tat)}, keeps about ${Math.round(x.k * 100)}% of it by next season` }, `${(M.players[x.a.id]?.last_name || x.a.name.split(' ').slice(-1)[0])} (${(x.a.age || 0).toFixed(0)}, −${Math.round((1 - x.k) * 100)}%)`)]));
   };
   const keyLine = L => { const p = L.plan; if (!p) return 'Working out the plan…'; const l = p.lines.find(x => /^Deadline/.test(x)) || p.lines.find(x => /^(If you filled|Even with|Filling |Biggest hole|You don't own)/.test(x)); return l ? l.replace(/^Deadline: [A-Z]+[.,]\s*/, '').replace(/^./, c => c.toUpperCase()) : ''; };
@@ -140,9 +139,8 @@ export default function dashboard() {
     const p = L.plan, b = hist(L);
     return h('a', { class: 'lcard', href: '#/league/' + L.id },
       h('div', { class: 'row spread' }, h('b', { class: 'lname' }, L.nick), h('span', { class: 'muted small' }, `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`)),
-      h('div', { style: { margin: '4px 0 8px' } }, actionLine(L)),
-      h('div', { class: 'stats' }, stat(L.me.playoff, b?.playoff, 'playoffs'), stat(L.me.bye, null, 'bye'), stat(L.me.title, b?.title, 'title')),
-      sellList(L), eqLine(L));
+      h('div', { class: 'stats', style: { marginTop: '8px' } }, stat(L.me.playoff, b?.playoff, 'playoffs'), stat(L.me.bye, null, 'bye'), stat(L.me.title, b?.title, 'title')),
+      actionLine(L), sellList(L), eqLine(L));
   })));
 
   // everything else lives in one tabbed panel
