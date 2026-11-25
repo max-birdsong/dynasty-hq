@@ -7,7 +7,7 @@
 // Everything is turned into one currency: Sanderson (TAT) value. A title is worth `titleWorth` TAT.
 import { M, simInput, simParams, playerWeekPts, posOf, teamAssets, expectedFromDist, classOf, titleWorthFor } from './model.js';
 import { simulate } from './sim.js';
-import { bestLineup } from './lineup.js';
+import { bestLineup, SLOT_ELIG } from './lineup.js';
 import { settings } from './state.js';
 import { myGoals } from './trade.js';
 
@@ -21,6 +21,26 @@ function groupPoints(L, ids, weeks) {
   }
   for (const g of GROUPS) tot[g] /= Math.max(1, weeks.length);
   return tot;
+}
+
+// points per starting slot (RB1, RB2, FLEX1..): strict slots in order, flex slots of one kind sorted best first,
+// so a weak 3rd flex shows up as a FLEX hole rather than as a hole at whichever position usually fills it
+const ORD = ['1st', '2nd', '3rd', '4th'];
+function slotPoints(L, ids, weeks) {
+  const tot = {};
+  for (const w of weeks) {
+    const pts = {}; for (const id of ids) pts[id] = playerWeekPts(L, id, w);
+    const by = {};
+    for (const [slot, id] of bestLineup(ids, pts, posOf, L.slots).lineup) (by[slot] ||= []).push(id ? pts[id] : 0);
+    for (const [slot, arr] of Object.entries(by)) arr.sort((a, b) => b - a).forEach((v, i) => { const k = slot + ':' + i; tot[k] = (tot[k] || 0) + v; });
+  }
+  for (const k in tot) tot[k] /= Math.max(1, weeks.length);
+  return tot;
+}
+const SLOT_NAME = { FLEX: 'flex', SUPER_FLEX: 'superflex', REC_FLEX: 'WR/TE flex', WRRB_FLEX: 'RB/WR flex' };
+function slotLabel(key, count) {
+  const [slot, i] = key.split(':'); const nm = SLOT_NAME[slot] || slot;
+  return count > 1 ? `${ORD[+i] || +i + 1 + 'th'} ${nm}` : nm;
 }
 
 export function teamPlan(L) {
@@ -65,7 +85,14 @@ export function teamPlan(L) {
   const mine = all.find(a => a.x.isMe).g;
   const med = {};
   for (const g of GROUPS) { const v = all.map(a => a.g[g]).sort((a, b) => a - b); med[g] = v[Math.floor(v.length / 2)]; }
-  const holes = GROUPS.map(g => ({ g, mine: mine[g], med: med[g], gap: mine[g] - med[g] })).filter(x => x.gap < -5).sort((a, b) => a.gap - b.gap);
+  const slotAll = L.teams.map(x => ({ x, s: slotPoints(L, x.players, weeks) }));
+  const mineS = slotAll.find(a => a.x.isMe).s;
+  const counts = {}; for (const k of Object.keys(mineS)) { const sl = k.split(':')[0]; counts[sl] = (counts[sl] || 0) + 1; }
+  const holes = Object.keys(mineS).map(k => {
+    const v = slotAll.map(a => a.s[k] || 0).sort((a, b) => a - b), md = v[Math.floor(v.length / 2)];
+    const slot = k.split(':')[0];
+    return { g: slotLabel(k, counts[slot]), key: k, pos: (SLOT_ELIG[slot] || []).filter(p => GROUPS.includes(p)), mine: mineS[k], med: md, gap: mineS[k] - md };
+  }).filter(x => x.gap < -5).sort((a, b) => a.gap - b.gap);
   // every team's holes and surpluses, for spotting "parallel need" trades (I need a RB, you need a WR)
   L.posNeeds = {};
   for (const a of all) L.posNeeds[a.x.rid] = { holes: GROUPS.filter(g => a.g[g] - med[g] < -5), surplus: GROUPS.filter(g => a.g[g] - med[g] > 5) };
@@ -95,9 +122,9 @@ export function teamPlan(L) {
     const f = simulate(simInput(L, { [t.rid]: w }), { runs, params, seed })[t.rid];
     ifFixed = { gap, playoff: f.playoff, title: f.title, bye: f.bye, pick: pickEV(f) };
     if (f.playoff - base.playoff < 0.03 && f.title - base.title < 0.01) lines.push(f.playoff < 0.1
-      ? `Even with league-typical starters at ${holes.map(x => x.g).join(' and ')} you'd miss the playoffs: this season is done, so trade for next year.`
-      : `Filling ${holes.map(x => x.g).join(' and ')} barely moves your odds: it isn't where your title chances come from.`);
-    else lines.push(`If you filled ${holes.map(x => x.g).join(' and ')} with league-typical starters (+${gap.toFixed(0)} pts/wk): playoffs ${pc(base.playoff)} → ${pc(f.playoff)}, title ${pc(base.title)} → ${pc(f.title)}` +
+      ? `Even with league-typical players in your ${holes.map(x => x.g).join(' and ')} you'd miss the playoffs: this season is done, so trade for next year.`
+      : `Filling your ${holes.map(x => x.g).join(' and ')} barely moves your odds: it isn't where your title chances come from.`);
+    else lines.push(`If you filled your ${holes.map(x => x.g).join(' and ')} with league-typical starters (+${gap.toFixed(0)} pts/wk): playoffs ${pc(base.playoff)} → ${pc(f.playoff)}, title ${pc(base.title)} → ${pc(f.title)}` +
       (ownFirst ? `, and your own ${ny} 1st drops from about ${Math.round(pickNow).toLocaleString()} to ${Math.round(ifFixed.pick).toLocaleString()}. Net: ${(TITLE * (f.title - base.title) + ifFixed.pick - pickNow) >= 0 ? 'pushing beats reloading' : 'reloading beats pushing'} by about ${Math.abs(Math.round(TITLE * (f.title - base.title) + ifFixed.pick - pickNow)).toLocaleString()}, before the cost of the trades.` : '. You don\'t own your 1st, so there is no draft-slot cost to pushing.'));
   }
   if (holes.length) lines.push(`Biggest hole: ${holes.map(x => `${x.g} (${x.mine.toFixed(1)} pts/wk vs league typical ${x.med.toFixed(1)})`).join(', ')}.`);
@@ -153,7 +180,7 @@ export function teamPlan(L) {
   else if ((t.title ?? 0) >= 0.12) headline = 'Contend for a bye, at the lowest cost';
   else if ((t.playoff ?? 0) < 0.05) headline = tanking ? 'Season\'s gone: take the high pick, compete next year' : 'Out this year: sell what won\'t help next year';
   else if (tanking && !bpOk) headline = lastYearBad ? 'Second down year: get back to competing' : 'One-year reload';
-  else if (holes.length && (t.playoff ?? 0) >= 0.05) headline = `Stay at the table: fix ${holes[0].g} cheaply`;
+  else if (holes.length && (t.playoff ?? 0) >= 0.05) headline = `Stay at the table: fix your ${holes[0].g} cheaply`;
   else if (bpOk) headline = 'Chip and a chair: compete with what you have';
   else headline = 'Reload for one year, then compete';
   if ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15) lines.push("You're likely to get a bye, and that's where most of your title odds come from. One more stud adds only 1–2% (Adeiko), so spending future value now has sharply diminishing returns. Put surplus into picks and extending the window.");

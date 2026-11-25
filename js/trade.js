@@ -295,7 +295,7 @@ export function myGoals(L, plan) {
   const t = L.me, g = [];
   // shedding points: holes are the point, not a problem; every point you send away improves your own pick
   if (plan.tanking && plan.ownFirst) g.push({ id: 'shed', label: L.draftOrder === 'maxpf' ? 'Shed points (max PF decides your pick)' : 'Shed points (better pick)' });
-  else for (const h of plan.holes) g.push({ id: 'fix:' + h.g, label: `Fix ${h.g}` });
+  else for (const h of plan.holes) g.push({ id: 'fix:' + (h.pos || [h.g]).join(','), label: `Fix ${h.g}` });
   if (!plan.tanking && (t.title ?? 0) >= 0.06) g.push({ id: 'points', label: 'Buy points' });
   if (plan.tanking || plan.weakLongTerm) g.push({ id: 'younger', label: 'Get younger' });
   if (plan.tanking || ((t.bye ?? 0) >= 0.5 && (t.title ?? 0) >= 0.15)) g.push({ id: 'picks', label: 'Turn players into picks' });
@@ -311,7 +311,7 @@ export function goalsMet(L, r, goals) {
   const ag = ages(r.get), av = ages(r.give);
   const met = [];
   for (const g of goals) {
-    if (g.id.startsWith('fix:')) { const pos = g.id.slice(4); if (r.get.some(a => a.pos === pos) && dReg > 1) met.push(g); }
+    if (g.id.startsWith('fix:')) { const pos = g.id.slice(4).split(','); if (r.get.some(a => pos.includes(a.pos)) && dReg > 1) met.push(g); }
     else if (g.id === 'points' && (dReg > 1.5 || dPo > 1.5)) met.push(g);
     else if (g.id === 'shed' && dReg < -2) met.push(g);
     else if (g.id === 'younger' && r.mix.future > 300 && (ag == null || av == null || ag < av - 1.5)) met.push(g);
@@ -351,7 +351,7 @@ export function suggest(L, { partners = null, limit = 30, poolSize = 16, exactTo
     }
     return marg.get(k);
   };
-  const holeGroups = new Set(plan.holes.map(x => x.g));
+  const holeGroups = new Set(plan.holes.flatMap(x => x.pos || [x.g]));
   const mine = teamAssets(L, L.me).filter(a => (a.fc > 250 || a.tat > 250) && !(a.id && untouch.has(a.id))).sort((a, b) => Math.max(b.fc, b.tat) - Math.max(a.fc, a.tat)).slice(0, poolSize);
   const minGain = minGainAt ?? (focus || sellOnly ? 0 : R.minTatGain);
   if (sellOnly) { const so = new Set(sellOnly); mine.splice(0, mine.length, ...teamAssets(L, L.me).filter(a => so.has(a.key))); }
