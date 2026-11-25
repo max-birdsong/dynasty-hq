@@ -359,14 +359,15 @@ function blockPanel(L) {
     .filter(x => M.players[x.id]).map(x => ({ ...x, label: `${M.players[x.id].full_name || x.id} (${x.t.owner})` }));
   const chips = h('div', { class: 'row', style: { gap: '6px', flexWrap: 'wrap' } });
   const draw = () => chips.replaceChildren(...list().map(id => { const x = others.find(o => o.id === String(id));
-    return h('span', { class: 'tag' }, x ? x.label : id, ' ', h('a', { href: 'javascript:void 0', title: 'Remove', onclick: () => { S.block[L.id] = list().filter(y => String(y) !== String(id)); save({ settingsChanged: true }); draw(); } }, '×')); }),
+    const ask = S.blockAsk?.[L.id]?.[String(id)];
+    return h('span', { class: 'tag', title: ask ? `Nickname on Sleeper: ${ask}` : '' }, x ? x.label : id, ask ? h('span', { class: 'muted' }, ` · ${ask}`) : '', ' ', h('a', { href: 'javascript:void 0', title: 'Remove', onclick: () => { S.block[L.id] = list().filter(y => String(y) !== String(id)); save({ settingsChanged: true }); draw(); } }, '×')); }),
     ...(list().length ? [] : [h('span', { class: 'small muted' }, 'Nobody marked yet.')]));
   const dl = h('datalist', { id: 'blk-' + L.id }, others.map(x => h('option', { value: x.label })));
   const inp = h('input', { list: 'blk-' + L.id, placeholder: 'Type a player on someone\'s block…', style: { minWidth: '320px', maxWidth: '100%' },
     onchange: e => { const x = others.find(o => o.label === e.target.value); if (!x) return; if (!list().includes(x.id)) list().push(x.id); save({ settingsChanged: true }); e.target.value = ''; draw(); } });
   draw();
   return h('details', { class: 'panel' }, h('summary', {}, h('b', {}, `On the trade block in ${L.nick}`), h('span', { class: 'small muted' }, ` (${list().length})`)),
-    h('p', { class: 'small muted' }, "Sleeper doesn't share trade blocks outside the app, so mark them here. Listed players are always considered in suggestions, and their owner only needs a fair deal, not a premium."),
+    h('p', { class: 'small muted' }, `From Sleeper's trade block and owners' "OTB" nicknames${S.blockSyncedAt ? `, synced ${new Date(S.blockSyncedAt).toLocaleDateString()}` : ''} (ask me to refresh it). You can add or remove players here too. Listed players are always considered in suggestions, and their owner only needs a fair deal, not a premium.`),
     h('div', { class: 'row', style: { gap: '8px', marginBottom: '8px' } }, inp, dl), chips);
 }
 
