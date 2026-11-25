@@ -13,7 +13,7 @@ const loadComps = () => compsP || (compsP = fetch('data/comps.json', { cache: 'n
 import { modeTag, posB, assetLine, empty, delta } from '../components.js';
 
 const STATUSES = ['sent', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
-const STATUSES_IN = ['received', 'accepted', 'rejected', 'countered'];
+const STATUSES_IN = ['received', 'accepted', 'rejected', 'countered', 'ignored', 'withdrawn'];
 
 export default function tradesView(id, partnerRid, sub) {
   const root = h('div');
