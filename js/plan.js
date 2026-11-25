@@ -177,7 +177,7 @@ export function teamPlan(L) {
   const middle = false;
   const lastYearBad = L.prevRecord && L.prevRecord.winPct < 0.4;
   if ((t.title ?? 0) >= 0.15 && (t.bye ?? 0) >= 0.5) headline = 'Bye secured: extend the window, don\'t chase the last piece';
-  else if ((t.title ?? 0) >= 0.12) headline = 'Contend for a bye, at the lowest cost';
+  else if ((t.title ?? 0) >= 0.12) headline = (t.bye ?? 0) >= 0.15 ? 'Contend for a bye, at the lowest cost' : 'Bye is out of reach: gain value, protect playoff-week points';
   else if ((t.playoff ?? 0) < 0.05) headline = tanking ? 'Season\'s gone: take the high pick, compete next year' : 'Out this year: sell what won\'t help next year';
   else if (tanking && !bpOk) headline = lastYearBad ? 'Second down year: get back to competing' : 'One-year reload';
   else if (holes.length && (t.playoff ?? 0) >= 0.05) headline = `Stay at the table: fix your ${holes[0].g} cheaply`;
