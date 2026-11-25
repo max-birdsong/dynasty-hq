@@ -108,11 +108,14 @@ export default function dashboard() {
     if ((t.playoff ?? 0) < 0.05) return top ? line('Reload', 'mid', `Out this year, but value ${r}/${n} is top half: sell what won't help in ${+L.season + 1}, keep the core.`)
       : line('Sell', 'tank', `Out this year and value ${r}/${n} is bottom half: turn vets into picks and young players.`);
     if (!L.swing) return h('div', { class: 'small muted' }, 'Checking title trades…');
-    const b = L.swing.top[0];
-    if (b && b.dTitle >= 0.03) return line('Buy', 'push', `${b.give.join(' + ')} for ${b.get.join(' + ')} (${b.partner}): +${(b.dTitle * 100).toFixed(0)}% title, ~${Math.round(b.pAccept * 100)}% he accepts.`);
+    // a title trade only earns "Buy" if it pays for itself: title equity gained beats the long-term value given up
+    const b = L.swing.top.find(x => x.dTitle >= 0.03 && x.tat + x.now >= 0);
+    if (b) return line('Buy', 'push', `${b.give.join(' + ')} for ${b.get.join(' + ')} (${b.partner}): +${(b.dTitle * 100).toFixed(0)}% title, net ${f1(L, b.tat + b.now)}, ~${Math.round(b.pAccept * 100)}% he accepts.`);
+    const near = L.swing.top.find(x => x.dTitle >= 0.03);
+    const nearTxt = near ? ` Best title trade (+${(near.dTitle * 100).toFixed(0)}%) costs more long-term than it adds (net ${f1(L, near.tat + near.now)}).` : '';
     const per = p.TITLE * (p.sens?.titlePo || 0) / base1; // 1sts per playoff point a week
     const farm = per >= 0.01 ? ` Take value trades that gain more than ${per.toFixed(2)} 1sts per playoff point/wk they cost.` : ' Take value trades freely; playoff points barely move your odds.';
-    return line('Hold', 'contend', `No trade moves your ${odds(t.title)} much, and value ${r}/${n} is ${top ? 'top half: keep competing.' : 'bottom half: play it out, retool after.'}${farm}`);
+    return line('Hold', 'contend', `${near ? 'No title trade pays for itself' : `No trade moves your ${odds(t.title)} much`}, and value ${r}/${n} is ${top ? 'top half: keep competing.' : 'bottom half: play it out, retool after.'}${nearTxt}${farm}`);
   };
   const keyLine = L => { const p = L.plan; if (!p) return 'Working out the plan…'; const l = p.lines.find(x => /^Deadline/.test(x)) || p.lines.find(x => /^(If you filled|Even with|Filling |Biggest hole|You don't own)/.test(x)); return l ? l.replace(/^Deadline: [A-Z]+[.,]\s*/, '').replace(/^./, c => c.toUpperCase()) : ''; };
   root.append(h('div', { class: 'lcards' }, [...mine].sort((a, b) => (b.me.title || 0) - (a.me.title || 0)).map(L => {
