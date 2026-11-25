@@ -3,7 +3,6 @@ import { firstsSent } from '../owners.js';
 import { state, syncReady } from '../state.js';
 import { h, fmt, pct, odds, sgn, f1 } from '../util.js';
 import { VERDICT } from './trades.js';
-import { planChip } from '../strategy.js';
 import { table, adviceTag, pctBar, posB, heat, empty } from '../components.js';
 
 let planning = false;
@@ -57,7 +56,7 @@ export default function dashboard() {
       h('div', { class: 'row spread' }, h('b', { class: 'lname' }, L.nick), h('span', { class: 'muted small' }, `${L.me.wins}-${L.me.losses}${L.me.ties ? '-' + L.me.ties : ''}`)),
       h('div', { class: 'row', style: { gap: '6px', margin: '4px 0 8px' } }, p?.verdict ? h('span', { class: 'tag ' + (VERDICT[p.verdict] || '') }, p.verdict) : '', h('span', { class: 'small' }, p?.headline || '')),
       h('div', { class: 'stats' }, stat(L.me.playoff, b?.playoff, 'playoffs'), stat(L.me.bye, null, 'bye'), stat(L.me.title, b?.title, 'title')),
-      h('div', { class: 'small muted clamp' }, keyLine(L)), planChip(L));
+      h('div', { class: 'small muted clamp' }, keyLine(L)));
   })));
 
   // everything else lives in one tabbed panel
