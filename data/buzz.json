@@ -1945,16 +1945,16 @@
 "guid": "e2a3e5d0-e783-11f1-8473-1b2cc25ad7b4"
 }
 ],
-"updated": "2026-11-27T13:50:46.636286+00:00",
+"updated": "2026-11-28T12:58:27.843494+00:00",
 "log": [
-"run 2026-11-27T13:50 model claude-haiku-5-5",
+"run 2026-11-28T12:58 model claude-haiku-5-5",
 "Fantasy Footballers Dynasty: 190 episodes in feed",
 "FantasyPros Dynasty: 422 episodes in feed",
 "FantasyPros Dynasty | Dynasty Trade Deadline Targets: 3 Win-Now Buys & 3 Players t: failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
-"Dynasty Nerds: 981 episodes in feed",
+"Dynasty Nerds: 982 episodes in feed",
+"Dynasty Nerds | Too High, Too Low, or Just Right? | Dynasty Fantasy Football: failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
 "Dynasty Nerds | 2026 Rookie Redraft | Dynasty Fantasy Football Podcast Ep. 9: failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
 "Dynasty Nerds | Dynasty Mailbag | Dynasty Fantasy Football Podcast Ep. 955: failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
-"Dynasty Nerds | Our Dynasty Thanksgiving | Dynasty Fantasy Football Podcast : failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
 "Fantasy Football Today Dynasty: 262 episodes in feed",
 "Fantasy Football Today Dynasty | BEST Dynasty Trade Targets for Championship Contenders!: failed at transcribe: FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'",
 "Under The Helmet: 600 episodes in feed",
